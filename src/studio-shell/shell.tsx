@@ -27,7 +27,7 @@ const PRESETS = [
 ] as const;
 
 const TAB_TRANSITION =
-  "transition-[background-color,border-color,color,transform] duration-150 ease-out motion-reduce:transition-none";
+  "transition-[background-color,border-color,color,transform] duration-150 ease-out motion-reduce:transition-none motion-reduce:transform-none";
 
 /**
  * Two-pane evidence chrome (PRD §7). At the walking-skeleton stage the header
@@ -58,17 +58,17 @@ export function WorkspaceShell() {
   };
 
   return (
-    <div className="flex h-dvh flex-col">
+    <div className="flex h-dvh min-w-[960px] flex-col">
       <header className="flex items-center gap-4 border-b border-edge bg-surface px-4 py-2">
         <h1 className="text-lg font-semibold tracking-[-0.01em]">DuckStudio</h1>
-        <p className="text-sm text-ink-secondary">
+        <p aria-live="polite" className="text-sm text-ink-secondary">
           <span className="font-mono text-ink">ws_local_01</span>
           <span aria-hidden> · </span>
           <span className="font-mono text-ink">rev 0</span>
           <span aria-hidden> · </span>
           no dataset
         </p>
-        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-edge bg-canvas px-2.5 py-0.5 text-sm">
+        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-surface px-3 py-1 text-sm">
           <span aria-hidden className="size-1.5 rounded-full bg-accent" />
           0 Bytes of Dataset Uploaded
         </span>
@@ -85,7 +85,7 @@ export function WorkspaceShell() {
                 key={preset.id}
                 type="button"
                 disabled
-                aria-disabled="true"
+                aria-describedby="preset-status"
                 className={`block w-full rounded-md border border-edge bg-surface px-3 py-2 text-left ${TAB_TRANSITION}`}
               >
                 <span className="flex items-center justify-between gap-2">
@@ -103,13 +103,13 @@ export function WorkspaceShell() {
                 <span className="mt-1 block text-xs text-ink-secondary">{preset.meta}</span>
               </button>
             ))}
-            <p className="text-xs text-ink-secondary">
-              Presets are not wired yet — activation arrives with the workspace store.
+            <p id="preset-status" className="text-xs text-ink-secondary">
+              Dataset activation is coming online.
             </p>
           </div>
           <p className="mt-4 text-xs text-ink-secondary">
             Agent channel: <span className="font-mono">simulator</span> ·{" "}
-            <span className="font-mono">native WebMCP</span> — registering with the control plane.
+            <span className="font-mono">native WebMCP</span> — connecting.
           </p>
         </section>
         <section aria-label="Selected artifact" className="p-4">
