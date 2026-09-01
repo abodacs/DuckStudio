@@ -5,6 +5,7 @@
 - Deciders: @senior-frontend-architect
 - Technical Area: Backend (in-worker), Performance
 - Amendment 2: 2026-08-31 (template conformance: Deciders, Technical Area, reformat Alternatives, split Consequences into Positive/Negative/Neutral, add Implementation, References, Decision Log)
+- Amendment 3: 2026-09-01 (worker init awaited from studio-shell/boot.ts start(), per ADR 0001 amendment 5)
 - Amendment 1: 2026-08-31 (respawn cost, library API, binding translation, worker singleton, OPFS)
 
 ## Context
@@ -107,7 +108,7 @@ OPFS persistence is **not used in the one-day build.** The worker uses in-memory
 - `dataset-custody/sql-inspector.ts` is the trust seam. SQL is inspected on the main thread before any `postMessage` to the worker. Unsafe SQL never crosses the boundary.
 - Binding translation lives at the SQL-inspector boundary: `{ name: value }` becomes positional `$1, $2, ...` and the values are type-checked against the column type from the schema digest.
 - `cancelActiveOperation` is implemented as `worker.terminate()` followed by a fresh `getWorker()`. The revisioned workspace records the cancel event and the prior artifact remains selected.
-- Worker init is awaited from `studio-shell/main.tsx` before the React tree mounts, per ADR 0007.
+- Worker init is awaited from `studio-shell/boot.ts`'s `start()` before the React tree mounts, per ADR 0007 (amendment 1).
 
 ## References (amended 2)
 
@@ -127,3 +128,4 @@ OPFS persistence is **not used in the one-day build.** The worker uses in-memory
 | 2026-08-31 | Amendment 1: respawn cost, library API, binding translation, worker singleton, OPFS | @senior-frontend-architect |
 | 2026-08-31 | Amendment 2: template conformance | @senior-frontend-architect |
 | 2026-08-31 | Accepted | @senior-frontend-architect |
+| 2026-09-01 | Amendment 3: worker init awaited from studio-shell/boot.ts start() | @senior-frontend-architect |

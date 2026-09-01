@@ -5,6 +5,7 @@
 - Deciders: @senior-frontend-architect
 - Technical Area: Schema, Validation
 - Amendment 3: 2026-08-31 (template conformance: Deciders, Technical Area, reformat Alternatives, split Consequences into Positive/Negative/Neutral, add Implementation, References, Decision Log)
+- Amendment 4: 2026-09-01 (schema placement: domain schemas colocate with their owning modules, envelope.ts is transport vocabulary plus re-exports; store contract: dispatch is honest about time)
 - Amendment 2: 2026-08-31 (upgrade to `zod@4.5.4`, adopt `z.compile()` AOT fast path, drop `zod-to-json-schema` post-processing in favor of `z.strictObject`)
 - Amendment 1: 2026-08-31 (JSON Schema strictness, store API contract, no-shared-kernel rule)
 
@@ -60,6 +61,12 @@ Encode every domain shape once in `zod@4.5.4`. Use `z.strictObject(...)` for eve
 
 State is colocated. Each feature owns its store. The revisioned workspace is the source of truth. UI reads through a thin `useSyncExternalStore` selector over the workspace event log. No Redux, no Zustand-by-default, no global "last result."
 
+### Schema placement (amended 4)
+
+Each domain shape is encoded in the module that owns it: `revisioned-workspace/schemas.ts` (the four tool input schemas, the projection input schema, the URL search-param schema), `dataset-custody/schemas.ts` (release decision, cohort confirmation), `analysis-artifacts/schemas.ts` (artifact and lineage shapes). `agent-control-plane/envelope.ts` holds only transport vocabulary — `schemaVersion` and the success/failure envelope shapes — and re-exports the domain schemas for adapters and tests.
+
+The original placement put every schema in `envelope.ts`. That made the adapter folder a de-facto shared kernel with the widest fan-in in the tree, violating the no-shared-kernel rule this ADR already carries: deleting `agent-control-plane/` would have deleted the domain's types. A contract test in `agent-control-plane/_contract/` asserts the re-exports are import-equal to the domain exports.
+
 ### Compile strategy (amended)
 
 We use **per-schema compile**, not global mode.
@@ -103,7 +110,7 @@ The JSON Schema emitted by `z.toJSONSchema()` is the **human copy** of the trust
 - The four tool input schemas (`getContext`, `activateDataset`, `runAnalysis`, `verifyCustody`).
 - The success and failure envelope schemas.
 - The projection input schema in `revisioned-workspace/projection.ts`.
-- The custody release-decision schema in `dataset-custody/release.ts`.
+- The custody release-decision schema in `dataset-custody/schemas.ts`.
 
 We do **not** compile:
 
@@ -111,7 +118,7 @@ We do **not** compile:
 - Internal refinement schemas that are never parsed at runtime (type-only imports).
 - Schemas with async refinements or transforms (compile returns them unchanged, so the cost is zero but the visual signal "this is hot" is lost).
 
-### Store API contract (carried from Amendment 1)
+### Store API contract (amended 4)
 
 The revisioned workspace is a React-compatible external store:
 
@@ -120,11 +127,11 @@ type WorkspaceStore = {
   subscribe(listener: () => void): () => void;
   getSnapshot(): Workspace;
   getServerSnapshot(): Workspace; // frozen empty workspace; SSR is N/A but the API requires it
-  dispatch(command: DomainCommand): Envelope; // synchronous; the worker is async
+  dispatch(command: DomainCommand): Promise<Envelope>; // honest about time; the worker is async
 };
 ```
 
-`useSyncExternalStore` reads through `subscribe` and `getSnapshot`. Adapters call `dispatch` and get the envelope. The store is the only place that increments `revision`. Tests drive the store directly; they do not mount React.
+`useSyncExternalStore` reads through `subscribe` and `getSnapshot`. Adapters call `dispatch` and await the commit envelope. `dispatch` is honest about time: schema validation, stale `expectedRevision`, and `idempotencyKey` conflicts reject immediately with no worker round trip; the commit envelope arrives through one awaited path every adapter shares. No adapter polls revisions or sleeps to wait for the worker — adapter parity (`webmcp-vs-simulator-parity.test.ts`) is a property of this seam, not of the adapters. The store is the only place that increments `revision`. Tests drive the store directly; they do not mount React.
 
 ### No-shared-kernel rule (carried from Amendment 1)
 
@@ -136,8 +143,9 @@ Trigger to migrate off `zod`: schema module bundle size > 30 KB gzipped, measure
 
 ## Consequences (amended 3)
 
-### Positive
+### Positive (amended 4)
 
+- Domain schemas live where the concept lives: a schema change is a one-folder change, and deleting `agent-control-plane/` removes no domain type.
 - One trust seam: a `zod` parse error is the same error in WebMCP, the simulator, the URL, and the human UI.
 - `expectedRevision` and `idempotencyKey` are required by the schema, not by convention. Stale and conflicting requests fail at the boundary, not in the worker.
 - A new schema-version migration is a `zod` schema bump plus a `schemaVersion` field on the envelope.
@@ -146,8 +154,9 @@ Trigger to migrate off `zod`: schema module bundle size > 30 KB gzipped, measure
 - There is no `src/shared/` junk drawer.
 - We do not depend on `zod-to-json-schema`. One fewer dependency.
 
-### Negative
+### Negative (amended 4)
 
+- Adapters and the router reach domain schemas through the envelope re-export — one indirection, bought in exchange for the deletion test passing.
 - The cost of `z.compile()` is `new Function` at schema construction time, which is acceptable on a COEP origin where we already load WASM but could trip a future CSP-strict environment.
 - The schema module's gzipped bundle is the trigger to revisit `valibot` or `@standard-schema` (carried from Amendment 1).
 - `zod` v4 issue format is the new `z.core.$ZodIssue*` shape. Anything that consumed the v3 `.format()` output must migrate to `z.treeifyError()`.
@@ -156,9 +165,10 @@ Trigger to migrate off `zod`: schema module bundle size > 30 KB gzipped, measure
 
 - Per-schema compile (not global mode) is a deliberate choice to keep the "is this compiled?" check reviewable per file.
 
-## Implementation (amended 3)
+## Implementation (amended 4)
 
-- `agent-control-plane/envelope.ts` is the single module that exports the four tool input schemas, the success/failure envelope schemas, and the projection input schema. All schemas use `z.strictObject(...)` and are exported in their compiled form (`CompiledEnvelopeSuccess = z.compile(EnvelopeSuccessSchema)`).
+- Domain schemas live with their owners per the Schema placement rule: `revisioned-workspace/schemas.ts`, `dataset-custody/schemas.ts`, `analysis-artifacts/schemas.ts`. All schemas use `z.strictObject(...)` and are exported in their compiled form (`CompiledEnvelopeSuccess = z.compile(EnvelopeSuccessSchema)`).
+- `agent-control-plane/envelope.ts` exports the success/failure envelope schemas (transport vocabulary) and re-exports the domain schemas for adapters and tests. It exports no schema that names a domain concept.
 - `agent-control-plane/registration.ts` derives JSON Schema via `z.toJSONSchema(schema)` and passes it to `document.modelContext.registerTool`. The runtime `.parse()` remains the real trust boundary.
 - The revisioned workspace store lives in `revisioned-workspace/`. It is a React-compatible external store (`subscribe`, `getSnapshot`, `getServerSnapshot`, `dispatch`). It is the only place that increments `revision`.
 - The no-shared-kernel rule is enforced by review: a feature's UI, store, schemas, and tests colocate under `src/<feature>/`. Three-or-more importers triggers promotion to `src/<feature>/kernel/`, not a top-level `src/shared/`.
@@ -186,3 +196,4 @@ Trigger to migrate off `zod`: schema module bundle size > 30 KB gzipped, measure
 | 2026-08-31 | Amendment 2: upgrade to zod 4.5.4, adopt z.compile() AOT fast path, drop zod-to-json-schema | @senior-frontend-architect |
 | 2026-08-31 | Amendment 3: template conformance | @senior-frontend-architect |
 | 2026-08-31 | Accepted | @senior-frontend-architect |
+| 2026-09-01 | Amendment 4: schema placement (colocate with owners, envelope re-exports), store contract (dispatch honest about time) | @senior-frontend-architect |

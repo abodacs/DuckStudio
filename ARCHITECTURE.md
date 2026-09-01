@@ -24,14 +24,14 @@ src/
 
 Folder meaning:
 
-- `revisioned-workspace/` owns the domain-command interface, revision, idempotency, single-flight operations, events, and atomic commit. Human, chip, simulator, and WebMCP adapters dispatch into it.
+- `revisioned-workspace/` owns the domain-command interface, revision, idempotency, single-flight operations, events, atomic commit, and the projection functions. Human, chip, simulator, and WebMCP adapters dispatch into it.
 - `dataset-custody/` is the custody kernel behind that interface: policy, SQL inspection, release, cohort confirmation, and upload/release evidence. Do not add `egress-audit/`.
-- `duck-engine/` is the worker, bindings, budgets, and cancellation.
+- `duck-engine/` is the worker, bindings, budgets, and cancellation. It executes custody decisions verbatim; it never re-derives them.
 - `analysis-artifacts/` is the immutable graph and lineage.
-- `live-canvas/` renders the one safe projection (envelope summary, cards, four views). Tab clicks are not workspace commands.
-- `agent-control-plane/` is thin adapters, the shared schema/envelope module, and WebMCP registration. It does not own the workspace.
-- `studio-shell/` composes the two-pane chrome.
-- `demo-presets/` is the two seeded datasets.
+- `live-canvas/` renders artifact-scope projections: the four evidence views. Tab clicks are not workspace commands.
+- `agent-control-plane/` is thin adapters, the envelope module (transport vocabulary, re-exporting domain schemas), and WebMCP registration. It does not own the workspace or any domain schema.
+- `studio-shell/` composes the two-pane chrome; its `boot.ts` owns ordered startup behind one `start()` interface.
+- `demo-presets/` is the two seeded datasets. A preset's interface is the seed→relation triple: deterministic row generator, dataset metadata carrying its release policy, and canonical SQL. Policy travels with its dataset, and a contract test runs the SQL and asserts the pinned `prd.md` §6 values, so the demo numbers are load-bearing.
 
 `selectArtifact` and `cancelActiveOperation` live on the workspace interface. They are not registered WebMCP tools.
 
@@ -48,16 +48,21 @@ stores/
 
 Colocate each feature’s UI, domain commands, projections, schemas, and tests. A tiny shared kernel is allowed only for primitives genuinely used across features; it must not become a miscellaneous bucket.
 
+Schema ownership follows the same rule. Each module owns its schemas (`revisioned-workspace/schemas.ts`, `dataset-custody/schemas.ts`, `analysis-artifacts/schemas.ts`); `agent-control-plane/envelope.ts` holds only transport vocabulary (`schemaVersion`, envelope shape) and re-exports the domain schemas for adapters and tests. A schema change lands in the folder that owns the concept, deleting `agent-control-plane/` removes no domain type, and the schemas contract test is import equality.
+
+The custody → engine seam is one object. `dataset-custody/` returns a single authorized-execution decision — authorized relation, prepared positional SQL, clamped budget, redaction keys — and `duck-engine/` consumes it verbatim, owning only cancellation and respawn-on-cancel (ADR 0002). The engine never re-derives relation, SQL, budget, or redaction; each custody rule is written and tested once, and engine tests run against fake decision objects with no worker.
+
 ## One Command Path
 
 Human controls, prompt chips, Agent Simulator, and WebMCP adapters must dispatch the same domain commands through the revisioned workspace.
 
 - Do not put business logic only in React event handlers or WebMCP callbacks.
 - Do not let adapters call private UI setters.
+- `dispatch` is honest about time: validation, staleness, and idempotency conflicts reject synchronously with no worker round trip, and the commit envelope arrives through one awaited path every adapter shares. No adapter polls revisions or sleeps to wait for the worker; parity is assertable at that single seam.
 - Do not manufacture transcript cards, artifacts, timings, revisions, or audit evidence for the demo.
 - Equivalent commands through different adapters must produce equivalent events, artifacts, errors, and projections.
 - WebMCP registers exactly the four canonical tools. `selectArtifact` and `cancelActiveOperation` remain workspace commands for human and simulator adapters.
-- Envelope `summary`, left-pane artifact cards, and Insights KPIs are the same projection object.
+- One projection owner, two named functions: `projectWorkspace(ws)` for workspace scope (left-pane cards, simulator cards, header badge) and `projectArtifact(ws, id)` for artifact scope (envelope `summary`, Insights KPIs, the four views). The referential-equality contract test covers all four call sites, so DOM evidence and tool payloads cannot drift.
 
 ## Explicit State Only
 
@@ -72,7 +77,7 @@ Human controls, prompt chips, Agent Simulator, and WebMCP adapters must dispatch
 ## Agent-Ergonomic Contracts
 
 - Register exactly the four canonical tools from `docs/agent-system-design.md`; add no aliases or compatibility wrappers.
-- JSON Schema is discoverability, not the trust boundary. Encode schemas once; adapters and tests import that module. Do not hand-duplicate them.
+- JSON Schema is discoverability, not the trust boundary. Encode each domain schema once, in the module that owns it; adapters and tests import it through the envelope re-export. Do not hand-duplicate them.
 - Every tool returns the shared discriminated envelope.
 - Use stable IDs, enums, revisions, and error codes instead of prose when a machine-readable value exists.
 - Bound context and response sizes.
@@ -87,6 +92,7 @@ Human controls, prompt chips, Agent Simulator, and WebMCP adapters must dispatch
 - Use an `AbortController` to clean up registrations on lifecycle teardown.
 - Duplicate registration is a defect; do not catch it and silently continue.
 - The simulator remains available when native WebMCP is absent, but it uses the same domain commands rather than a mock registry.
+- Boot is a module, not a pile. `studio-shell/boot.ts` exposes one `start()`: secure-context gate → warm worker → create store → mount router → register tools → simulator fallback, each step a pure decision function. `main.tsx` shrinks to the sole importer that calls `start()`, so boot order is testable headlessly.
 
 ## No Backward Compatibility
 

@@ -5,6 +5,7 @@
 - Deciders: @senior-frontend-architect
 - Technical Area: Frontend, Project Structure
 - Amendment 2: 2026-08-31 (template conformance: Deciders, Technical Area, add Alternatives Considered, split Consequences into Positive/Negative/Neutral, add Implementation, References, Decision Log)
+- Amendment 3: 2026-09-01 (projection: one owner, two named functions, four call sites; preset seed→relation contract test; schema placement per ADR 0004 amendment 4)
 - Amendment 1: 2026-08-31 (projection module, cross-cutting tests, no-shared-kernel, handler ownership)
 
 ## Context
@@ -15,35 +16,35 @@
 
 ```text
 src/
-├── studio-shell/         # two-pane chrome, header state, mounts the control plane once
-├── revisioned-workspace/ # domain commands, revision, idempotency, events, atomic commit, projection
-├── dataset-custody/      # policy, SQL inspection, release, cohort confirmation, evidence
+├── studio-shell/         # two-pane chrome, boot via boot.ts start(), header state
+├── revisioned-workspace/ # domain commands, revision, idempotency, events, atomic commit, projection, schemas
+├── dataset-custody/      # policy, SQL inspection, release, cohort confirmation, evidence, schemas
 ├── duck-engine/          # worker singleton, bindings, budgets, cancellation
-├── analysis-artifacts/   # immutable graph and lineage
-├── live-canvas/          # one safe projection consumer; four evidence views
-├── agent-control-plane/  # thin adapters, shared schema/envelope module, WebMCP+simulator registration
-└── demo-presets/         # the two seeded datasets
+├── analysis-artifacts/   # immutable graph and lineage, schemas
+├── live-canvas/          # artifact-scope projection consumer; four evidence views
+├── agent-control-plane/  # thin adapters, envelope module (transport vocabulary, re-exports), WebMCP+simulator registration
+└── demo-presets/         # the two seeded datasets: generator + metadata + canonical SQL
 ```
 
 No top-level `components/`, `hooks/`, `utils/`, `services/`, `types/`, or `stores/` bucket. No `src/shared/` (see ADR 0004 amendment). A feature's UI, store, tests, and registration live next to each other.
 
-### Projection module (amended)
+### Projection module (amended 3)
 
-`revisioned-workspace/projection.ts` is the **single owner of the projection function** that maps `(Workspace, ArtifactId?) -> Projection`. It is imported by:
+`revisioned-workspace/projection.ts` is the **single owner of the projection functions**. Two named interfaces leave it:
 
-- `live-canvas/` to render Insights, Data Grid, SQL & Lineage, and Custody.
-- `agent-control-plane/envelope.ts` to build the `summary` field of the tool envelope.
-- `agent-control-plane/simulator.ts` to render the left-pane artifact cards.
+- `projectWorkspace(ws)` — workspace scope. Consumed by `agent-control-plane/simulator.ts` (left-pane artifact cards) and `studio-shell/` (header badge).
+- `projectArtifact(ws, id)` — artifact scope. Consumed by `live-canvas/` (Insights, Data Grid, SQL & Lineage, Custody) and `agent-control-plane/envelope.ts` (the envelope `summary` field).
 
-The PRD's "one safe projection for envelope, cards, and Insights" is enforced by this single function. There is no second projection. A Vitest contract test in `revisioned-workspace/projection.test.ts` asserts that, for any artifact, the projection object is referentially equal across all three call sites.
+"Single projection consumer" was already false: this ADR named three consumers and the header badge was a silent fourth. The PRD's "one safe projection" property is enforced by one owner with two named scopes, not by one function — DOM evidence and tool payloads cannot drift. A Vitest contract test in `revisioned-workspace/projection.test.ts` asserts that, per scope, the projection object is referentially equal across all four call sites.
 
-### Cross-cutting tests (amended)
+### Cross-cutting tests (amended 3)
 
 Contract tests that span features live in a `_contract/` subfolder inside the feature that owns the contract. For example:
 
 - `agent-control-plane/_contract/webmcp-vs-simulator-parity.test.ts` proves that the WebMCP and simulator adapters produce identical envelopes, events, and artifacts for the same commands.
 - `revisioned-workspace/_contract/stale-revision-recovery.test.ts` proves the recovery action shape.
 - `dataset-custody/_contract/release-decision.test.ts` proves the safe-release table from `agent-system-design.md` §5.1.
+- `demo-presets/_contract/preset-numbers.test.ts` runs each preset's canonical SQL against the engine and asserts the pinned `prd.md` §6 values, so the demo numbers are load-bearing (amended 3).
 
 Unit tests for a single module live next to that module (`projection.test.ts` next to `projection.ts`). Vitest's `vitest.workspace.ts` aggregates them.
 
@@ -76,8 +77,9 @@ Unit tests for a single module live next to that module (`projection.test.ts` ne
 
 ## Consequences (amended 2)
 
-### Positive
+### Positive (amended 3)
 
+- The projection is one owner, two named scopes, four asserted call sites. There is no fork between "what the tool sees," "what the canvas sees," and "what the badge says."
 - Reading the top level tells a new contributor what the product does, not which framework it uses.
 - A future feature gets one folder, not five file moves across technical buckets.
 - The single `agent-control-plane/` folder is the only place that knows the envelope exists. Adapters do not import schemas from one another.
@@ -94,10 +96,11 @@ Unit tests for a single module live next to that module (`projection.test.ts` ne
 
 - No `src/shared/` junk drawer.
 
-## Implementation (amended 2)
+## Implementation (amended 3)
 
 - Scaffold each top-level folder under `src/` with the responsibilities described in the Decision tree.
-- `revisioned-workspace/projection.ts` is the single owner of the projection function. It is imported by `live-canvas/`, `agent-control-plane/envelope.ts`, and `agent-control-plane/simulator.ts`. The contract test `revisioned-workspace/projection.test.ts` asserts referential equality across the three call sites.
+- `revisioned-workspace/projection.ts` is the single owner of the projection functions `projectWorkspace(ws)` and `projectArtifact(ws, id)`. The contract test `revisioned-workspace/projection.test.ts` asserts referential equality per scope across the four call sites: live-canvas views and the envelope `summary` (`projectArtifact`), simulator cards and the studio-shell header badge (`projectWorkspace`).
+- Domain schemas colocate with their owning modules (`revisioned-workspace/schemas.ts`, `dataset-custody/schemas.ts`, `analysis-artifacts/schemas.ts`); `agent-control-plane/envelope.ts` re-exports them (ADR 0004 amendment 4).
 - `selectArtifact` and `cancelActiveOperation` handlers live in `revisioned-workspace/`. The simulator and the human UI both call `workspace.dispatch(...)`; they do not import the handlers directly.
 - Cross-cutting contract tests live in `<feature>/_contract/`:
   - `agent-control-plane/_contract/webmcp-vs-simulator-parity.test.ts`
@@ -125,3 +128,4 @@ Unit tests for a single module live next to that module (`projection.test.ts` ne
 | 2026-08-31 | Amendment 1: projection module, cross-cutting tests, no-shared-kernel, handler ownership | @senior-frontend-architect |
 | 2026-08-31 | Amendment 2: template conformance | @senior-frontend-architect |
 | 2026-08-31 | Accepted | @senior-frontend-architect |
+| 2026-09-01 | Amendment 3: projection (one owner, two named functions, four call sites), preset contract test, schema placement alignment | @senior-frontend-architect |

@@ -24,7 +24,7 @@ Out of scope:
 
 - SQL allow/deny policy. Owned by `dataset-custody/sql-inspector.ts` and the deny list in `docs/agent-system-design.md` §6.
 - Artifact immutability after a failure. Owned by `revisioned-workspace/`.
-- Custody release decisions. Owned by `dataset-custody/release.ts`.
+- Custody release decisions. Owned by `dataset-custody/schemas.ts`.
 - A generic "toast" system. Not a feature of this product.
 
 ## One trust seam, one envelope

@@ -4,6 +4,7 @@
 - Date: 2026-08-31
 - Deciders: @senior-frontend-architect
 - Technical Area: Frontend, Performance
+- Amendment 1: 2026-09-01 (worker warm-up is awaited from studio-shell/boot.ts start(), not main.tsx)
 
 ## Context
 
@@ -58,7 +59,7 @@ The static build serves a single COOP/COEP origin (ADR 0006). The COEP header en
 
 ## Implementation
 
-- `duck-engine/worker.ts` calls `getWorker()` at module top-level (see ADR 0002 worker singleton). The promise is awaited once from `studio-shell/main.tsx` before the React tree mounts.
+- `duck-engine/worker.ts` calls `getWorker()` at module top-level (see ADR 0002 worker singleton). The promise is awaited once inside `studio-shell/boot.ts`'s `start()` — after the secure-context gate, before the router mounts (ADR 0001 amendment 5).
 - ECharts is imported via `await import("echarts")` inside the chart component, behind a Suspense boundary.
 - `public/_headers` adds `Link: </fonts/inter-400.woff2>; rel=preload; as=font; crossorigin` (and the two sibling font files) per ADR 0006 CORP rules.
 - `vite.config.ts` uses `build.rollupOptions.output.manualChunks` to split the ECharts vendor and the router into named chunks.
@@ -78,3 +79,4 @@ The static build serves a single COOP/COEP origin (ADR 0006). The COEP header en
 | ---------- | -------- | ------------------------ |
 | 2026-08-31 | Proposed | @senior-frontend-architect |
 | 2026-08-31 | Accepted | @senior-frontend-architect |
+| 2026-09-01 | Amendment 1: worker warm-up awaited from studio-shell/boot.ts start() | @senior-frontend-architect |
