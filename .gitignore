@@ -25,3 +25,6 @@ dist/
 # Playwright artifacts
 playwright-report/
 test-results/
+
+# Impeccable artifacts
+.impeccable/

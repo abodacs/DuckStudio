@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter } from "@tanstack/react-rout
 import { zodValidator } from "@tanstack/zod-adapter";
 import { workspaceSearchSchema } from "../revisioned-workspace/schemas";
 import { WorkspaceShell } from "./shell";
+import { WorkspaceError } from "./workspace-error";
 
 const rootRoute = createRootRoute();
 
@@ -12,6 +13,7 @@ const workspaceRoute = createRoute({
   // reaches the router only through this import — never re-declared here.
   validateSearch: zodValidator(workspaceSearchSchema),
   component: WorkspaceShell,
+  errorComponent: WorkspaceError,
 });
 
 export const router = createRouter({
