@@ -5,7 +5,9 @@ const baseURL = `http://127.0.0.1:${PORT}`;
 
 // Command-line form of chrome://flags/#enable-webmcp-testing (CONTRIBUTING.md):
 // the e2e browser must be the flagged WebMCP surface the acceptance criteria
-// target. Ticket 14's registration E2E is the live proof of this spelling.
+// target. Spelling verified against chromium's about_flags.cc registration and
+// existing WebMCP Playwright setups; ticket 14's registration E2E is the live
+// proof that document.modelContext actually surfaces under it.
 const WEBMCP_TESTING_ARGS = [
   "--enable-features=WebMCPTesting",
   "--enable-experimental-web-platform-features",
