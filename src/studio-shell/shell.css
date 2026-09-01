@@ -1,1 +1,45 @@
 @import "tailwindcss";
+
+/* Self-hosted variable fonts — COEP require-corp forbids third-party asset origins. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/inter-latin-var.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-latin-var.woff2") format("woff2");
+}
+
+/*
+ * Brand tokens from PRODUCT.md "Brand Commitments". Amber is reserved for
+ * tool operations and warnings; cyan is the selection/focus/trust accent.
+ */
+@theme {
+  --color-canvas: #0a0b0f;
+  --color-surface: #161821;
+  --color-edge: #2d3139;
+  --color-accent: #00f2fe;
+  --color-amber: #ffb347;
+  --color-ink: #e9edf1;
+  --color-ink-secondary: #9aa7b4;
+
+  --font-ui: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-ui);
+}

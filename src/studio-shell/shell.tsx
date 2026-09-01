@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import { CustodyView } from "../live-canvas/custody-view";
 import { DataGridView } from "../live-canvas/data-grid-view";
 import { InsightsView } from "../live-canvas/insights-view";
@@ -17,46 +17,140 @@ type ViewId = keyof typeof VIEWS;
 const VIEW_ORDER: readonly ViewId[] = ["insights", "grid", "sql_lineage", "custody"];
 
 /**
+ * Rev-0 chrome constants: the preset catalog lives in the PRD (§6) until the
+ * workspace store (ticket 13) owns it. Spellings are canonical, not display
+ * labels — never re-case them.
+ */
+const PRESETS = [
+  { id: "saas_churn", meta: "250k rows · ~14.2 MB", policy: "public_synthetic" },
+  { id: "healthcare_pii", meta: "100k rows", policy: "sensitive_aggregate_only" },
+] as const;
+
+const TAB_TRANSITION =
+  "transition-[background-color,border-color,color,transform] duration-150 ease-out motion-reduce:transition-none";
+
+/**
  * Two-pane evidence chrome (PRD §7). At the walking-skeleton stage the header
  * values are the rev-0 constants; the workspace store (next tickets) and the
  * projection wiring own them from ticket 13.
  */
 export function WorkspaceShell() {
   const [activeView, setActiveView] = useState<ViewId>("insights");
-  const { label, View } = VIEWS[activeView];
+  const { View } = VIEWS[activeView];
+  const tabRefs = useRef<Map<ViewId, HTMLButtonElement | null>>(new Map());
+
+  const onTablistKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const current = VIEW_ORDER.indexOf(activeView);
+    const next =
+      event.key === "ArrowRight"
+        ? VIEW_ORDER[(current + 1) % VIEW_ORDER.length]
+        : event.key === "ArrowLeft"
+          ? VIEW_ORDER[(current - 1 + VIEW_ORDER.length) % VIEW_ORDER.length]
+          : event.key === "Home"
+            ? VIEW_ORDER[0]
+            : event.key === "End"
+              ? VIEW_ORDER[VIEW_ORDER.length - 1]
+              : null;
+    if (!next) return;
+    event.preventDefault();
+    setActiveView(next);
+    tabRefs.current.get(next)?.focus();
+  };
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="flex items-center gap-4 border-b border-zinc-300 px-4 py-2">
-        <span className="text-lg font-semibold">DuckStudio</span>
-        <span>ws_local_01 · rev 0 · no dataset</span>
-        <span className="ml-auto rounded border border-zinc-400 px-2 py-0.5 text-sm">
+      <header className="flex items-center gap-4 border-b border-edge bg-surface px-4 py-2">
+        <h1 className="text-lg font-semibold tracking-[-0.01em]">DuckStudio</h1>
+        <p className="text-sm text-ink-secondary">
+          <span className="font-mono text-ink">ws_local_01</span>
+          <span aria-hidden> · </span>
+          <span className="font-mono text-ink">rev 0</span>
+          <span aria-hidden> · </span>
+          no dataset
+        </p>
+        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-edge bg-canvas px-2.5 py-0.5 text-sm">
+          <span aria-hidden className="size-1.5 rounded-full bg-accent" />
           0 Bytes of Dataset Uploaded
         </span>
       </header>
       <main className="grid min-h-0 flex-1 grid-cols-[35%_65%]">
-        <section aria-label="Agent control and operations" className="border-r border-zinc-300 p-4">
-          <h2 className="text-xs font-semibold tracking-wide text-zinc-500">
+        <section aria-label="Agent control and operations" className="border-r border-edge p-4">
+          <h2 className="text-xs font-semibold tracking-wide text-ink-secondary">
             AGENT CONTROL &amp; OPERATIONS
           </h2>
+          <div role="group" aria-label="Dataset presets" className="mt-3 space-y-2">
+            <h3 className="text-xs font-medium tracking-wide text-ink-secondary">DATASETS</h3>
+            {PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                disabled
+                aria-disabled="true"
+                className={`block w-full rounded-md border border-edge bg-surface px-3 py-2 text-left ${TAB_TRANSITION}`}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-sm text-ink">{preset.id}</span>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-xs ${
+                      preset.policy === "sensitive_aggregate_only"
+                        ? "border-amber/40 text-amber"
+                        : "border-edge text-ink-secondary"
+                    }`}
+                  >
+                    {preset.policy}
+                  </span>
+                </span>
+                <span className="mt-1 block text-xs text-ink-secondary">{preset.meta}</span>
+              </button>
+            ))}
+            <p className="text-xs text-ink-secondary">
+              Presets are not wired yet — activation arrives with the workspace store.
+            </p>
+          </div>
+          <p className="mt-4 text-xs text-ink-secondary">
+            Agent channel: <span className="font-mono">simulator</span> ·{" "}
+            <span className="font-mono">native WebMCP</span> — registering with the control plane.
+          </p>
         </section>
         <section aria-label="Selected artifact" className="p-4">
-          <h2 className="text-xs font-semibold tracking-wide text-zinc-500">SELECTED ARTIFACT</h2>
-          <div role="tablist" aria-label="Evidence views" className="mt-2 flex gap-1">
+          <h2 className="text-xs font-semibold tracking-wide text-ink-secondary">
+            SELECTED ARTIFACT
+          </h2>
+          <div
+            role="tablist"
+            aria-label="Evidence views"
+            className="mt-2 flex gap-1"
+            onKeyDown={onTablistKeyDown}
+          >
             {VIEW_ORDER.map((id) => (
               <button
                 key={id}
+                ref={(el) => {
+                  tabRefs.current.set(id, el);
+                }}
                 type="button"
                 role="tab"
+                id={`tab-${id}`}
                 aria-selected={id === activeView}
+                aria-controls={`panel-${id}`}
+                tabIndex={id === activeView ? 0 : -1}
                 onClick={() => setActiveView(id)}
-                className="rounded-t border border-b-0 border-zinc-300 px-3 py-1 text-sm"
+                className={`rounded-t-md border border-b-0 px-3 py-1.5 text-sm focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent active:scale-[0.97] ${TAB_TRANSITION} ${
+                  id === activeView
+                    ? "relative z-10 translate-y-px border-edge bg-surface text-ink"
+                    : "border-transparent text-ink-secondary hover:bg-surface hover:text-ink"
+                }`}
               >
                 {VIEWS[id].label}
               </button>
             ))}
           </div>
-          <div role="tabpanel" aria-label={label} className="border border-zinc-300 p-4 text-sm">
+          <div
+            role="tabpanel"
+            id={`panel-${activeView}`}
+            aria-labelledby={`tab-${activeView}`}
+            className="rounded-b-md border border-edge bg-surface p-4 text-sm"
+          >
             <View />
           </div>
         </section>
