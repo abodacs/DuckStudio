@@ -24,6 +24,7 @@
     "zod": "4.5.4"
   },
   "devDependencies": {
+    "@duckdb/node-api": "1.5.5-r.4",
     "@playwright/test": "1.62.1",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/dom": "10.4.1",

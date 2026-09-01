@@ -32,3 +32,30 @@ export const saasChurnPreset: PresetMetadata = {
     { name: "signup_channel", type: "VARCHAR", classification: "public" },
   ],
 };
+
+/**
+ * The `healthcare_pii` catalog entry — the seeded sensitive preset
+ * (prd.md §6.2). `mrn` is the direct identifier custody omits: it exists in
+ * the pre-release schema so the release policy has something to suppress,
+ * and the generator never materializes a value for it. Every grouping column
+ * here is safe, which is what lets the canonical aggregate pass the
+ * ten-record cohort floor under `sensitive_aggregate_only`.
+ */
+export const healthcarePiiPreset: PresetMetadata = {
+  datasetId: "healthcare_pii",
+  policy: "sensitive_aggregate_only",
+  minimumCohortSize: 10,
+  rowCount: 100_000,
+  byteSizeEstimate: 6_000_000,
+  schemaDigest: "76649d41c0945ce657d5d172e8aa5a46976caf78fe70b72380b2cc78c9503140",
+  columns: [
+    { name: "mrn", type: "VARCHAR", classification: "direct_identifier" },
+    { name: "age_band", type: "VARCHAR", classification: "quasi_identifier" },
+    { name: "region", type: "VARCHAR", classification: "quasi_identifier" },
+    { name: "diagnosis", type: "VARCHAR", classification: "sensitive" },
+    { name: "visit_count", type: "INTEGER", classification: "public" },
+    { name: "length_of_stay_days", type: "INTEGER", classification: "public" },
+    { name: "readmitted", type: "BOOLEAN", classification: "public" },
+    { name: "billed_amount", type: "DECIMAL(10,2)", classification: "public" },
+  ],
+};

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { PresetMetadataSchema, canonicalSchemaJson } from "./schemas";
-import { saasChurnPreset } from "./catalog";
+import { healthcarePiiPreset, saasChurnPreset } from "./catalog";
 
 describe("saas_churn catalog entry", () => {
   it("parses against PresetMetadataSchema", () => {
@@ -23,6 +23,36 @@ describe("saas_churn catalog entry", () => {
     for (const name of ["tickets", "churned", "churn_rate", "mrr"]) {
       expect(names).toContain(name);
     }
+  });
+});
+
+describe("healthcare_pii catalog entry", () => {
+  it("parses against PresetMetadataSchema", () => {
+    expect(PresetMetadataSchema.parse(healthcarePiiPreset)).toEqual(healthcarePiiPreset);
+  });
+
+  it("carries the prd.md §6.2 preset contract values", () => {
+    expect(healthcarePiiPreset.datasetId).toBe("healthcare_pii");
+    expect(healthcarePiiPreset.policy).toBe("sensitive_aggregate_only");
+    expect(healthcarePiiPreset.rowCount).toBe(100000);
+    expect(healthcarePiiPreset.minimumCohortSize).toBe(10);
+  });
+
+  it("classifies mrn as the omitted direct identifier and keeps grouping columns safe", () => {
+    expect(healthcarePiiPreset.columns).toHaveLength(8);
+    const byName = new Map(healthcarePiiPreset.columns.map((column) => [column.name, column]));
+    expect(byName.get("mrn")?.classification).toBe("direct_identifier");
+    expect(byName.get("diagnosis")).toBeDefined();
+    for (const name of ["visit_count", "length_of_stay_days", "readmitted", "billed_amount"]) {
+      expect(byName.get(name)?.classification).toBe("public");
+    }
+  });
+
+  it("equals the SHA-256 of the canonical schema JSON", () => {
+    const digest = createHash("sha256")
+      .update(canonicalSchemaJson(healthcarePiiPreset.columns))
+      .digest("hex");
+    expect(healthcarePiiPreset.schemaDigest).toBe(digest);
   });
 });
 
