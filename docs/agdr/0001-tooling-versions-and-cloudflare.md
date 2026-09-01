@@ -45,7 +45,7 @@ Chosen: **pnpm + Vite + React + TanStack Router + Tailwind + Vitest + Playwright
 | Concern | Choice |
 | --- | --- |
 | Package manager | pnpm |
-| Node | 22 LTS |
+| Node | 26 (Current; LTS from 2026-10-28) |
 | Bundler / dev server | Vite |
 | UI framework | React |
 | Router | `@tanstack/react-router` |
