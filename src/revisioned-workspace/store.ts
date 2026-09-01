@@ -203,8 +203,9 @@ function executeGetContext(workspace: Workspace, input: GetContextInput): Envelo
 }
 
 /**
- * One tab, one workspace. Boot (ticket 13) creates the instance; tests drive
- * the store headlessly without mounting React (ADR 0004 am4).
+ * One tab, one workspace. The React binding (`use-workspace.ts`) owns the
+ * app instance; tests drive the store headlessly through this factory
+ * without mounting React (ADR 0004 am4).
  */
 export function createWorkspaceStore(): WorkspaceStore {
   const listeners = new Set<() => void>();

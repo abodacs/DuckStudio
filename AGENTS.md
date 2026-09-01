@@ -22,6 +22,11 @@ The rules in `ARCHITECTURE.md`, `SECURITY.md`, and `CONTRIBUTING.md` bind agents
 
 ## Agent Behavioral Guidelines
 
+### Git Workflow
+- **Never commit to `main`.** PRs only.
+- Work on a feature branch, push the branch, open a PR (`gh pr create`) using `.github/PULL_REQUEST_TEMPLATE.md`.
+- Never push directly to `main` and never force-push or rewrite `main` history.
+
 ### Think Before Coding
 - State assumptions explicitly. If uncertain, ask.
 - If multiple interpretations exist, present them — don't pick silently.

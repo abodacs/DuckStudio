@@ -25,6 +25,9 @@ test.describe("walking skeleton @ rev 0", () => {
   test("the shell renders at rev 0", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+    // The seeded catalog's canonical spelling in the header (ticket 13) —
+    // available to activate, never shown as active.
+    await expect(page.getByText("saas_churn · public_synthetic", { exact: true })).toBeVisible();
     await expect(page.getByText("0 Bytes of Dataset Uploaded")).toBeVisible();
     await expect(page.getByText("AGENT CONTROL & OPERATIONS")).toBeVisible();
     await expect(page.getByText("SELECTED ARTIFACT")).toBeVisible();
