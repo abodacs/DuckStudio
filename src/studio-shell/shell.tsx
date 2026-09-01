@@ -1,4 +1,7 @@
 import { useRef, useState, type KeyboardEvent } from "react";
+import { saasChurnPreset } from "../demo-presets/catalog";
+import { projectWorkspace } from "../revisioned-workspace/projection";
+import { useWorkspace } from "../revisioned-workspace/use-workspace";
 import { CustodyView } from "../live-canvas/custody-view";
 import { DataGridView } from "../live-canvas/data-grid-view";
 import { InsightsView } from "../live-canvas/insights-view";
@@ -17,9 +20,9 @@ type ViewId = keyof typeof VIEWS;
 const VIEW_ORDER: readonly ViewId[] = ["insights", "grid", "sql_lineage", "custody"];
 
 /**
- * Rev-0 chrome constants: the preset catalog lives in the PRD (§6) until the
- * workspace store (ticket 13) owns it. Spellings are canonical, not display
- * labels — never re-case them.
+ * Rev-0 preset-chip chrome constants (ticket 10). The chips keep their
+ * static cards until activation exists (Slice 2); the header's preset line
+ * reads the seeded catalog's canonical spelling directly.
  */
 const PRESETS = [
   { id: "saas_churn", meta: "250k rows · ~14.2 MB", policy: "public_synthetic" },
@@ -36,12 +39,13 @@ const TAB_TRANSITION =
   "transition-[background-color,border-color,color,transform] duration-150 ease-out motion-reduce:transition-none motion-reduce:transform-none";
 
 /**
- * Two-pane evidence chrome (PRD §7). At the walking-skeleton stage the header
- * values are the rev-0 constants; the workspace store (next tickets) and the
- * projection wiring own them from ticket 13.
+ * Two-pane evidence chrome (PRD §7) rendered by the single projection owner
+ * (ADR 0005 am3): the header and left-pane cards read `projectWorkspace`,
+ * the right pane's views read `projectArtifact` — no second projection.
  */
 export function WorkspaceShell() {
   const [activeView, setActiveView] = useState<ViewId>("insights");
+  const vm = useWorkspace(projectWorkspace);
   const { View } = VIEWS[activeView];
   const tabRefs = useRef<Map<ViewId, HTMLButtonElement | null>>(new Map());
 
@@ -68,15 +72,21 @@ export function WorkspaceShell() {
       <header className="flex items-center gap-4 border-b border-edge bg-surface px-4 py-2">
         <h1 className="text-lg font-semibold tracking-[-0.01em]">DuckStudio</h1>
         <p aria-live="polite" className="text-sm text-ink-secondary">
-          <span className="font-mono text-ink">ws_local_01</span>
+          <span className="font-mono text-ink">{vm.workspaceId}</span>
           <span aria-hidden> · </span>
-          <span className="font-mono text-ink">rev 0</span>
+          <span className="font-mono text-ink">rev {vm.revision}</span>
           <span aria-hidden> · </span>
-          no dataset
+          {vm.datasetLine}
+        </p>
+        <p className="text-sm text-ink-secondary">
+          available preset{" "}
+          <span className="font-mono text-ink">
+            {saasChurnPreset.datasetId} · {saasChurnPreset.policy}
+          </span>
         </p>
         <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-surface px-3 py-1 text-sm">
           <span aria-hidden className="size-1.5 rounded-full bg-accent" />
-          0 Bytes of Dataset Uploaded
+          {vm.badge}
         </span>
       </header>
       <main className="grid min-h-0 flex-1 grid-cols-[35%_65%]">
@@ -84,6 +94,56 @@ export function WorkspaceShell() {
           <h2 className="text-xs font-semibold tracking-wide text-ink-secondary">
             AGENT CONTROL &amp; OPERATIONS
           </h2>
+          <div role="group" aria-label="Workspace context" className="mt-3 rounded-md border border-edge bg-surface px-3 py-2">
+            <h3 className="text-xs font-medium tracking-wide text-ink-secondary">CONTEXT</h3>
+            <p className="mt-1 text-xs text-ink-secondary">
+              <span className="font-mono text-ink">{vm.workspaceId}</span>
+              <span aria-hidden> · </span>
+              rev <span className="font-mono text-ink">{vm.revision}</span>
+            </p>
+            <p className="mt-1 text-xs text-ink-secondary">dataset: {vm.datasetLine}</p>
+            <dl className="mt-1 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 text-xs text-ink-secondary">
+              {Object.entries(vm.budgets).map(([knob, limit]) => (
+                <div key={knob} className="contents">
+                  <dt>{knob}</dt>
+                  <dd className="font-mono text-ink">{limit}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+          {/*
+            The one read, pinned idle (ticket 06): reads never take the
+            store's single-flight slot, so no workspace state backs this card
+            and nothing dispatches it until the agent channel lands — an
+            auto-dispatched proof-of-life read would flip the card with no
+            state change to show for it.
+          */}
+          <div role="group" aria-label="Operations" className="mt-2 rounded-md border border-amber/40 bg-surface px-3 py-2">
+            <h3 className="text-xs font-medium tracking-wide text-ink-secondary">OPERATION</h3>
+            <p className="mt-1 flex items-center gap-2 text-xs">
+              <span className="rounded-full border border-amber/40 px-2 py-0.5 font-mono text-amber">
+                duckdb_get_context
+              </span>
+              <span className="text-ink-secondary">idle</span>
+            </p>
+            <p className="mt-1 text-xs text-ink-secondary">
+              op <span className="font-mono">op_get_context</span>
+            </p>
+          </div>
+          <div role="group" aria-label="Artifact stream" className="mt-2 rounded-md border border-edge bg-surface px-3 py-2">
+            <h3 className="text-xs font-medium tracking-wide text-ink-secondary">ARTIFACTS</h3>
+            {vm.recentArtifacts.length === 0 ? (
+              <p className="mt-1 text-xs text-ink-secondary">No artifacts yet.</p>
+            ) : (
+              <ul className="mt-1 space-y-1 text-xs">
+                {vm.recentArtifacts.map((artifactId) => (
+                  <li key={artifactId} className="font-mono text-ink">
+                    {artifactId}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <div role="group" aria-label="Dataset presets" className="mt-3 space-y-2">
             <h3 className="text-xs font-medium tracking-wide text-ink-secondary">DATASETS</h3>
             {PRESETS.map((preset) => (
