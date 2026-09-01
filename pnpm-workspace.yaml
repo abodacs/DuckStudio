@@ -1,0 +1,17 @@
+# pnpm 11 settings home — package.json's `pnpm` field and .npmrc are no longer
+# read for these (pnpm 11). No `packages` field: the root package is the only
+# member, unchanged from the single-package decision.
+engineStrict: true
+
+# Build scripts pnpm must run: esbuild installs its binary, workerd (wrangler's
+# runtime) links its platform binary. Everything else stays script-less.
+allowBuilds:
+  esbuild: true
+  workerd: true
+
+# @tanstack/zod-adapter declares a zod ^3 peer; the trust seam needs zod 4
+# (z.compile / z.toJSONSchema) and the adapter's parse-shaped runtime use is
+# verified against zod 4 by a scaffold unit test.
+peerDependencyRules:
+  allowedVersions:
+    "@tanstack/zod-adapter>zod": "4"

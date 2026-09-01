@@ -13,3 +13,15 @@ Thumbs.db
 
 # Secrets
 .env
+.env.*
+
+# Dependencies and build output
+node_modules/
+dist/
+
+# Wrangler local cache
+.wrangler/
+
+# Playwright artifacts
+playwright-report/
+test-results/
