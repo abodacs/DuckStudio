@@ -36,12 +36,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Latest major as of 2026-09-01 (11.25.0). Keep the major in sync with
-      # package.json's packageManager field when the scaffold lands.
+      # No `version:` input — pnpm/action-setup reads the exact pin from
+      # package.json's `packageManager` field (pnpm@11.25.0, ticket 01), so
+      # CI and local installs resolve the identical version.
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
-        with:
-          version: 11
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -80,8 +79,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
-        with:
-          version: 11
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
