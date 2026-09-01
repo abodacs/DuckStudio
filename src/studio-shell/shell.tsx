@@ -26,6 +26,12 @@ const PRESETS = [
   { id: "healthcare_pii", meta: "100k rows", policy: "sensitive_aggregate_only" },
 ] as const;
 
+/**
+ * Canonical monitored-transport list from the custody evidence contract
+ * (docs/agent-system-design.md, duckdb_verify_custody response).
+ */
+const TRANSPORTS = ["fetch", "XMLHttpRequest", "sendBeacon", "WebSocket", "WebTransport"] as const;
+
 const TAB_TRANSITION =
   "transition-[background-color,border-color,color,transform] duration-150 ease-out motion-reduce:transition-none motion-reduce:transform-none";
 
@@ -111,6 +117,18 @@ export function WorkspaceShell() {
             Agent channel: <span className="font-mono">simulator</span> ·{" "}
             <span className="font-mono">native WebMCP</span> — connecting.
           </p>
+          <div role="group" aria-label="Custody monitoring" className="mt-4">
+            <h3 className="text-xs font-medium tracking-wide text-ink-secondary">CUSTODY</h3>
+            <p className="mt-1 text-xs text-ink-secondary">
+              Monitored transports:{" "}
+              {TRANSPORTS.map((transport, index) => (
+                <span key={transport}>
+                  {index > 0 && <span aria-hidden> · </span>}
+                  <span className="font-mono text-ink">{transport}</span>
+                </span>
+              ))}
+            </p>
+          </div>
         </section>
         <section aria-label="Selected artifact" className="p-4">
           <h2 className="text-xs font-semibold tracking-wide text-ink-secondary">
