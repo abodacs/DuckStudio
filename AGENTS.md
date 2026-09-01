@@ -41,3 +41,13 @@ The rules in `ARCHITECTURE.md`, `SECURITY.md`, and `CONTRIBUTING.md` bind agents
 Define success criteria. Loop until verified.
 - "Add validation" → Write tests for invalid inputs, then make them pass
 - "Fix bug" → Write test that reproduces it, then make it pass
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
