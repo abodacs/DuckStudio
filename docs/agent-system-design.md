@@ -52,14 +52,14 @@ Reads do not increment `revision`:
 | Command | WebMCP tool |
 |---|---|
 | `getContext` | `duckdb_get_context` |
-| `verifyCustody` | `duckdb_verify_custody` |
+| `verifyCustody` | `duckdb_verify_zero_egress` |
 
 Mutations require `expectedRevision` and `idempotencyKey` and increment `revision` once on commit:
 
 | Command | WebMCP tool |
 |---|---|
 | `activateDataset` | `duckdb_activate_dataset` |
-| `runAnalysis` | `duckdb_run_analysis` |
+| `runAnalysis` | `duckdb_execute_sql_to_canvas` |
 | `selectArtifact` | none — human and simulator only |
 | `cancelActiveOperation` | none — human and simulator only |
 
@@ -376,8 +376,8 @@ The envelope module is the trust seam for every command result. JSON Schema in t
 type ToolName =
   | "duckdb_get_context"
   | "duckdb_activate_dataset"
-  | "duckdb_run_analysis"
-  | "duckdb_verify_custody"
+  | "duckdb_execute_sql_to_canvas"
+  | "duckdb_verify_zero_egress"
 
 type NextAction =
   | { kind: "tool"; tool: ToolName; input: Record<string, unknown> }
@@ -534,7 +534,7 @@ Compact bootstrap response data:
 
 Response data includes `datasetId`, safe `schemaDigest`, `rowCount`, `byteSizeEstimate`, `policy`, and `minimumCohortSize`. Replaying the same key with the same input returns the original envelope. Reusing it with different input returns `IDEMPOTENCY_CONFLICT`. Activation does not select an artifact and does not render rows.
 
-### 8.3 `duckdb_run_analysis`
+### 8.3 `duckdb_execute_sql_to_canvas`
 
 **Description:** Run one bounded read-only analysis against a dataset or prior artifact, create an immutable result artifact, infer or apply a safe presentation, and select that artifact atomically. Returns only a safe summary and handles, never result rows.
 
@@ -664,7 +664,7 @@ Response data:
 
 Left-pane artifact cards and Insights render this same `summary`.
 
-### 8.4 `duckdb_verify_custody`
+### 8.4 `duckdb_verify_zero_egress`
 
 **Description:** Read a scoped, timestamped evidence snapshot for dataset uploads, sensitive releases, monitored transports, and operation lineage. Operational evidence only; not a formal proof.
 
@@ -752,7 +752,7 @@ The four tools are audited against the 2026 `modern-web-guidance` WebMCP best pr
 
 **Aligned:**
 
-- **One tool = one function.** Four tools, no overlap: `duckdb_get_context` reads workspace state, `duckdb_activate_dataset` and `duckdb_run_analysis` execute mutations, `duckdb_verify_custody` reads evidence. Reads and mutations never collide on intent.
+- **One tool = one function.** Four tools, no overlap: `duckdb_get_context` reads workspace state, `duckdb_activate_dataset` and `duckdb_execute_sql_to_canvas` execute mutations, `duckdb_verify_zero_egress` reads evidence. Reads and mutations never collide on intent.
 - **Execution vs. initiation.** All four names use execution verbs (`get`, `activate`, `run`, `verify`). There is no "start-process" tool; the human-only mutations (`selectArtifact`, `cancelActiveOperation`) are workspace commands, not WebMCP tools.
 - **Positive language, negative only for hard invariants.** Descriptions state what each tool does. "never returns raw rows" and "not a formal proof" are the two negative phrases kept, because they are non-negotiable safety invariants, not usage discouragement.
 - **Strict-in-code, loose-in-schema.** §8 already declares "browser-visible schema is discoverability, not the trust boundary." Runtime `.parse()` is the seam; field-level `details` give the model enough to self-correct (§9).
@@ -841,14 +841,14 @@ Unavailable human gestures appear in `nextActions` as `{ kind: "human_action", a
 ### Bootstrap and analyze
 
 1. Call `duckdb_get_context({ scope: "summary" })`.
-2. If the desired local dataset is active, call `duckdb_run_analysis` with its ID, returned revision, unique key, bounded SQL, and bindings. Omit `presentation` unless a specific view is required.
+2. If the desired local dataset is active, call `duckdb_execute_sql_to_canvas` with its ID, returned revision, unique key, bounded SQL, and bindings. Omit `presentation` unless a specific view is required.
 3. Use the returned artifact ID for explanation or refinement. Do not request rows.
 
 ### Activate then analyze
 
 1. Read summary.
 2. Call `duckdb_activate_dataset` with returned revision.
-3. Call `duckdb_run_analysis` with the new revision and returned dataset ID.
+3. Call `duckdb_execute_sql_to_canvas` with the new revision and returned dataset ID.
 
 ### Refine without recomputation
 
@@ -875,7 +875,7 @@ Unavailable human gestures appear in `nextActions` as `{ kind: "human_action", a
 
 ### Verify custody
 
-Call `duckdb_verify_custody` for the relevant artifact or operation. Report its scope and limitations with the evidence; do not broaden the claim.
+Call `duckdb_verify_zero_egress` for the relevant artifact or operation. Report its scope and limitations with the evidence; do not broaden the claim.
 
 ## 13. UI Projection Contract
 

@@ -31,7 +31,7 @@ const PRESETS = [
 
 /**
  * Canonical monitored-transport list from the custody evidence contract
- * (docs/agent-system-design.md, duckdb_verify_custody response).
+ * (docs/agent-system-design.md, duckdb_verify_zero_egress response).
  */
 const TRANSPORTS = ["fetch", "XMLHttpRequest", "sendBeacon", "WebSocket", "WebTransport"] as const;
 

@@ -58,8 +58,8 @@ The canonical schemas and semantics are in `docs/agent-system-design.md`.
 |---|---:|---|
 | `duckdb_get_context` | None | Bootstrap or delta-read capabilities, revision, active policy, compact schema, budgets, operations, artifacts, and legal next actions. |
 | `duckdb_activate_dataset` | Workspace mutation | Activate `saas_churn` or `healthcare_pii` with `expectedRevision` and `idempotencyKey`. |
-| `duckdb_run_analysis` | Workspace mutation | Validate and run one bounded query, create one artifact, infer or apply KPI/chart/grid presentation, and select that artifact atomically. |
-| `duckdb_verify_custody` | None | Return scoped dataset-upload, safe-release, interceptor, policy, and lineage evidence with limitations. |
+| `duckdb_execute_sql_to_canvas` | Workspace mutation | Validate and run one bounded query, create one artifact, infer or apply KPI/chart/grid presentation, and select that artifact atomically. |
+| `duckdb_verify_zero_egress` | None | Return scoped dataset-upload, safe-release, interceptor, policy, and lineage evidence with limitations. |
 
 Human and simulator adapters also dispatch `selectArtifact` and `cancelActiveOperation`. Those commands are not WebMCP tools.
 
@@ -80,9 +80,9 @@ sequenceDiagram
     participant D as DuckStudio
     A->>D: duckdb_get_context(summary)
     D-->>A: revision + policy + schema digest + budgets
-    A->>D: duckdb_run_analysis(source, SQL, bindings, revision, key)
+    A->>D: duckdb_execute_sql_to_canvas(source, SQL, bindings, revision, key)
     D-->>A: artifact ID + projected summary + metrics + revision
-    A->>D: duckdb_verify_custody(artifact) when evidence is requested
+    A->>D: duckdb_verify_zero_egress(artifact) when evidence is requested
 ```
 
 Activation is omitted when the desired dataset is already active. Refinements source a prior artifact ID so earlier work is not repeated.
@@ -157,7 +157,7 @@ No partial artifact or partial canvas commits after cancellation, policy denial,
 | saas_churn · 250k · 14 cols              |                                                           |
 | budget 5s / 10k rows / 2k points         | a_01 · source saas_churn · succeeded                     |
 |                                          | KPI cards + chart                                         |
-| duckdb_run_analysis · op_01              |                                                           |
+| duckdb_execute_sql_to_canvas · op_01              |                                                           |
 | succeeded · measured runtime             | SQL hash · exact statement · lineage                     |
 |                                          |                                                           |
 | Artifact a_01                            | Policy release: allowed                                   |
@@ -193,11 +193,11 @@ The first paint is an empty workspace with no dataset rows. The badge reads `0 B
 
 1. Activate `saas_churn`; show active policy and revision. Do not paint a grid until an artifact exists.
 2. Run `duckdb_get_context` and visibly establish that the agent receives safe schema, budget, revision, and legal actions in one compact response.
-3. Run one `duckdb_run_analysis`; show one operation producing artifact, KPIs, scatter, SQL, and lineage atomically.
+3. Run one `duckdb_execute_sql_to_canvas`; show one operation producing artifact, KPIs, scatter, SQL, and lineage atomically.
 4. Select SQL & Lineage, then Data Grid, to prove inspectability and stable artifact identity.
 5. Activate `healthcare_pii`; show `mrn` classified as omitted and Data Grid suppressed by policy.
 6. Run one safe healthcare aggregate or context read; do not expose rows.
-7. Run `duckdb_verify_custody` scoped to an artifact; show dataset upload bytes, release counters, monitored transports, lineage, and limitations.
+7. Run `duckdb_verify_zero_egress` scoped to an artifact; show dataset upload bytes, release counters, monitored transports, lineage, and limitations.
 8. Close on the artifact, policy indicator, and zero-dataset-upload badge together.
 
 The demo may show measured runtime but must not promise or speak a fixed query time.
@@ -209,7 +209,7 @@ Amendment 2: 2026-09-02 (feature placement — runtime error→envelope taxonomy
 
 ### North star (amended)
 
-**Agents complete bounded analysis on sensitive local data with 0 dataset bytes uploaded, provably, in two tool calls** (`duckdb_get_context` → `duckdb_run_analysis`). Leading indicator: time from first paint to first committed artifact. Proof of the north star: this PRD's §8 demo contract records without fakery, and the mute test from `docs/video-script.md` §1 passes — artifact handle, policy label, and the `0 Bytes of Dataset Uploaded` badge tell the custody story with no audio.
+**Agents complete bounded analysis on sensitive local data with 0 dataset bytes uploaded, provably, in two tool calls** (`duckdb_get_context` → `duckdb_execute_sql_to_canvas`). Leading indicator: time from first paint to first committed artifact. Proof of the north star: this PRD's §8 demo contract records without fakery, and the mute test from `docs/video-script.md` §1 passes — artifact handle, policy label, and the `0 Bytes of Dataset Uploaded` badge tell the custody story with no audio.
 
 ### MLP definition (amended)
 

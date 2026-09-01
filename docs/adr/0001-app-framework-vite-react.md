@@ -143,7 +143,7 @@ Rules that come from the 2026 guides, not from our taste:
 - **Tools are atomic, composable, and distinct.** We register the four canonical WebMCP tools; `selectArtifact` and `cancelActiveOperation` are workspace commands, not tools (ARCHITECTURE.md).
 - **One `AbortController` per registration context, abort on context teardown.** For DuckStudio the context is the page lifetime plus a StrictMode-safe re-mount path; the controller is module-scoped and the re-mount guard from Amendment 1 keeps it idempotent.
 - **Secure context required.** WebMCP will not register on a non-HTTPS, non-`localhost` origin. This is a hard requirement, not a soft one. ADR 0006 already pins the secure-context guard for `crypto.subtle`; the same gate covers WebMCP. On a LAN IP we fall through to the simulator.
-- **Read tools carry `readOnlyHint: true`.** `duckdb_get_context` and `duckdb_verify_custody` set it; the two mutations do not.
+- **Read tools carry `readOnlyHint: true`.** `duckdb_get_context` and `duckdb_verify_zero_egress` set it; the two mutations do not.
 
 ## Consequences (amended 4)
 

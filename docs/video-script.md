@@ -100,7 +100,7 @@ Result card:
 
 **VISUAL:** Hold CU-left until one operation completes:
 
-`duckdb_run_analysis · op_01 · rev 1 → 2`
+`duckdb_execute_sql_to_canvas · op_01 · rev 1 → 2`
 
 Then artifact card:
 
@@ -117,7 +117,7 @@ Right pane atomically lands:
 
 ```ts
 document.modelContext.registerTool({
-  name: "duckdb_run_analysis",
+  name: "duckdb_execute_sql_to_canvas",
   description: "Run one bounded local analysis and create an immutable artifact.",
   inputSchema: runAnalysisSchema,
   execute: (input) => workspace.runAnalysis(input)
@@ -152,7 +152,7 @@ document.modelContext.registerTool({
 
 ### BEAT 7 — Evidence with scope and limits — 2:10–2:30
 
-**VISUAL:** Run `duckdb_verify_custody` scoped to the selected artifact or workspace. Render a permanent card:
+**VISUAL:** Run `duckdb_verify_zero_egress` scoped to the selected artifact or workspace. Render a permanent card:
 
 - `datasetBytesUploaded: 0`;
 - `rawSensitiveValuesReleasedToTools: 0`;
@@ -181,8 +181,8 @@ context → atomic analysis → immutable artifact → custody evidence
 
 duckdb_get_context
 duckdb_activate_dataset
-duckdb_run_analysis
-duckdb_verify_custody
+duckdb_execute_sql_to_canvas
+duckdb_verify_zero_egress
 
 MIT · public repo · live URL on Devpost
 ```
@@ -219,8 +219,8 @@ Burn captions from the final teleprompter take. Keep exact strings intact:
 
 - `duckdb_get_context`
 - `duckdb_activate_dataset`
-- `duckdb_run_analysis`
-- `duckdb_verify_custody`
+- `duckdb_execute_sql_to_canvas`
+- `duckdb_verify_zero_egress`
 - `document.modelContext.registerTool`
 - `sensitive_aggregate_only`
 - `0 Bytes of Dataset Uploaded`
@@ -279,7 +279,7 @@ One bounded context read gives the agent stable IDs, revision, policy, schema, b
 An analyst can delegate local computation while DuckStudio retains custody and controls release into both tools and the agent-visible DOM. Subsequent work builds on immutable artifact handles instead of repeatedly exposing context or recomputing results.
 
 **How WebMCP was implemented.**
-Four imperative tools—`duckdb_get_context`, `duckdb_activate_dataset`, `duckdb_run_analysis`, and `duckdb_verify_custody`—are a subset of the revisioned-workspace interface. They use one schema module plus runtime validation, a shared response envelope, optimistic revisions, idempotent retries, bounded DuckDB-WASM execution, immutable artifact lineage, one safe projection, and scoped custody telemetry. Human controls, native WebMCP, and the simulator share that workspace.
+Four imperative tools—`duckdb_get_context`, `duckdb_activate_dataset`, `duckdb_execute_sql_to_canvas`, and `duckdb_verify_zero_egress`—are a subset of the revisioned-workspace interface. They use one schema module plus runtime validation, a shared response envelope, optimistic revisions, idempotent retries, bounded DuckDB-WASM execution, immutable artifact lineage, one safe projection, and scoped custody telemetry. Human controls, native WebMCP, and the simulator share that workspace.
 
 ## 11. Director’s Last Note
 
