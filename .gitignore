@@ -1,9 +1,6 @@
 # Command Code session state
 .commandcode/
 
-# Claude Code local settings
-.claude/settings.local.json
-
 # Expect/session logs
 .expect/
 

@@ -24,7 +24,7 @@ Count total code lines changed (added + removed):
 Check PR description, linked issues, commit messages for the motivating spec. If none found, warn: "No linked spec or issue found. Correctness based on code intent only."
 
 Read project conventions:
-- `CLAUDE.md` (coding standards, DDD layer rules)
+- `AGENTS.md` (coding standards, DDD layer rules)
 - `ARCHITECTURE.md` (system design)
 
 ## Step 4: Analyze blast radius

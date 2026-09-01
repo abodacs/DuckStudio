@@ -1,8 +1,6 @@
 ---
 id: AgDR-0001
 timestamp: 2026-08-31T00:00:00Z
-agent: claude
-model: claude-sonnet-4.5
 session: webmcp-tooling-move
 trigger: user-prompt
 status: executed
@@ -29,12 +27,12 @@ Exact version pins are not recorded here. The user installs compatible versions 
 
 ## Options Considered
 
-| Option | Pros | Cons |
-| --- | --- | --- |
-| **pnpm + Vite + React + TanStack Router + Tailwind + Vitest + Playwright + oxlint/oxfmt** (chosen) | One schema source via `zod`; native Web Worker tests; Chrome flag plumbing for e2e; pre-1.0 oxlint/oxfmt fast enough for hackathon; Cloudflare Pages is a `_headers` swap | Pre-1.0 lint/format churn risk; lockfile drift if versions are unpinned | 
-| ESLint + Prettier instead of oxlint/oxfmt | Battle-tested, ecosystem maturity | Too slow on the day for a one-day build; redundant formatter | 
-| Next.js or Remix instead of Vite + TanStack Router | Built-in SSR/router | Server runtime fights the zero-upload, COOP/COEP-static-origin model; second schema system | 
-| Deploy to Vercel/Netlify instead of Cloudflare Pages | Equally static | No advantage for this app; adds a `_headers`-style config to migrate later | 
+| Option                                                                                             | Pros                                                                                                                                                                      | Cons                                                                                       |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| **pnpm + Vite + React + TanStack Router + Tailwind + Vitest + Playwright + oxlint/oxfmt** (chosen) | One schema source via `zod`; native Web Worker tests; Chrome flag plumbing for e2e; pre-1.0 oxlint/oxfmt fast enough for hackathon; Cloudflare Pages is a `_headers` swap | Pre-1.0 lint/format churn risk; lockfile drift if versions are unpinned                    |
+| ESLint + Prettier instead of oxlint/oxfmt                                                          | Battle-tested, ecosystem maturity                                                                                                                                         | Too slow on the day for a one-day build; redundant formatter                               |
+| Next.js or Remix instead of Vite + TanStack Router                                                 | Built-in SSR/router                                                                                                                                                       | Server runtime fights the zero-upload, COOP/COEP-static-origin model; second schema system |
+| Deploy to Vercel/Netlify instead of Cloudflare Pages                                               | Equally static                                                                                                                                                            | No advantage for this app; adds a `_headers`-style config to migrate later                 |
 
 ## Decision
 
@@ -42,28 +40,28 @@ Chosen: **pnpm + Vite + React + TanStack Router + Tailwind + Vitest + Playwright
 
 ### Stack responsibilities (no version pins)
 
-| Concern | Choice |
-| --- | --- |
-| Package manager | pnpm |
-| Node | 26 (Current; LTS from 2026-10-28) |
-| Bundler / dev server | Vite |
-| UI framework | React |
-| Router | `@tanstack/react-router` |
-| Router zod adapter | `@tanstack/zod-adapter` |
-| Styling | Tailwind CSS |
-| Charts | ECharts (lazy-loaded) |
-| DB | `@duckdb/duckdb-wasm` |
-| Schema / validation | `zod` (with AOT compile and `z.strictObject`) |
-| JSON Schema derivation | `zod.toJSONSchema()` (built into v4) |
-| Lint | `oxlint` |
-| Format | `oxfmt` |
-| Tests (unit + contract) | `vitest` + `@testing-library/react` |
-| Tests (e2e) | `@playwright/test` |
-| Deploy | Cloudflare Pages (static) |
-| Origin headers | COOP `same-origin`, COEP `require-corp`, CORP `same-origin` on all self-hosted assets |
-| Fonts | self-hosted Inter, Space Grotesk, JetBrains Mono |
-| ID / hash | `crypto.randomUUID` (always available), `crypto.subtle.digest('SHA-256', ...)` (guarded by `isSecureContext`) |
-| License | MIT |
+| Concern                 | Choice                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Package manager         | pnpm                                                                                                          |
+| Node                    | 26 (Current; LTS from 2026-10-28)                                                                             |
+| Bundler / dev server    | Vite                                                                                                          |
+| UI framework            | React                                                                                                         |
+| Router                  | `@tanstack/react-router`                                                                                      |
+| Router zod adapter      | `@tanstack/zod-adapter`                                                                                       |
+| Styling                 | Tailwind CSS                                                                                                  |
+| Charts                  | ECharts (lazy-loaded)                                                                                         |
+| DB                      | `@duckdb/duckdb-wasm`                                                                                         |
+| Schema / validation     | `zod` (with AOT compile and `z.strictObject`)                                                                 |
+| JSON Schema derivation  | `zod.toJSONSchema()` (built into v4)                                                                          |
+| Lint                    | `oxlint`                                                                                                      |
+| Format                  | `oxfmt`                                                                                                       |
+| Tests (unit + contract) | `vitest` + `@testing-library/react`                                                                           |
+| Tests (e2e)             | `@playwright/test`                                                                                            |
+| Deploy                  | Cloudflare Pages (static)                                                                                     |
+| Origin headers          | COOP `same-origin`, COEP `require-corp`, CORP `same-origin` on all self-hosted assets                         |
+| Fonts                   | self-hosted Inter, Space Grotesk, JetBrains Mono                                                              |
+| ID / hash               | `crypto.randomUUID` (always available), `crypto.subtle.digest('SHA-256', ...)` (guarded by `isSecureContext`) |
+| License                 | MIT                                                                                                           |
 
 `pnpm dev`, `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm e2e` are the contract. CI runs all six on every push with `pnpm install --frozen-lockfile`.
 

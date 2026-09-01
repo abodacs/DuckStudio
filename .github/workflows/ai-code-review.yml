@@ -30,21 +30,18 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code
+      - name: Install Codex CLI
+        run: npm install -g @openai/codex
 
       - name: Run AI Review
         env:
-          ANTHROPIC_BASE_URL: https://api.z.ai/api/anthropic
-          ANTHROPIC_API_KEY: ${{ secrets.AI_CODE_REVIEW_ANTHROPIC_API_KEY }}
-          CLAUDE_MODEL: glm-5.3-flash
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CODEX_MODEL: gpt-5-codex
         run: |
-          claude -p "$(cat .claude/commands/code-review.md)" \
-            --output-format json \
-            --max-turns 30 \
-            --model "$CLAUDE_MODEL" \
-            --allowedTools "Read,Grep,Glob,Bash(git diff *),Bash(git log *),Bash(git show *),Bash(git merge-base *),Agent" \
-            | jq -r '.result // "Review produced no output"' > ai-review-output.txt
+          codex exec "$(cat .agents/commands/code-review.md)" \
+            --model "$CODEX_MODEL" \
+            --sandbox read-only \
+            --output-last-message ai-review-output.txt
 
       - name: Post review comment
         env:

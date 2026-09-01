@@ -1,6 +1,6 @@
 # Contributing
 
-Workflow for DuckStudio: the test floor, the checks that must pass, the pre-publish audit, and browser setup. Architecture rules live in `ARCHITECTURE.md`; custody rules in `SECURITY.md`; agent behavior in `AGENTS.md`.
+Workflow for DuckStudio: the test floor, the checks that must pass, the pre-publish audit, and browser setup. Architecture rules live in `ARCHITECTURE.md`; custody rules in `SECURITY.md`; agent behavior in `AGENTS.md`; dev tooling (caveman, ripgrep) in [`docs/dev-tooling.md`](./docs/dev-tooling.md).
 
 ## Tests
 

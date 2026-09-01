@@ -49,7 +49,7 @@ Create file at `{project-root}/docs/agdr/AgDR-{NNNN}-{slug}.md`:
 ---
 id: AgDR-{NNNN}
 timestamp: {ISO-8601: YYYY-MM-DDTHH:MM:SSZ}
-agent: claude-code
+agent: codex
 model: {model-id from environment}
 session: {session-id if available}
 trigger: user-prompt
