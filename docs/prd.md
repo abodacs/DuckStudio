@@ -43,11 +43,11 @@ flowchart TB
 |---|---|---|
 | **Custody kernel** | Explicit preset policies, SQL guard, release guard, upload telemetry | Differential privacy, formal proofs, compliance certification |
 | **Workspace** | ID, revision, six domain commands, selected artifact, one active operation, bounded events | Persistence across tabs, collaboration, multi-agent locking |
-| **Execution** | One DuckDB-WASM Web Worker; bounded read-only SQL with bindings | Writes, exports, external connectors, arbitrary files on tape |
+| **Execution** | One DuckDB-WASM Web Worker; bounded read-only SQL with bindings | Writes, exports, external connectors, multi-file join wizards, arbitrary files on tape |
 | **Artifacts** | Immutable metadata + local relation + lineage; bounded retention | Durable notebooks, branching UI, artifact sharing |
 | **Control plane** | Four WebMCP tools as a subset of the workspace interface; one envelope; stable errors; revisions; idempotency; delta context | Compatibility aliases, conversational orchestration server, `egress-audit/` folder |
 | **Safe projections** | One summary object for envelope, cards, and Insights; sensitive raw-grid suppression; `minimumCohortSize` | General privacy theorem, unrestricted ad hoc PII analysis |
-| **Evidence UI** | One screen, two panes, four artifact views, operation cards, policy and revision | Routing, auth, dashboards, 3D visualization |
+| **Evidence UI** | One screen, two panes, four artifact views, operation cards, policy and revision | Routing, auth, dashboards, 3D visualization, voice |
 | **Demo** | Two seeded presets and one locked agent-native path | More datasets, extra prompt chips, paid model setup |
 
 ## 4. Agent Control Plane
@@ -205,6 +205,7 @@ The demo may show measured runtime but must not promise or speak a fixed query t
 ## 9. Feature-Driven Implementation Plan
 
 Amendment 1: 2026-09-01 (MLP/north-star framing — adds the north-star metric, MLP definition, and per-slice MLP-beat lines; slice boundaries and order unchanged)
+Amendment 2: 2026-09-02 (feature placement — runtime error→envelope taxonomy named in Slice 2, actuation/context separation tests named in Slice 4, cut-table completeness for voice and multi-file join wizards; no slice boundary or scope changes)
 
 ### North star (amended)
 
@@ -226,9 +227,9 @@ The MLP is this one-day scope: two presets, custody kernel, DuckDB-WASM engine, 
 ### Slice 2 — Dataset custody and Duck engine
 
 - Generate both deterministic presets in a dedicated worker.
-- Implement the custody kernel: classification, policy lookup, SQL inspection, release, cohort confirmation, and upload/release evidence. Do not add `egress-audit/`.
+- Implement the custody kernel: classification, policy lookup, SQL inspection, release, cohort confirmation, and upload/release evidence. Runtime engine failures map to the stable error codes with recovery-useful details, never raw rows. Do not add `egress-audit/`.
 - Implement authorized-source resolution, bindings, budgets, cancellation, and measured metrics.
-- Test unsafe SQL, cohort suppression, budget failure, and worker cancellation.
+- Test unsafe SQL, cohort suppression, budget failure, worker cancellation, and the error-to-envelope mapping that makes the agent's retry loop self-healing.
 - **MLP beat (amended):** the PRD §6 numbers (Churn Rate `14.2%`, Avg Tickets `4.8 / mo`, Impacted MRR `$182,400`) are computed by the seed and canonical SQL — load-bearing, never hardcoded — and the custody leaps are proven: unsafe SQL never crosses the worker boundary, and `sensitive_aggregate_only` data can only leave as cohorts of ten or more.
 
 ### Slice 3 — Revisioned workspace and artifacts
@@ -242,8 +243,8 @@ The MLP is this one-day scope: two presets, custody kernel, DuckDB-WASM engine, 
 
 - Register the four canonical tools through lifecycle-managed adapters that dispatch into the workspace.
 - Encode schemas once; import them from adapters and tests.
-- Produce compact envelopes, deltas, stable errors, typed warnings, and executable `nextActions`.
-- Run identical adapter contract tests for native WebMCP and simulator clients, including human-only `selectArtifact` / `cancelActiveOperation`.
+- Produce compact envelopes, deltas, stable errors, typed warnings, and executable `nextActions`. Read tools return projection-derived `data` and `contextDelta`; actuation happens only through domain commands; mutation envelopes never contain rows.
+- Run identical adapter contract tests for native WebMCP and simulator clients, including human-only `selectArtifact` / `cancelActiveOperation` and the actuation/context separation.
 - **MLP beat (amended):** parity is the product — human controls, prompt chips, the simulator, and native WebMCP produce identical events, artifacts, revisions, errors, and projections for equivalent commands. This is the killer-feature gate.
 
 ### Slice 5 — Evidence canvas
