@@ -66,7 +66,12 @@ export function buildGetContextTool(store: WorkspaceStore): WebMCPToolDefinition
   };
 }
 
-/** The secure-context gate (05): `document.modelContext` only, feature-detected for `registerTool`. */
+/**
+ * The secure-context gate (05): `document.modelContext` only, feature-detected for `registerTool`.
+ * Browsers without the API — Firefox/Safari today, any pre-146 Chromium —
+ * fail a leg here and fall to the simulator; `registerTool` is invoked at
+ * exactly one call site, behind this gate and a try/catch.
+ */
 export function nativeModelContextAvailable(): boolean {
   return (
     typeof isSecureContext !== "undefined" &&

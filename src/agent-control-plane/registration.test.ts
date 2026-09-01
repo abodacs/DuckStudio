@@ -107,6 +107,38 @@ describe("registerTools simulator fallback (ticket 14)", () => {
     const envelope = await invokeTool("duckdb_get_context", { scope: "summary" });
     expect(envelope.ok).toBe(true);
   });
+
+  it("unsupported browser (document present, modelContext absent — Firefox/Safari today): the simulator serves", async () => {
+    // The realistic no-WebMCP shape is a full DOM without the API — not the
+    // bare node env — so this pins the gate's `!!document.modelContext` leg.
+    vi.stubGlobal("isSecureContext", true);
+    vi.stubGlobal("document", {});
+
+    const { registerTools, invokeTool } = await importAdapters();
+    const store = createWorkspaceStore();
+
+    await expect(registerTools(store)).resolves.toBeUndefined();
+
+    expect(store.getSnapshot().capabilities).toContain("simulator_only");
+    const envelope = await invokeTool("duckdb_get_context", { scope: "summary" });
+    expect(envelope.ok).toBe(true);
+  });
+
+  it("modelContext present without registerTool (partial implementation): the simulator serves without touching the native path", async () => {
+    // A future/partial implementation could ship the namespace before the
+    // method; the gate's `"registerTool" in registry` leg must reject it.
+    vi.stubGlobal("isSecureContext", true);
+    vi.stubGlobal("document", { modelContext: {} });
+
+    const { registerTools, invokeTool } = await importAdapters();
+    const store = createWorkspaceStore();
+
+    await expect(registerTools(store)).resolves.toBeUndefined();
+
+    expect(store.getSnapshot().capabilities).toContain("simulator_only");
+    const envelope = await invokeTool("duckdb_get_context", { scope: "summary" });
+    expect(envelope.ok).toBe(true);
+  });
 });
 
 describe("duplicate registration (ticket 14)", () => {
