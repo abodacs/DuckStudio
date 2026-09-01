@@ -753,7 +753,7 @@ The four tools are audited against the 2026 `modern-web-guidance` WebMCP best pr
 **Aligned:**
 
 - **One tool = one function.** Four tools, no overlap: `duckdb_get_context` reads workspace state, `duckdb_activate_dataset` and `duckdb_execute_sql_to_canvas` execute mutations, `duckdb_verify_zero_egress` reads evidence. Reads and mutations never collide on intent.
-- **Execution vs. initiation.** All four names use execution verbs (`get`, `activate`, `run`, `verify`). There is no "start-process" tool; the human-only mutations (`selectArtifact`, `cancelActiveOperation`) are workspace commands, not WebMCP tools.
+- **Execution vs. initiation.** All four names use execution verbs (`get`, `activate`, `execute`, `verify`). There is no "start-process" tool; the human-only mutations (`selectArtifact`, `cancelActiveOperation`) are workspace commands, not WebMCP tools.
 - **Positive language, negative only for hard invariants.** Descriptions state what each tool does. "never returns raw rows" and "not a formal proof" are the two negative phrases kept, because they are non-negotiable safety invariants, not usage discouragement.
 - **Strict-in-code, loose-in-schema.** §8 already declares "browser-visible schema is discoverability, not the trust boundary." Runtime `.parse()` is the seam; field-level `details` give the model enough to self-correct (§9).
 - **Specific types, natural-language choices.** `enum` is used for every choice the agent must pick from (`scope`, dataset IDs, formats, chart types, view tabs). No ambiguous numeric IDs.

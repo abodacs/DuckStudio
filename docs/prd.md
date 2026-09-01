@@ -157,7 +157,7 @@ No partial artifact or partial canvas commits after cancellation, policy denial,
 | saas_churn · 250k · 14 cols              |                                                           |
 | budget 5s / 10k rows / 2k points         | a_01 · source saas_churn · succeeded                     |
 |                                          | KPI cards + chart                                         |
-| duckdb_execute_sql_to_canvas · op_01              |                                                           |
+| duckdb_execute_sql_to_canvas · op_01     |                                                           |
 | succeeded · measured runtime             | SQL hash · exact statement · lineage                     |
 |                                          |                                                           |
 | Artifact a_01                            | Policy release: allowed                                   |
