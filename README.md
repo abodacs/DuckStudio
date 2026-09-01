@@ -100,18 +100,23 @@ Both datasets are generated in browser memory. No customer data, testimonials, d
 
 ## Local Development
 
-Prerequisites: Node 26 (enforced via `engines` + `engineStrict`) and pnpm 11.25.0 (pinned via `packageManager`; corepack or a current pnpm picks it up automatically).
+Prerequisites, both defined and enforced:
+
+- **Node 26** — `.nvmrc` (`nvm use` selects it), `engines.node` in `package.json`, and pnpm's `engineStrict` fail the install on any other major.
+- **pnpm 11.25.0** — pinned via `packageManager`; corepack (or pnpm ≥ 10.17's own manager) switches to it automatically.
 
 ```bash
 pnpm install
 pnpm dev                # dev server
-pnpm lint               # oxlint over the repo
-pnpm lint:strict        # --deny-warnings over the four trust-seam files
+pnpm lint               # oxlint over the repo; --deny-warnings: any warning fails
+pnpm lint:strict        # the four trust-seam files, raised rules, --deny-warnings
 pnpm typecheck          # tsc --noEmit
 pnpm test               # vitest (CI mode)
 pnpm build              # static dist/ (public/_headers ships with it)
 pnpm build && pnpm e2e  # Playwright serves dist/ via wrangler pages dev
 ```
+
+Warning levels are controlled, not floating: `pnpm lint` denies warnings repo-wide, and `.oxlintrc.json` raises the trust-seam rules (`no-explicit-any`, `no-non-null-assertion`, `no-console`) to errors in the four contract files. A warning is either fixed or explicitly configured away — never accumulated.
 
 ## Deploy (Cloudflare Pages)
 

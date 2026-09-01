@@ -1,0 +1,17 @@
+{
+  "overrides": [
+    {
+      "files": [
+        "src/revisioned-workspace/schemas.ts",
+        "src/agent-control-plane/envelope.ts",
+        "src/agent-control-plane/registration.ts",
+        "src/revisioned-workspace/projection.ts"
+      ],
+      "rules": {
+        "no-explicit-any": "error",
+        "no-non-null-assertion": "error",
+        "no-console": "error"
+      }
+    }
+  ]
+}

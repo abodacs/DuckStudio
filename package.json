@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "lint": "oxlint .",
+    "lint": "oxlint . --deny-warnings",
     "lint:strict": "oxlint --deny-warnings src/revisioned-workspace/schemas.ts src/agent-control-plane/envelope.ts src/agent-control-plane/registration.ts src/revisioned-workspace/projection.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
