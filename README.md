@@ -6,13 +6,12 @@ The core idea is **controlled release**, not locality alone. A browser agent can
 
 ## Status
 
-Slice 1 (walking skeleton) is underway: the app scaffold, quality gates, and the Cloudflare Pages deploy cutover exist, and the shell renders at `rev 0` behind COOP/COEP/CORP isolation. The domain systems — custody kernel, DuckDB engine, workspace commands, WebMCP registration — land slice by slice (see [`docs/prd.md`](./docs/prd.md) §9).
+Slice 1 (walking skeleton) is complete: `duckdb_get_context` is exposed through the WebMCP trust seam and envelope, the shell renders at `rev 0` behind COOP/COEP/CORP isolation, and every push to `main` deploys from CI. The domain systems still ahead — dataset custody, DuckDB engine, artifact graph, the remaining workspace commands and tools — land slice by slice (see [`docs/prd.md`](./docs/prd.md) §9).
 
 - Product intent: [`PRODUCT.md`](./PRODUCT.md)
 - Agent and protocol design: [`docs/agent-system-design.md`](./docs/agent-system-design.md)
 - Build scope and acceptance: [`docs/prd.md`](./docs/prd.md)
 - Demo contract: [`docs/video-script.md`](./docs/video-script.md)
-- External reading and tips: [`docs/tips.md`](./docs/tips.md)
 - Implementation architecture: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 - Custody and safe release: [`SECURITY.md`](./SECURITY.md)
 - Workflow, tests, audit, browser setup: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
@@ -45,8 +44,8 @@ flowchart TB
 |---|---|
 | `duckdb_get_context` | Bootstrap or delta-read the actionable workspace state. |
 | `duckdb_activate_dataset` | Activate an already local preset with revision and idempotency control. |
-| `duckdb_run_analysis` | Run one bounded read-only analysis, create an artifact, infer presentation, and select it. |
-| `duckdb_verify_custody` | Read scoped upload, release, transport, policy, and lineage evidence. |
+| `duckdb_execute_sql_to_canvas` | Run one bounded read-only analysis, create an artifact, infer presentation, and select it. |
+| `duckdb_verify_zero_egress` | Read scoped upload, release, transport, policy, and lineage evidence. |
 
 All tools use one schema module plus runtime validation and one discriminated response envelope. Mutations require `expectedRevision` and `idempotencyKey`; reads support bounded detail and revision deltas. Human and simulator adapters also dispatch `selectArtifact` and `cancelActiveOperation`.
 
@@ -54,7 +53,7 @@ All tools use one schema module plus runtime validation and one discriminated re
 
 ```text
 1. duckdb_get_context({ scope: "summary" })
-2. duckdb_run_analysis({
+2. duckdb_execute_sql_to_canvas({
      source: { kind: "dataset", id: "saas_churn" },
      sql: "SELECT ...",
      bindings: {},
@@ -62,7 +61,7 @@ All tools use one schema module plus runtime validation and one discriminated re
      idempotencyKey: "analysis-churn-001"
    })
 3. Reuse the returned artifact ID for refinements.
-4. Call duckdb_verify_custody only when evidence is needed.
+4. Call duckdb_verify_zero_egress only when evidence is needed.
 ```
 
 Good requests describe the analytical goal and constraints, for example:
@@ -120,10 +119,11 @@ Warning levels are controlled, not floating: `pnpm lint` denies warnings repo-wi
 
 ## Deploy (Cloudflare Pages)
 
-The Pages project is created once; deploys ship the static `dist/` and inherit `public/_headers` (COOP/COEP/CORP) at the edge. Until the CI deploy job lands (ship-gate ticket), deploy manually after a green build:
+The Pages project was created once with `--production-branch main`. Every push to `main` deploys from CI: after the quality and E2E jobs are green, the deploy job builds and runs `wrangler pages deploy dist --project-name duckstudio --branch main`, authenticated with the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets. Deploys ship the static `dist/` and inherit `public/_headers` (COOP/COEP/CORP) at the edge.
+
+Preview deploys for a feature branch are manual:
 
 ```bash
-wrangler pages project create duckstudio --production-branch main   # one-time setup
 pnpm exec wrangler pages deploy dist --project-name duckstudio
 ```
 
