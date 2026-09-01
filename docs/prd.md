@@ -204,6 +204,16 @@ The demo may show measured runtime but must not promise or speak a fixed query t
 
 ## 9. Feature-Driven Implementation Plan
 
+Amendment 1: 2026-09-01 (MLP/north-star framing — adds the north-star metric, MLP definition, and per-slice MLP-beat lines; slice boundaries and order unchanged)
+
+### North star (amended)
+
+**Agents complete bounded analysis on sensitive local data with 0 dataset bytes uploaded, provably, in two tool calls** (`duckdb_get_context` → `duckdb_run_analysis`). Leading indicator: time from first paint to first committed artifact. Proof of the north star: this PRD's §8 demo contract records without fakery, and the mute test from `docs/video-script.md` §1 passes — artifact handle, policy label, and the `0 Bytes of Dataset Uploaded` badge tell the custody story with no audio.
+
+### MLP definition (amended)
+
+The MLP is this one-day scope: two presets, custody kernel, DuckDB-WASM engine, revisioned workspace, four WebMCP tools, two-pane evidence canvas, COOP/COEP-isolated deploy. WebMCP is the killer feature because a server API cannot actuate browser-RAM custody through a page-local control plane; the parity contract (human controls, simulator, and native WebMCP dispatch the same domain commands) is what makes it defensible. Each slice below names its MLP beat — the lovable moment that slice must prove before the next starts.
+
 ### Slice 1 — System contracts and scaffold
 
 - Initialize Vite + React + TypeScript + Tailwind.
@@ -211,6 +221,7 @@ The demo may show measured runtime but must not promise or speak a fixed query t
 - Add COOP/COEP `_headers`; self-host runtime assets and fonts.
 - Encode shared domain schemas, response envelope, stable errors, and preset policy metadata.
 - Contract-test schemas and release rules before UI work.
+- **MLP beat (amended):** the honest empty workspace — first paint at `rev 0` with `0 Bytes of Dataset Uploaded` and no fabricated artifact becomes real state flowing through one command path, not chrome constants.
 
 ### Slice 2 — Dataset custody and Duck engine
 
@@ -218,12 +229,14 @@ The demo may show measured runtime but must not promise or speak a fixed query t
 - Implement the custody kernel: classification, policy lookup, SQL inspection, release, cohort confirmation, and upload/release evidence. Do not add `egress-audit/`.
 - Implement authorized-source resolution, bindings, budgets, cancellation, and measured metrics.
 - Test unsafe SQL, cohort suppression, budget failure, and worker cancellation.
+- **MLP beat (amended):** the PRD §6 numbers (Churn Rate `14.2%`, Avg Tickets `4.8 / mo`, Impacted MRR `$182,400`) are computed by the seed and canonical SQL — load-bearing, never hardcoded — and the custody leaps are proven: unsafe SQL never crosses the worker boundary, and `sensitive_aggregate_only` data can only leave as cohorts of ten or more.
 
 ### Slice 3 — Revisioned workspace and artifacts
 
 - Implement the revisioned workspace: six domain commands, monotonic revisions, idempotency cache, bounded event log, operation lifecycle, and atomic commit.
 - Implement immutable artifact metadata, generated local relation names, lineage, retention, and the one safe-projection function.
 - Test stale revisions, exact replay, key conflicts, artifact refinement, `selectArtifact`, cancel, inferred presentation, and no partial commits.
+- **MLP beat (amended):** one command → one commit → one reusable artifact — `a_01` exists, refinement sources it without recomputing its query, and stale/cancelled/conflicting commands leave zero trace.
 
 ### Slice 4 — Agent control plane
 
@@ -231,6 +244,7 @@ The demo may show measured runtime but must not promise or speak a fixed query t
 - Encode schemas once; import them from adapters and tests.
 - Produce compact envelopes, deltas, stable errors, typed warnings, and executable `nextActions`.
 - Run identical adapter contract tests for native WebMCP and simulator clients, including human-only `selectArtifact` / `cancelActiveOperation`.
+- **MLP beat (amended):** parity is the product — human controls, prompt chips, the simulator, and native WebMCP produce identical events, artifacts, revisions, errors, and projections for equivalent commands. This is the killer-feature gate.
 
 ### Slice 5 — Evidence canvas
 
@@ -238,6 +252,7 @@ The demo may show measured runtime but must not promise or speak a fixed query t
 - Bind every visual to the one workspace projection; prohibit private demo setters.
 - Virtualize public grid rows only after an artifact exists; render the healthcare suppression panel.
 - Add custody evidence card. Badge pulse, if any, paints the same projection; `verifyCustody` itself does not mutate chrome.
+- **MLP beat (amended):** the mute test passes on a real screen — artifact handle, policy label, and the zero-upload badge tell the custody story with no audio, and the healthcare grid visibly refuses to paint rows.
 
 ### Slice 6 — Demo proof and deployment
 
@@ -245,6 +260,7 @@ The demo may show measured runtime but must not promise or speak a fixed query t
 - Verify Chrome WebMCP registration and unsupported-browser simulator mode.
 - Run unit, contract, integration, type, lint, and production build checks.
 - Test deployed origin isolation, local asset loading, dataset-upload accounting, and the complete video checklist.
+- **MLP beat (amended):** the tape records without fakery — the north star demonstrated end-to-end on the live URL: context → atomic analysis → immutable artifact → custody evidence, with `0 Bytes of Dataset Uploaded` in frame.
 
 ## 10. Acceptance Criteria
 
