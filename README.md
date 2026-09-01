@@ -6,7 +6,7 @@ The core idea is **controlled release**, not locality alone. A browser agent can
 
 ## Status
 
-Design and implementation contract are complete; the application scaffold is not yet present.
+Slice 1 (walking skeleton) is underway: the app scaffold, quality gates, and the Cloudflare Pages deploy cutover exist, and the shell renders at `rev 0` behind COOP/COEP/CORP isolation. The domain systems — custody kernel, DuckDB engine, workspace commands, WebMCP registration — land slice by slice (see [`docs/prd.md`](./docs/prd.md) §9).
 
 - Product intent: [`PRODUCT.md`](./PRODUCT.md)
 - Agent and protocol design: [`docs/agent-system-design.md`](./docs/agent-system-design.md)
@@ -100,18 +100,27 @@ Both datasets are generated in browser memory. No customer data, testimonials, d
 
 ## Local Development
 
-The scaffold will expose the following commands once implemented:
+Prerequisites: Node 26 (enforced via `engines` + `engineStrict`) and pnpm 11.25.0 (pinned via `packageManager`; corepack or a current pnpm picks it up automatically).
 
 ```bash
 pnpm install
-pnpm dev
-pnpm test
-pnpm lint
-pnpm typecheck
-pnpm build
+pnpm dev                # dev server
+pnpm lint               # oxlint over the repo
+pnpm lint:strict        # --deny-warnings over the four trust-seam files
+pnpm typecheck          # tsc --noEmit
+pnpm test               # vitest (CI mode)
+pnpm build              # static dist/ (public/_headers ships with it)
+pnpm build && pnpm e2e  # Playwright serves dist/ via wrangler pages dev
 ```
 
-Do not treat these commands as currently available until the scaffold lands.
+## Deploy (Cloudflare Pages)
+
+The Pages project is created once; deploys ship the static `dist/` and inherit `public/_headers` (COOP/COEP/CORP) at the edge. Until the CI deploy job lands (ship-gate ticket), deploy manually after a green build:
+
+```bash
+wrangler pages project create duckstudio --production-branch main   # one-time setup
+pnpm exec wrangler pages deploy dist --project-name duckstudio
+```
 
 ## Connect a Browser Agent
 
