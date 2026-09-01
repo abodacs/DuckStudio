@@ -10,3 +10,6 @@
 # OS artifacts
 .DS_Store
 Thumbs.db
+
+# Scratch files
+.scratch/
