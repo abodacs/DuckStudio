@@ -12,6 +12,8 @@ describe("envelope re-exports (ADR 0004 am4)", () => {
     expect(envelope.GetContextInputSchema).toBe(domain.GetContextInputSchema);
     expect(envelope.CompiledGetContextInput).toBe(domain.CompiledGetContextInput);
     expect(envelope.GetContextSummaryDataSchema).toBe(domain.GetContextSummaryDataSchema);
+    expect(envelope.GetContextEventsDataSchema).toBe(domain.GetContextEventsDataSchema);
+    expect(envelope.WorkspaceEventSchema).toBe(domain.WorkspaceEventSchema);
     expect(envelope.GET_CONTEXT_TOOL_DESCRIPTION).toBe(domain.GET_CONTEXT_TOOL_DESCRIPTION);
   });
 
@@ -23,6 +25,8 @@ describe("envelope re-exports (ADR 0004 am4)", () => {
     expectTypeOf<envelope.ErrorCode>().toEqualTypeOf<domain.ErrorCode>();
     expectTypeOf<envelope.GetContextInput>().toEqualTypeOf<domain.GetContextInput>();
     expectTypeOf<envelope.GetContextSummaryData>().toEqualTypeOf<domain.GetContextSummaryData>();
+    expectTypeOf<envelope.GetContextEventsData>().toEqualTypeOf<domain.GetContextEventsData>();
+    expectTypeOf<envelope.WorkspaceEvent>().toEqualTypeOf<domain.WorkspaceEvent>();
   });
 
   // The URL seam (workspaceSearchSchema) is routed directly from the domain

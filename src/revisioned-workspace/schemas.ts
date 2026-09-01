@@ -174,3 +174,38 @@ export const GetContextSummaryDataSchema = z.strictObject({
 });
 
 export type GetContextSummaryData = z.infer<typeof GetContextSummaryDataSchema>;
+
+/**
+ * §3.3 workspace event — the ring-buffer element, encoded now so
+ * `scope: "events"` carries its domain shape before the first mutation can
+ * append anything (ticket 04).
+ */
+export const WorkspaceEventSchema = z.strictObject({
+  revision: z.number().int().nonnegative(),
+  at: z.string(),
+  kind: z.enum([
+    "dataset_activated",
+    "analysis_succeeded",
+    "analysis_failed",
+    "artifact_selected",
+    "operation_cancelled",
+  ]),
+  operationId: z.string().optional(),
+  artifactId: z.string().optional(),
+  datasetId: z.string().optional(),
+  errorCode: ErrorCodeSchema.optional(),
+});
+
+export type WorkspaceEvent = z.infer<typeof WorkspaceEventSchema>;
+
+/**
+ * §8.1 `scope: "events"` data. At rev 0 the buffer is empty by construction —
+ * nothing can append, so nothing can truncate, and every legal `sinceRevision`
+ * is inside the window (ticket 04).
+ */
+export const GetContextEventsDataSchema = z.strictObject({
+  events: z.array(WorkspaceEventSchema),
+  oldestRetainedRevision: z.number().int().nonnegative(),
+});
+
+export type GetContextEventsData = z.infer<typeof GetContextEventsDataSchema>;

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ErrorCodeSchema, GetContextSummaryDataSchema } from "../revisioned-workspace/schemas";
+import { ErrorCodeSchema, GetContextEventsDataSchema, GetContextSummaryDataSchema } from "../revisioned-workspace/schemas";
 
 /**
  * Transport vocabulary for the §7 uniform envelope, plus re-exports of the
@@ -15,19 +15,23 @@ export {
   CapabilitySchema,
   CompiledGetContextInput,
   GET_CONTEXT_TOOL_DESCRIPTION,
+  GetContextEventsDataSchema,
   GetContextInputSchema,
   GetContextSummaryDataSchema,
   OperationSummarySchema,
+  WorkspaceEventSchema,
   WorkspaceSchema,
 } from "../revisioned-workspace/schemas";
 export type {
   BudgetLimits,
   Capability,
   ErrorCode,
+  GetContextEventsData,
   GetContextInput,
   GetContextSummaryData,
   OperationSummary,
   Workspace,
+  WorkspaceEvent,
 } from "../revisioned-workspace/schemas";
 export { ErrorCodeSchema };
 
@@ -100,3 +104,12 @@ export const CompiledEnvelopeFailure = z.compile(EnvelopeFailureSchema);
 export const CompiledGetContextEnvelopeSuccess = z.compile(
   EnvelopeSuccessSchema.extend({ data: GetContextSummaryDataSchema }),
 );
+
+export const CompiledGetContextEventsEnvelopeSuccess = z.compile(
+  EnvelopeSuccessSchema.extend({ data: GetContextEventsDataSchema }),
+);
+
+/** The one awaited result type every adapter shares (ADR 0004 am4). */
+export type Envelope =
+  | z.infer<typeof EnvelopeSuccessSchema>
+  | z.infer<typeof EnvelopeFailureSchema>;
