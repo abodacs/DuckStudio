@@ -47,6 +47,7 @@ export type WorkspaceStore = {
   getSnapshot(): Workspace;
   getServerSnapshot(): Workspace;
   dispatch(command: DomainCommand): Promise<Envelope>;
+  appendCapability(capability: "webmcp_native" | "simulator_only"): void;
 };
 
 /** §4.1: the workspace has a stable ID — deterministic for parity tests and the simulator. */
@@ -209,7 +210,7 @@ function executeGetContext(workspace: Workspace, input: GetContextInput): Envelo
  */
 export function createWorkspaceStore(): WorkspaceStore {
   const listeners = new Set<() => void>();
-  const workspace = createRev0Workspace();
+  let workspace = createRev0Workspace();
 
   return {
     subscribe(listener) {
@@ -230,6 +231,25 @@ export function createWorkspaceStore(): WorkspaceStore {
         return Promise.resolve(validationFailure(workspace, parsed.error));
       }
       return Promise.resolve(executeGetContext(workspace, parsed.data.input));
+    },
+    appendCapability: (capability) => {
+      // Negotiation, not a domain event: the revision stays 0, but the
+      // snapshot is replaced whole so the deep-freeze discipline holds and
+      // `useSyncExternalStore` sees a new reference. A second append for the
+      // same capability means two surfaces claim the tool — a defect, never
+      // silently swallowed (ARCHITECTURE.md).
+      if (workspace.capabilities.includes(capability)) {
+        throw new Error(`store: capability "${capability}" appended twice — negotiation is a defect`);
+      }
+      const next: Workspace = {
+        ...workspace,
+        capabilities: [...workspace.capabilities, capability],
+      };
+      Object.freeze(next.capabilities);
+      workspace = Object.freeze(next);
+      for (const listener of listeners) {
+        listener();
+      }
     },
   };
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   CompiledEnvelopeFailure,
   CompiledGetContextEnvelopeSuccess,
@@ -205,5 +205,39 @@ describe("dispatch honesty at the synchronous seam (ADR 0004 am4)", () => {
     await Promise.resolve();
     expect(settled).toBeDefined();
     expect(settled?.ok).toBe(false);
+  });
+});
+
+describe("capability negotiation (ticket 14)", () => {
+  it("appendCapability replaces the snapshot whole at rev 0, frozen, without touching the old snapshot", () => {
+    const store = createStore();
+    const before = store.getSnapshot();
+
+    store.appendCapability("simulator_only");
+
+    const after = store.getSnapshot();
+    expect(after).not.toBe(before);
+    expect(after.capabilities).toContain("simulator_only");
+    expect(after.revision).toBe(0);
+    expect(Object.isFrozen(after)).toBe(true);
+    expect(Object.isFrozen(after.capabilities)).toBe(true);
+    expect(before.capabilities).not.toContain("simulator_only");
+  });
+
+  it("notifies listeners when a capability is appended", () => {
+    const store = createStore();
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    store.appendCapability("webmcp_native");
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws on a double append instead of silently negotiating twice", () => {
+    const store = createStore();
+    store.appendCapability("webmcp_native");
+
+    expect(() => store.appendCapability("webmcp_native")).toThrow();
   });
 });
