@@ -1,0 +1,51 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+# Cancel an in-flight review when a new commit is pushed to the same PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 100
+
+      - name: Fetch main branch
+        run: git fetch origin main --depth=100
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Install Codex CLI
+        run: npm install -g @openai/codex
+
+      - name: Run AI Review
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CODEX_MODEL: gpt-5-codex
+        run: |
+          codex exec "$(cat .agents/commands/code-review.md)" \
+            --model "$CODEX_MODEL" \
+            --sandbox read-only \
+            --output-last-message ai-review-output.txt
+
+      - name: Post review comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body-file ai-review-output.txt
