@@ -2,7 +2,7 @@
 export function InsightsView() {
   return (
     <p className="flex min-h-36 items-center justify-center text-center text-sm text-ink-secondary">
-      No artifact selected — approved KPIs appear with your first analysis.
+      No artifact selected — run an analysis to see approved KPIs.
     </p>
   );
 }
