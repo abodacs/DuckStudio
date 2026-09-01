@@ -809,6 +809,8 @@ type ErrorCode =
 
 Errors never echo raw rows, sensitive bindings, or full internal stack traces.
 
+Runtime engine failures (DuckDB diagnostics, budget exhaustion, worker respawn) are classified at the custody seam before they become envelopes: policy violations map to their table code above, exhausted budgets to `BUDGET_EXCEEDED`, and anything unclassified to `INTERNAL_ERROR` with `retryable: true`. `error.details` carries only recovery-useful hints — blocked construct, offending clause kind, budget axis, elapsed and limit values — so the agent's recovery loop is: read `code` + `details`, apply the recovery column, re-dispatch. There is no fix-up tool; §12's playbooks are the loop.
+
 ## 10. State, Retry, and Lifecycle Semantics
 
 - Adapters validate inputs against the shared schema module, then dispatch domain commands.
