@@ -1,0 +1,34 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout only so the guards below can see whether the scaffold has landed
+      - uses: actions/checkout@v7
+
+      - uses: googleapis/release-please-action@v5
+        if: ${{ hashFiles('package.json') != '' }}
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # Version+changelog-only PRs need no human review — merge as soon as they
+      # exist so versions stay current without a manual click.
+      - name: Auto-merge release PRs
+        if: ${{ hashFiles('package.json') != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr list --label "autorelease: pending" --state open --json number \
+            --jq '.[].number' | while read -r pr; do
+            gh pr merge "$pr" --squash --admin
+          done

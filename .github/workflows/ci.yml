@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Cancel in-progress runs for the same workflow
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The scaffold (package.json) hasn't landed yet — README "Local Development"
+  # is explicit that the commands don't exist until it does. Gate on its
+  # presence so docs-only commits stay green instead of failing install.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      scaffold: ${{ steps.check.outputs.scaffold }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: check
+        run: echo "scaffold=$([ -f package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: Lint, Type Check, Test & Build
+    needs: gate
+    if: needs.gate.outputs.scaffold == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Latest major as of 2026-09-01 (11.25.0). Keep the major in sync with
+      # package.json's packageManager field when the scaffold lands.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (oxlint — ADR-0003)
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Test (Vitest)
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  # AgDR-0001 "E2E layer": Playwright drives acceptance scenarios (sensitive
+  # grid suppression, badge text, custody evidence, WebMCP-vs-simulator parity).
+  # Chrome must carry the WebMCP testing flag — launch args live in the
+  # scaffold's playwright.config, not here; CI just supplies the browser.
+  e2e:
+    name: E2E (Playwright)
+    needs: gate
+    if: needs.gate.outputs.scaffold == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: playwright-${{ runner.os }}-
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Build before serving so e2e exercises the shipped static origin
+      # (COOP/COEP headers included), not a dev server.
+      - name: Build
+        run: pnpm build
+
+      - name: Run E2E
+        run: pnpm e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
