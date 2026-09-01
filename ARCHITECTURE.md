@@ -62,7 +62,7 @@ Human controls, prompt chips, Agent Simulator, and WebMCP adapters must dispatch
 - Do not manufacture transcript cards, artifacts, timings, revisions, or audit evidence for the demo.
 - Equivalent commands through different adapters must produce equivalent events, artifacts, errors, and projections.
 - WebMCP registers exactly the four canonical tools. `selectArtifact` and `cancelActiveOperation` remain workspace commands for human and simulator adapters.
-- One projection owner, two named functions: `projectWorkspace(ws)` for workspace scope (left-pane cards, simulator cards, header badge) and `projectArtifact(ws, id)` for artifact scope (envelope `summary`, Insights KPIs, the four views). The referential-equality contract test covers all four call sites, so DOM evidence and tool payloads cannot drift.
+- One projection owner, two named functions: `projectWorkspace(ws)` for workspace scope (left-pane cards, simulator cards, header badge) and `projectArtifact(ws, id)` for artifact scope (Insights KPIs, the four views). The envelope `summary` sources `projectWorkspace` while no artifact can exist — at rev 0 it is the five workspace-scope bootstrap fields (ticket 06); artifact-bearing summaries move to `projectArtifact` when artifacts arrive (Slice 3). The referential-equality contract test covers all four call sites, so DOM evidence and tool payloads cannot drift.
 
 ## Explicit State Only
 

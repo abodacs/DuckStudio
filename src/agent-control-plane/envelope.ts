@@ -19,6 +19,7 @@ export {
   GetContextInputSchema,
   GetContextSummaryDataSchema,
   OperationSummarySchema,
+  PolicySchema,
   WorkspaceEventSchema,
   WorkspaceSchema,
 } from "../revisioned-workspace/schemas";
@@ -30,6 +31,7 @@ export type {
   GetContextInput,
   GetContextSummaryData,
   OperationSummary,
+  Policy,
   Workspace,
   WorkspaceEvent,
 } from "../revisioned-workspace/schemas";

@@ -6,6 +6,7 @@
 - Technical Area: Frontend, Project Structure
 - Amendment 2: 2026-08-31 (template conformance: Deciders, Technical Area, add Alternatives Considered, split Consequences into Positive/Negative/Neutral, add Implementation, References, Decision Log)
 - Amendment 3: 2026-09-01 (projection: one owner, two named functions, four call sites; preset seed→relation contract test; schema placement per ADR 0004 amendment 4)
+- Amendment 4: 2026-09-02 (rev-0 envelope `summary` sources `projectWorkspace` — ticket 06's resolution of the amendment-3 tension; `projectArtifact` serves artifact-bearing summaries from Slice 3)
 - Amendment 1: 2026-08-31 (projection module, cross-cutting tests, no-shared-kernel, handler ownership)
 
 ## Context
@@ -32,8 +33,8 @@ No top-level `components/`, `hooks/`, `utils/`, `services/`, `types/`, or `store
 
 `revisioned-workspace/projection.ts` is the **single owner of the projection functions**. Two named interfaces leave it:
 
-- `projectWorkspace(ws)` — workspace scope. Consumed by `agent-control-plane/simulator.ts` (left-pane artifact cards) and `studio-shell/` (header badge).
-- `projectArtifact(ws, id)` — artifact scope. Consumed by `live-canvas/` (Insights, Data Grid, SQL & Lineage, Custody) and `agent-control-plane/envelope.ts` (the envelope `summary` field).
+- `projectWorkspace(ws)` — workspace scope. Consumed by `agent-control-plane/simulator.ts` (left-pane artifact cards) and `studio-shell/` (header badge); also the envelope `summary` while no artifact can exist (amendment 4).
+- `projectArtifact(ws, id)` — artifact scope. Consumed by `live-canvas/` (Insights, Data Grid, SQL & Lineage, Custody) and, from Slice 3, `agent-control-plane/envelope.ts` (artifact-bearing summaries).
 
 "Single projection consumer" was already false: this ADR named three consumers and the header badge was a silent fourth. The PRD's "one safe projection" property is enforced by one owner with two named scopes, not by one function — DOM evidence and tool payloads cannot drift. A Vitest contract test in `revisioned-workspace/projection.test.ts` asserts that, per scope, the projection object is referentially equal across all four call sites.
 
@@ -99,7 +100,7 @@ Unit tests for a single module live next to that module (`projection.test.ts` ne
 ## Implementation (amended 3)
 
 - Scaffold each top-level folder under `src/` with the responsibilities described in the Decision tree.
-- `revisioned-workspace/projection.ts` is the single owner of the projection functions `projectWorkspace(ws)` and `projectArtifact(ws, id)`. The contract test `revisioned-workspace/projection.test.ts` asserts referential equality per scope across the four call sites: live-canvas views and the envelope `summary` (`projectArtifact`), simulator cards and the studio-shell header badge (`projectWorkspace`).
+- `revisioned-workspace/projection.ts` is the single owner of the projection functions `projectWorkspace(ws)` and `projectArtifact(ws, id)`. The contract test `revisioned-workspace/projection.test.ts` asserts referential equality per scope across the four call sites: live-canvas views (and the envelope `summary` from Slice 3 — at rev 0 the summary is workspace scope, `projectWorkspace`) for `projectArtifact`, simulator cards and the studio-shell header badge for `projectWorkspace`.
 - Domain schemas colocate with their owning modules (`revisioned-workspace/schemas.ts`, `dataset-custody/schemas.ts`, `analysis-artifacts/schemas.ts`); `agent-control-plane/envelope.ts` re-exports them (ADR 0004 amendment 4).
 - `selectArtifact` and `cancelActiveOperation` handlers live in `revisioned-workspace/`. The simulator and the human UI both call `workspace.dispatch(...)`; they do not import the handlers directly.
 - Cross-cutting contract tests live in `<feature>/_contract/`:

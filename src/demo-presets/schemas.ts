@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PolicySchema } from "../revisioned-workspace/schemas";
 
 /**
  * Preset catalog metadata (ticket 04): the seeded datasets live here as
@@ -36,7 +37,7 @@ export type PresetColumn = z.infer<typeof PresetColumnSchema>;
  */
 export const PresetMetadataSchema = z.strictObject({
   datasetId: z.string().min(1),
-  policy: z.enum(["public_synthetic", "sensitive_aggregate_only"]),
+  policy: PolicySchema,
   minimumCohortSize: z.number().int().min(1),
   rowCount: z.number().int().nonnegative(),
   byteSizeEstimate: z.number().int().nonnegative(),

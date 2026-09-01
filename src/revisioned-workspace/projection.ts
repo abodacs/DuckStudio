@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { WorkspaceSchema, type BudgetLimits, type Capability, type Workspace } from "./schemas";
+import {
+  WorkspaceSchema,
+  type BudgetLimits,
+  type Capability,
+  type Policy,
+  type Workspace,
+} from "./schemas";
 
 /**
  * The single projection owner (ADR 0005 am3): `projectWorkspace` serves the
@@ -21,7 +27,7 @@ export type DatasetState =
   | {
       kind: "active";
       datasetId: string;
-      policy: "public_synthetic" | "sensitive_aggregate_only";
+      policy: Policy;
       rowCount: number;
       bytes: number;
     };

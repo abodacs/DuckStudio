@@ -7,7 +7,7 @@ import {
 } from "../agent-control-plane/envelope";
 import { createWorkspaceStore, type DomainCommand } from "./store";
 
-function createDispatch() {
+function createStore() {
   return createWorkspaceStore();
 }
 
@@ -15,7 +15,7 @@ function createDispatch() {
 // leave the snapshot both unchanged in value and identical by reference.
 describe("rev-0 seed", () => {
   it("seeds ws_local_01 at revision 0 with the bootstrap capabilities and §4.6 default budgets", () => {
-    const ws = createDispatch().getSnapshot();
+    const ws = createStore().getSnapshot();
     expect(ws).toEqual({
       workspaceId: "ws_local_01",
       revision: 0,
@@ -44,19 +44,19 @@ describe("rev-0 seed", () => {
   });
 
   it("keeps the snapshot reference stable across reads (StrictMode-safe)", () => {
-    const store = createDispatch();
+    const store = createStore();
     expect(store.getSnapshot()).toBe(store.getSnapshot());
     expect(store.getServerSnapshot()).toBe(store.getServerSnapshot());
   });
 
   it("freezes the server snapshot (SSR N/A, API required)", () => {
-    expect(Object.isFrozen(createDispatch().getServerSnapshot())).toBe(true);
+    expect(Object.isFrozen(createStore().getServerSnapshot())).toBe(true);
   });
 });
 
 describe("getContext scope table at rev 0 (ticket 04)", () => {
   it("summary returns the five bootstrap fields with activeDataset null", async () => {
-    const store = createDispatch();
+    const store = createStore();
     const envelope = await store.dispatch({ kind: "getContext", input: { scope: "summary" } });
 
     const parsed = CompiledGetContextEnvelopeSuccess.parse(envelope);
@@ -88,7 +88,7 @@ describe("getContext scope table at rev 0 (ticket 04)", () => {
   });
 
   it("schema scope rejects with DATASET_UNAVAILABLE and the pinned details", async () => {
-    const store = createDispatch();
+    const store = createStore();
     const envelope = await store.dispatch({
       kind: "getContext",
       input: { scope: "schema", datasetId: "saas_churn" },
@@ -104,7 +104,7 @@ describe("getContext scope table at rev 0 (ticket 04)", () => {
   });
 
   it("artifact scope rejects with ARTIFACT_UNAVAILABLE", async () => {
-    const store = createDispatch();
+    const store = createStore();
     const envelope = await store.dispatch({
       kind: "getContext",
       input: { scope: "artifact", artifactId: "a_01" },
@@ -120,7 +120,7 @@ describe("getContext scope table at rev 0 (ticket 04)", () => {
   });
 
   it("events scope returns the empty delta window anchored at revision 0", async () => {
-    const store = createDispatch();
+    const store = createStore();
     const envelope = await store.dispatch({
       kind: "getContext",
       input: { scope: "events", sinceRevision: 0 },
@@ -135,7 +135,7 @@ describe("getContext scope table at rev 0 (ticket 04)", () => {
 
 describe("sinceRevision delta read", () => {
   it("returns the compact event delta, not a full re-ingest of the workspace", async () => {
-    const store = createDispatch();
+    const store = createStore();
     const envelope = await store.dispatch({
       kind: "getContext",
       input: { scope: "events", sinceRevision: 0 },
@@ -150,7 +150,7 @@ describe("sinceRevision delta read", () => {
   });
 
   it("accepts a sinceRevision beyond the window without DELTA_WINDOW_EXPIRED — every legal value is inside the window by construction", async () => {
-    const store = createDispatch();
+    const store = createStore();
     const envelope = await store.dispatch({
       kind: "getContext",
       input: { scope: "events", sinceRevision: 999 },
@@ -165,7 +165,7 @@ describe("sinceRevision delta read", () => {
 
 describe("dispatch honesty at the synchronous seam (ADR 0004 am4)", () => {
   it("rejects a refinement violation with a synchronous VALIDATION_ERROR envelope", async () => {
-    const store = createDispatch();
+    const store = createStore();
     const before = store.getSnapshot();
 
     // scope schema without datasetId violates the input refinement.
@@ -183,7 +183,7 @@ describe("dispatch honesty at the synchronous seam (ADR 0004 am4)", () => {
   });
 
   it("rejects an unknown command kind instead of faking success", async () => {
-    const store = createDispatch();
+    const store = createStore();
     const promise = store.dispatch({
       kind: "activate_dataset",
       input: {},
@@ -194,7 +194,7 @@ describe("dispatch honesty at the synchronous seam (ADR 0004 am4)", () => {
   });
 
   it("settles a malformed dispatch on the next microtask — no awaited round trip", async () => {
-    const store = createDispatch();
+    const store = createStore();
     let settled: Envelope | undefined;
     void store
       .dispatch({ kind: "getContext", input: { scope: "schema" } } as DomainCommand)

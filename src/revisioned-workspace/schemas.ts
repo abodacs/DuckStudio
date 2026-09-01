@@ -50,6 +50,11 @@ export const CapabilitySchema = z.enum([
 
 export type Capability = z.infer<typeof CapabilitySchema>;
 
+/** §4.2 dataset policy vocabulary — one spelling for the workspace summary and the preset catalog. */
+export const PolicySchema = z.enum(["public_synthetic", "sensitive_aggregate_only"]);
+
+export type Policy = z.infer<typeof PolicySchema>;
+
 /** §4.6 budget knobs; the hard maxima are custody-kernel enforcement, not schema bounds. */
 export const BudgetLimitsSchema = z.strictObject({
   executionMs: z.number().int().nonnegative(),
@@ -164,7 +169,7 @@ export const GetContextSummaryDataSchema = z.strictObject({
   activeDataset: z
     .strictObject({
       datasetId: z.string(),
-      policy: z.enum(["public_synthetic", "sensitive_aggregate_only"]),
+      policy: PolicySchema,
       rowCount: z.number().int().nonnegative(),
     })
     .nullable(),
