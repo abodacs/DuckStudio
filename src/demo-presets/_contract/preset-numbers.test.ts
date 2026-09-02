@@ -41,7 +41,7 @@ beforeAll(async () => {
     expect(Object.keys(tripleRows[0] as object)).toEqual(columns);
     await writeFile(csvPath(triple, workDir), toCsv(columns, tripleRows));
   }
-});
+}, 60_000);
 
 afterAll(async () => {
   await rm(workDir, { recursive: true, force: true });

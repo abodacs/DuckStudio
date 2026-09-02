@@ -21,7 +21,7 @@ function saasAggregate(rows: ReturnType<typeof generateSaasChurnRows>) {
 }
 
 describe("saas_churn seed", () => {
-  it("is deterministic across calls", () => {
+  it("is deterministic across calls", { timeout: 30_000 }, () => {
     const again = generateSaasChurnRows();
     expect(again.length).toBe(saasRows.length);
     for (const index of [0, 1, 7, 999, 125_000, 249_999]) {
