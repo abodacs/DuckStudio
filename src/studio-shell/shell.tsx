@@ -5,7 +5,7 @@ import { ToolNameSchema } from "../agent-control-plane/envelope";
 import type { OperationSummary } from "../revisioned-workspace/schemas";
 import { projectWorkspace } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
-import { cancelActiveOperation, selectArtifact, activatePreset, runPresetAnalysis, verifyEvidence, type RunnablePresetId } from "../live-canvas/human-commands";
+import { cancelActiveOperation, selectArtifact, activatePreset, runCanonicalChurnAnalysis, type RunnablePresetId } from "../live-canvas/human-commands";
 import { formatKpiValue } from "../live-canvas/kpi";
 import { consumeInitialView, resolvePostCommitView } from "../live-canvas/view-intent";
 import { CustodyView } from "../live-canvas/custody-view";
@@ -83,10 +83,9 @@ const TRANSPORTS = ["fetch", "XMLHttpRequest", "sendBeacon", "WebSocket", "WebTr
 
 /**
  * The first-run path (PRD §7.3 first paint): three moves to the aha —
- * governed evidence on glass while the badge still reads zero upload. Each
- * move names real UI and is itself a gesture: a click dispatches the same
- * domain commands through the human seam (slice 6); the current move and the
- * done checks derive from workspace state, never from a tour counter.
+ * governed evidence on glass while the badge still reads zero upload. The
+ * moves are guidance, not chrome state: the current move derives from
+ * workspace state, never from a tour counter.
  */
 const FIRST_RUN_MOVES = [
   {
@@ -111,15 +110,6 @@ function ArrowGlyph() {
   return (
     <svg viewBox="0 0 12 12" fill="none" aria-hidden className="size-3">
       <path d="M3.5 8.5 8.5 3.5M8.5 3.5H4.5M8.5 3.5v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-/** Hairline check for completed first-run moves — 1.5px strokes. */
-function CheckGlyph() {
-  return (
-    <svg viewBox="0 0 12 12" fill="none" aria-hidden className="size-3">
-      <path d="M2.5 6.5 5 9l4.5-5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -167,8 +157,13 @@ export function WorkspaceShell() {
   const tabRefs = useRef<Map<ViewId, HTMLButtonElement | null>>(new Map());
   const appliedRuns = useRef<Set<string>>(new Set());
   const switchTo = switchView(setActiveView);
-  /** The chip/step gesture in flight — button affordance only, never workspace state. */
-  const [pending, setPending] = useState<"chip-churn" | "chip-healthcare" | "chip-verify" | null>(null);
+  /**
+   * The human dispatches' rejected envelopes (grilling 61: "the envelope
+   * teaches"). Canvas-local echo only — the workspace never records a
+   * rejected command, so the card renders while the operation it conflicted
+   * with is live and disappears when the stream settles.
+   */
+  const [dispatchFailure, setDispatchFailure] = useState<{ code: string } | null>(null);
 
   // The post-commit tab (grilling 52): the human adapter's captured
   // `initialView` applies once per succeeded analysis, else §4.5 inference.
@@ -231,46 +226,20 @@ export function WorkspaceShell() {
   const runtime = expandedOperation ? measuredRuntime(expandedOperation) : null;
 
   /**
-   * The judge-path gestures (slice 6): one in-flight gesture at a time, and
-   * quiet while the operation slot is occupied — a second mutation would
-   * only earn OPERATION_CONFLICT. The verify chip lands on the Custody tab
-   * when its read succeeds; a canvas-local switch, never a mutation.
+   * The judge-path surface facts (slice 6) read from the one projection:
+   * the served capability names the header chip, and the active dataset
+   * highlights its preset card. Neither gates a dispatch — grilling 61
+   * keeps every gesture enabled so the envelope teaches recovery.
    */
-  const busy = pending !== null || operationsLive;
   const activeDatasetId = vm.datasetState.kind === "active" ? vm.datasetState.datasetId : null;
-  const hasArtifacts = vm.recentArtifacts.length > 0;
   const nativeSurface = vm.capabilities.includes("webmcp_native");
 
-  const runChip = (chip: "chip-churn" | "chip-healthcare", presetId: "saas_churn" | "healthcare_pii") => {
-    setPending(chip);
-    runPresetAnalysis(presetId, vm.revision)
-      .catch(() => undefined)
-      .finally(() => setPending(null));
-  };
-  const runVerifyChip = () => {
-    setPending("chip-verify");
-    verifyEvidence()
-      .then((ok) => {
-        if (ok) switchTo("custody");
-      })
-      .catch(() => undefined)
-      .finally(() => setPending(null));
-  };
-
-  /** Each first-run move is itself the gesture it names (slice 6). */
-  const runMove = (move: (typeof FIRST_RUN_MOVES)[number]["id"]) => {
-    if (move === "activate") {
-      if (activeDatasetId === null) activatePreset("saas_churn", vm.revision);
-      return;
-    }
-    if (move === "ask") {
-      setPending("chip-churn");
-      runPresetAnalysis("saas_churn", vm.revision)
-        .catch(() => undefined)
-        .finally(() => setPending(null));
-      return;
-    }
-    switchTo("insights");
+  /** One dispatch per click; the envelope's verdict echoes in the canvas. */
+  const activate = (datasetId: RunnablePresetId) => {
+    const pending = activatePreset(datasetId, vm.revision);
+    void pending.then((verdict) => {
+      setDispatchFailure(verdict.ok ? null : { code: verdict.code });
+    });
   };
 
   return (
@@ -296,6 +265,14 @@ export function WorkspaceShell() {
             <span aria-hidden className={`badge-dot ${operationsLive ? "badge-dot-live" : ""}`} />
             {vm.badge}
           </span>
+          <span
+            aria-label="Agent capability"
+            title="The served agent surface"
+            className="chip-capability"
+          >
+            <span aria-hidden className={`agent-dot ${nativeSurface ? "agent-dot-native" : "agent-dot-simulator"}`} />
+            <span className="mono-value">{nativeSurface ? "webmcp_native" : "simulator_only · same workspace"}</span>
+          </span>
         </div>
       </header>
       <main className="relative z-10 grid min-h-0 flex-1 grid-cols-[35%_65%] gap-4 px-5 pt-4 pb-5">
@@ -314,52 +291,30 @@ export function WorkspaceShell() {
           >
             <div className="card-core">
               <h3 className="card-label">FIRST ANALYSIS</h3>
-              <ol className="mt-2.5 space-y-1.5">
+              <ol className="mt-2.5 space-y-3">
                 {FIRST_RUN_MOVES.map((move, index) => {
                   const isCurrent = index === currentMove;
-                  const isDone = index < currentMove;
-                  // Each move enables only when its gesture is legal right
-                  // now: activate needs rev 0, ask chains activation itself,
-                  // read needs evidence to land on.
-                  const enabled =
-                    !busy &&
-                    (move.id === "activate"
-                      ? activeDatasetId === null
-                      : move.id === "ask" || hasArtifacts);
                   return (
-                    <li key={move.id}>
-                      <button
-                        type="button"
-                        disabled={!enabled}
-                        onClick={() => runMove(move.id)}
-                        className={`flex w-full items-start gap-3 rounded-panel-inner border px-1.5 py-1.5 text-left state-shift press focus-ring ${
-                          enabled
-                            ? "border-transparent hover:border-edge hover:bg-white/[0.03]"
-                            : "cursor-default"
+                    <li key={move.id} className="flex items-start gap-3">
+                      <span
+                        aria-hidden
+                        className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border font-display text-xs ${
+                          isCurrent
+                            ? "border-accent/40 bg-accent/[0.07] text-accent"
+                            : "border-edge bg-white/[0.03] text-ink-secondary"
                         }`}
                       >
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0">
                         <span
-                          aria-hidden
-                          className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border font-display text-xs ${
-                            isDone
-                              ? "border-accent/40 bg-accent/[0.07] text-accent"
-                              : isCurrent
-                                ? "border-accent/40 bg-accent/[0.07] text-accent"
-                                : "border-edge bg-white/[0.03] text-ink-secondary"
-                          }`}
+                          className={`block text-[13px] leading-5 ${isCurrent ? "text-ink" : "text-ink-secondary"}`}
                         >
-                          {isDone ? <CheckGlyph /> : index + 1}
+                          {move.label}
                         </span>
-                        <span className="min-w-0">
-                          <span
-                            className={`block text-[13px] leading-5 ${isCurrent || isDone ? "text-ink" : "text-ink-secondary"}`}
-                          >
-                            {move.label}
-                          </span>
-                          <span className="meta mt-0.5 block">{move.detail}</span>
-                        </span>
-                        {isCurrent && <span className="sr-only">(current move)</span>}
-                      </button>
+                        <span className="meta mt-0.5 block">{move.detail}</span>
+                      </span>
+                      {isCurrent && <span className="sr-only">(current move)</span>}
                     </li>
                   );
                 })}
@@ -368,34 +323,21 @@ export function WorkspaceShell() {
           </div>
           <div role="group" aria-label="Canonical runs" className="card-panel rise mt-2" style={rise(130)}>
             <div className="card-core">
-              <h3 className="card-label">CANONICAL RUNS</h3>
-              <div className="mt-2 flex flex-col gap-1.5">
-                <button
-                  type="button"
-                  className="button-run"
-                  disabled={busy}
-                  onClick={() => runChip("chip-churn", "saas_churn")}
-                >
-                  <span aria-hidden>⚡</span> Run SaaS Churn Analysis
-                </button>
-                <button
-                  type="button"
-                  className="button-run"
-                  disabled={busy}
-                  onClick={() => runChip("chip-healthcare", "healthcare_pii")}
-                >
-                  <span aria-hidden>🔒</span> Run Healthcare Aggregate
-                </button>
-                <button
-                  type="button"
-                  className="button-run"
-                  disabled={busy || !hasArtifacts}
-                  onClick={runVerifyChip}
-                >
-                  <span aria-hidden>🛡️</span> Verify Zero Egress
-                </button>
-              </div>
-              <p className="meta mt-1.5">One click each — the same commands, budgets, and custody as the agent.</p>
+              <h3 className="card-label">ASK THE AGENT</h3>
+              <button
+                type="button"
+                className="button-run"
+                onClick={() => {
+                  void runCanonicalChurnAnalysis();
+                }}
+              >
+                <span aria-hidden>⚡</span> Analyze churn against support tickets.
+              </button>
+              <p className="meta mt-1.5">
+                One prompt, two calls — <span className="mono-value">duckdb_get_context</span> then{" "}
+                <span className="mono-value">duckdb_execute_sql_to_canvas</span>: the same commands, budgets, and
+                custody as the agent.
+              </p>
             </div>
           </div>
           <div role="group" aria-label="Workspace context" className="card-panel rise mt-2" style={rise(160)}>
@@ -493,6 +435,18 @@ export function WorkspaceShell() {
                       )}
                     </div>
                   )}
+                  {/* Grilling 61: a rejected preset dispatch (OPERATION_CONFLICT
+                      and friends) renders the standard recovery card while the
+                      operation it collided with is live — the envelope teaches. */}
+                  {operationsLive && dispatchFailure && (
+                    <div className="operation-card operation-card-failed">
+                      <p className="mt-1.5 flex items-center gap-2">
+                        <span className="chip-error">{dispatchFailure.code}</span>
+                        <span className="meta">{RECOVERY_MESSAGE[dispatchFailure.code] ?? ""}</span>
+                      </p>
+                      <p className="meta mt-1">{RECOVERY_MOVE[dispatchFailure.code] ?? ""}</p>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -556,10 +510,9 @@ export function WorkspaceShell() {
                 <button
                   key={preset.datasetId}
                   type="button"
-                  disabled={isActive || busy}
-                  aria-pressed={isActive}
+                  aria-label={`Activate dataset ${preset.datasetId} · ${preset.policy} policy`}
                   aria-describedby="preset-status"
-                  onClick={() => activatePreset(preset.datasetId as RunnablePresetId, vm.revision)}
+                  onClick={() => activate(preset.datasetId as RunnablePresetId)}
                   className={isActive ? "preset-card preset-card-active" : "preset-card"}
                 >
                   <span className="card-core flex items-center justify-between gap-3">
@@ -590,15 +543,6 @@ export function WorkspaceShell() {
               );
             })}
           </div>
-          <p className="meta rise mt-3 flex items-center gap-2" style={rise(400)}>
-            <span aria-hidden className={`agent-dot ${nativeSurface ? "agent-dot-native" : "agent-dot-simulator"}`} />
-            Agent channel:{" "}
-            {nativeSurface ? (
-              <span className="mono-value">WebMCP Native Connected</span>
-            ) : (
-              <span className="mono-value">Agent Simulator Ready (Full Parity)</span>
-            )}
-          </p>
           <div role="group" aria-label="Custody monitoring" className="card-panel rise mt-2" style={rise(440)}>
             <div className="card-core">
               <h3 className="card-label">CUSTODY</h3>

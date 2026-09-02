@@ -217,6 +217,12 @@ body {
   @apply ml-auto inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-accent/30 bg-accent/[0.06] py-1 pr-3 pl-2.5 text-sm text-ink;
 }
 
+/* The served-surface chip (grilling 61): `webmcp_native` or
+   `simulator_only · same workspace`, sitting next to the zero-upload badge. */
+.chip-capability {
+  @apply inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-edge bg-white/[0.03] px-2.5 py-1 text-xs text-ink-secondary;
+}
+
 @utility badge-dot {
   @apply size-1.5 rounded-full bg-accent animate-pulse-dot;
 }
