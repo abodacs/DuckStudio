@@ -104,7 +104,7 @@ A browser agent can inspect tool output and the page. Therefore sensitive values
 - `sensitive_aggregate_only` artifacts never render raw rows;
 - direct identifiers never appear as values;
 - sensitive aggregate groups require at least `minimumCohortSize` source rows (presets: 10);
-- unsafe presentation requests are denied (`POLICY_DENIED` with `permittedPresentation` when one exists) or safely downgraded with `PRESENTATION_DOWNGRADED`;
+- unsafe presentation requests are denied (`POLICY_DENIED` with `blockedFields` and `permittedPresentation` when one exists) — unsafe elements are never silently removed or downgraded;
 - sensitive bindings are redacted in projected SQL lineage.
 
 ### 5.2 SQL policy

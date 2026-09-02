@@ -107,6 +107,8 @@ describe("verbatim consumption (ARCHITECTURE.md: the engine re-derives nothing)"
       runBounded: vi.fn(() =>
         Promise.resolve({ schema: [], rows: [], executionMs: 1 }),
       ),
+      materialize: vi.fn(() => Promise.resolve({ relationName: "artifact_a_01", rowCount: 0 })),
+      drop: vi.fn(() => Promise.resolve()),
     };
     const spyHandler = createWorkerHandler(spyRuntime);
     const d = decision({
@@ -129,6 +131,8 @@ describe("engine failures translate at the seam (§9)", () => {
         new Promise((resolve) =>
           setTimeout(() => resolve({ schema: [{ name: "tickets", type: "INTEGER" }], rows: [{ tickets: 1 }], executionMs: 50 }), 50),
         ),
+      materialize: () => Promise.resolve({ relationName: "artifact_a_01", rowCount: 0 }),
+      drop: () => Promise.resolve(),
     };
     const slowHandler = createWorkerHandler(slow);
     const response = await slowHandler({
@@ -150,6 +154,8 @@ describe("engine failures translate at the seam (§9)", () => {
       warm: () => Promise.resolve({ materializedRelations: [], warmMs: 0, materializationMs: 0 }),
       runBounded: () =>
         Promise.reject(new Error('Binder Error: no such column "secret_value" in "mrn"')),
+      materialize: () => Promise.resolve({ relationName: "artifact_a_01", rowCount: 0 }),
+      drop: () => Promise.resolve(),
     };
     const throwingHandler = createWorkerHandler(throwing);
     const response = await throwingHandler({
@@ -165,5 +171,43 @@ describe("engine failures translate at the seam (§9)", () => {
       expect(JSON.stringify(response.failure).includes("secret_value")).toBe(false);
       expect(JSON.stringify(response.failure).includes("Binder")).toBe(false);
     }
+  });
+});
+
+describe("artifact relations (grilling 32: materialize + relation-only drop)", () => {
+  it("materializes a result under the generated name; the relation is queryable", async () => {
+    const executed = await execute(
+      decision({ positionalSql: "SELECT tickets, COUNT(*) AS accounts FROM saas_churn GROUP BY tickets ORDER BY tickets" }),
+    );
+    expect(executed.kind === "execute" && executed.ok).toBe(true);
+    if (!(executed.kind === "execute" && executed.ok)) throw new Error("expected execution success");
+    const materialized = await handler({
+      id: 2,
+      kind: "materialize",
+      relationName: "artifact_a_01",
+      result: executed.result,
+    });
+    expect(materialized.kind === "materialize" && materialized.ok).toBe(true);
+    if (!(materialized.kind === "materialize" && materialized.ok)) throw new Error("expected materialization success");
+    expect(materialized.result.relationName).toBe("artifact_a_01");
+    expect(materialized.result.rowCount).toBe(executed.result.metrics.materializedRows);
+
+    // The refinement proof: the generated relation answers queries.
+    const refined = await execute(
+      decision({ positionalSql: "SELECT COUNT(*) AS n FROM artifact_a_01" }),
+    );
+    if (!(refined.kind === "execute" && refined.ok)) throw new Error("expected refinement success");
+    expect(Number(refined.result.batches[0]?.values.n?.[0])).toBe(materialized.result.rowCount);
+  });
+
+  it("drops the relation by name; dropping an absent name resolves silently", async () => {
+    const dropped = await handler({ id: 3, kind: "drop", relationName: "artifact_a_01" });
+    expect(dropped.kind === "drop" && dropped.ok).toBe(true);
+
+    const gone = await execute(decision({ positionalSql: "SELECT COUNT(*) AS n FROM artifact_a_01" }));
+    expect(gone.kind === "execute" && gone.ok).toBe(false);
+
+    const again = await handler({ id: 4, kind: "drop", relationName: "artifact_a_01" });
+    expect(again.kind === "drop" && again.ok).toBe(true);
   });
 });

@@ -1,5 +1,6 @@
 import { projectArtifact } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
+import { UnavailableArtifact } from "./artifact-states";
 
 /**
  * SQL & Lineage evidence view. The ghost shows the shape of the record — a
@@ -30,6 +31,25 @@ export function SqlLineageView() {
             <p className="meta">No artifact — lineage appears with your first analysis.</p>
             <p className="meta mt-1">Every artifact carries its exact statement and chain.</p>
           </div>
+        </div>
+      );
+    case "unavailable":
+      return <UnavailableArtifact artifactId={artifact.artifactId} reason={artifact.reason} />;
+    case "artifact":
+      return (
+        <div className="view-swap empty-state">
+          <p className="mono-value text-sm">
+            {artifact.artifact.artifactId} · {artifact.artifact.relationName}
+          </p>
+          <pre className="meta mt-2 overflow-x-auto whitespace-pre-wrap">{artifact.artifact.sql}</pre>
+          <p className="meta mt-2">
+            hash <span className="mono-value">{artifact.artifact.sqlHash.slice(0, 16)}…</span> · measured{" "}
+            {artifact.artifact.metrics.executionMs.toFixed(1)} ms
+          </p>
+          <p className="meta mt-1">
+            lineage:{" "}
+            {artifact.artifact.lineage.map((entry) => `${entry.kind}:${entry.id}`).join(" → ")}
+          </p>
         </div>
       );
   }

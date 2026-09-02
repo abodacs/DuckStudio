@@ -1,6 +1,7 @@
-import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
-import { workspaceSearchSchema } from "../revisioned-workspace/schemas";
+import { staleRevisionPin, workspaceSearchSchema } from "../revisioned-workspace/schemas";
+import { workspaceStore } from "../revisioned-workspace/store";
 import { WorkspaceShell } from "./shell";
 import { WorkspaceError } from "./workspace-error";
 
@@ -17,6 +18,15 @@ const workspaceRoute = createRoute({
   // The search schema is owned by revisioned-workspace (ADR 0001 am5) and
   // reaches the router only through this import — never re-declared here.
   validateSearch: zodValidator(workspaceSearchSchema),
+  // The `{rev}` pin's reader (04's resolved plan): a pin naming any revision
+  // but the live one is stale — rejected by redirecting to the same route
+  // with the pin stripped (the artifact deep-link survives). Junk params
+  // never get here; the strict schema throws into `errorComponent`.
+  beforeLoad: ({ search }) => {
+    if (staleRevisionPin(search, workspaceStore.getSnapshot().revision)) {
+      throw redirect({ to: "/", search: { artifact: search.artifact } });
+    }
+  },
   component: WorkspaceShell,
   errorComponent: WorkspaceError,
 });

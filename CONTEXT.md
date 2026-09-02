@@ -79,7 +79,7 @@ Named values supplied separately from the SQL statement so the kernel can redact
 _Avoid_: variables, string-interpolated values
 
 **Presentation**:
-The committed KPI, chart, and grid specification on an artifact — inferred when omitted, possibly downgraded by policy. It never includes which view tab is open.
+The committed KPI, chart, and grid specification on an artifact — inferred when omitted (policy-aware by construction); a supplied element that crosses policy denies the whole request (`POLICY_DENIED` + `permittedPresentation`), it is never stripped. It never includes which view tab is open.
 _Avoid_: dashboard, visualization, view config
 
 **Safe summary**:

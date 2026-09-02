@@ -1,8 +1,15 @@
 import { z } from "zod";
+import { EvidenceSnapshotSchema } from "../dataset-custody/schemas";
 import {
+  ActivateDatasetDataSchema,
+  CancelActiveOperationDataSchema,
   ErrorCodeSchema,
+  GetContextArtifactDataSchema,
   GetContextEventsDataSchema,
+  GetContextSchemaDataSchema,
   GetContextSummaryDataSchema,
+  RunAnalysisDataSchema,
+  SelectArtifactDataSchema,
   type Workspace,
 } from "./schemas";
 
@@ -26,12 +33,13 @@ export const ToolNameSchema = z.enum([
   "duckdb_verify_zero_egress",
 ]);
 
-export const WarningCodeSchema = z.enum([
-  "DELTA_WINDOW_EXPIRED",
-  "PRESENTATION_DOWNGRADED",
-  "CHART_DOWNSAMPLED",
-  "BUDGET_CLAMPED",
-]);
+/**
+ * Ticket 34's deny-over-strip ruling removed `PRESENTATION_DOWNGRADED`: a
+ * supplied presentation element that would cross release policy denies the
+ * whole request (`POLICY_DENIED` + `permittedPresentation`) — it is never
+ * silently removed, so the downgrade warning is unreachable and gone.
+ */
+export const WarningCodeSchema = z.enum(["DELTA_WINDOW_EXPIRED", "CHART_DOWNSAMPLED", "BUDGET_CLAMPED"]);
 
 export const WarningSchema = z.strictObject({
   code: WarningCodeSchema,
@@ -89,6 +97,34 @@ export const CompiledGetContextEventsEnvelopeSuccess = z.compile(
   EnvelopeSuccessSchema.extend({ data: GetContextEventsDataSchema }),
 );
 
+export const CompiledGetContextSchemaEnvelopeSuccess = z.compile(
+  EnvelopeSuccessSchema.extend({ data: GetContextSchemaDataSchema }),
+);
+
+export const CompiledGetContextArtifactEnvelopeSuccess = z.compile(
+  EnvelopeSuccessSchema.extend({ data: GetContextArtifactDataSchema }),
+);
+
+export const CompiledVerifyCustodyEnvelopeSuccess = z.compile(
+  EnvelopeSuccessSchema.extend({ data: EvidenceSnapshotSchema }),
+);
+
+export const CompiledActivateDatasetEnvelopeSuccess = z.compile(
+  EnvelopeSuccessSchema.extend({ data: ActivateDatasetDataSchema }),
+);
+
+export const CompiledRunAnalysisEnvelopeSuccess = z.compile(
+  EnvelopeSuccessSchema.extend({ data: RunAnalysisDataSchema }),
+);
+
+export const CompiledSelectArtifactEnvelopeSuccess = z.compile(
+  EnvelopeSuccessSchema.extend({ data: SelectArtifactDataSchema }),
+);
+
+export const CompiledCancelActiveOperationEnvelopeSuccess = z.compile(
+  EnvelopeSuccessSchema.extend({ data: CancelActiveOperationDataSchema }),
+);
+
 /** The one awaited result type every adapter shares (ADR 0004 am4). */
 export type Envelope =
   | z.infer<typeof EnvelopeSuccessSchema>
@@ -97,11 +133,21 @@ export type Envelope =
 export type EnvelopeFailure = z.infer<typeof EnvelopeFailureSchema>;
 export type EnvelopeSuccessData =
   | z.infer<typeof GetContextSummaryDataSchema>
-  | z.infer<typeof GetContextEventsDataSchema>;
+  | z.infer<typeof GetContextEventsDataSchema>
+  | z.infer<typeof GetContextSchemaDataSchema>
+  | z.infer<typeof GetContextArtifactDataSchema>
+  | z.infer<typeof EvidenceSnapshotSchema>
+  | z.infer<typeof ActivateDatasetDataSchema>
+  | z.infer<typeof RunAnalysisDataSchema>
+  | z.infer<typeof SelectArtifactDataSchema>
+  | z.infer<typeof CancelActiveOperationDataSchema>;
 
 // --- Builders: the one place a response is assembled ---
 
-export function successEnvelope(workspace: Workspace, data: EnvelopeSuccessData): Envelope {
+export function successEnvelope(
+  workspace: Workspace,
+  data: EnvelopeSuccessData,
+): Extract<Envelope, { ok: true }> {
   return {
     ok: true,
     schemaVersion: workspace.schemaVersion,

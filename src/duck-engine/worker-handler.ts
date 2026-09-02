@@ -9,7 +9,7 @@ import type { HealthcarePiiRow } from "../demo-presets/healthcare-pii";
 import type { SaasChurnRow } from "../demo-presets/saas-churn";
 import { toCsv } from "../demo-presets/csv";
 import type { EngineBatch, EngineRequest, EngineResponse, EngineColumn } from "./protocol";
-import type { ExecutionResult, WarmResult } from "./protocol";
+import type { ExecutionResult, MaterializedRelation, WarmResult } from "./protocol";
 
 /**
  * The worker side of the engine protocol (ADR 0002; grilling 21/23). The
@@ -37,6 +37,10 @@ export interface DuckEngineRuntime {
   warm(): Promise<WarmResult>;
   /** Runs the given positional SQL bounded to `maxRows`; the caller drops the result when over budget. */
   runBounded(sql: string, positionalBindings: readonly unknown[], maxRows: number): Promise<BoundedRead>;
+  /** Creates the artifact relation from a bounded result's batches (grilling 32). */
+  materialize(relationName: string, result: ExecutionResult): Promise<MaterializedRelation>;
+  /** Drops a relation by name; absent names resolve silently (idempotent cleanup). */
+  drop(relationName: string): Promise<void>;
 }
 
 /** The presets materialize in the worker at warm time (grilling 23). */
@@ -120,10 +124,13 @@ function budgetFailure(id: number, elapsedMs: number, limitMs: number): EngineRe
   };
 }
 
-function internalFailure(id: number, phase: "execute" | "warm"): EngineResponse {
+function internalFailure(
+  id: number,
+  phase: "execute" | "warm" | "materialize" | "drop",
+): EngineResponse {
   return {
     id,
-    kind: "execute",
+    kind: phase === "materialize" ? "materialize" : phase === "drop" ? "drop" : phase,
     ok: false,
     failure: {
       code: "INTERNAL_ERROR",
@@ -159,9 +166,39 @@ export function createWorkerHandler(runtime: DuckEngineRuntime): WorkerHandler {
       }
     }
 
+    if (request.kind === "materialize" || request.kind === "drop") {
+      // Artifact-relation mechanics (grilling 32): no policy here — the
+      // workspace decides when relations live and die. Drop is idempotent by
+      // contract so denial cleanup and eviction never race a vanished name.
+      try {
+        if (request.kind === "materialize") {
+          return {
+            id: request.id,
+            kind: "materialize",
+            ok: true,
+            result: await runtime.materialize(request.relationName, request.result),
+          };
+        }
+        await runtime.drop(request.relationName);
+        return {
+          id: request.id,
+          kind: "drop",
+          ok: true,
+          result: { relationName: request.relationName, rowCount: 0 },
+        };
+      } catch {
+        return internalFailure(request.id, request.kind);
+      }
+    }
+
     // Execute: the custody decision verbatim. The engine re-derives nothing.
     const decision: AuthorizedDecision = request.decision;
     try {
+      // Ensure warm: a respawned worker re-materializes the presets before
+      // its first execute, so a cancel-then-retry self-heals (ADR 0002;
+      // idempotent after the first call).
+      warmPromise ??= runtime.warm();
+      await warmPromise;
       const read = await Promise.race([
         runtime.runBounded(
           decision.positionalSql,

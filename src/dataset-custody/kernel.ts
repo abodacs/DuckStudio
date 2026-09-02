@@ -11,6 +11,7 @@ import {
   type ClampedBudget,
   type CustodyFailure,
   type EvidenceSnapshot,
+  type GovernedSource,
   type ReleaseDecision,
 } from "./schemas";
 import { inspectSql } from "./sql-inspector";
@@ -37,14 +38,14 @@ export type AuthorizeResult =
   | { readonly ok: false; readonly failure: CustodyFailure };
 
 export interface AuthorizeInput {
-  readonly dataset: PresetMetadata;
+  readonly source: GovernedSource;
   readonly sql: string;
   readonly bindings: Readonly<Record<string, BindingValue>>;
   readonly requestedBudget?: BudgetRequest;
 }
 
 export interface ReleaseInput {
-  readonly dataset: PresetMetadata;
+  readonly source: GovernedSource;
   /** The executed statement, for statement-shape classification (aggregate vs row-level). */
   readonly sql: string;
   readonly resultSchema: readonly { readonly name: string; readonly type: string }[];
@@ -160,12 +161,12 @@ function bindingTypeMismatch(value: BindingValue, columnType: string): string | 
   return null;
 }
 
-/** Classification of the materialized result columns, by name, through the dataset's digest. */
+/** Classification of the materialized result columns, by name, through the source's digest. */
 function resultColumnClassifications(
-  dataset: PresetMetadata,
+  source: { readonly columns: readonly PresetColumn[] },
   resultSchema: readonly { readonly name: string; readonly type: string }[],
 ): Map<string, PresetColumn["classification"]> {
-  const byName = new Map(dataset.columns.map((column) => [column.name, column.classification]));
+  const byName = new Map(source.columns.map((column) => [column.name, column.classification]));
   return new Map(resultSchema.map((column) => [column.name, byName.get(column.name) ?? "public"]));
 }
 
@@ -190,6 +191,20 @@ function inspectStatementShape(sql: string, authorizedRelations: readonly string
   };
 }
 
+/**
+ * The governed view of a preset dataset: its relation is the datasetId the
+ * worker materialized it under (grilling 23). Slice 3's artifact sources
+ * build their GovernedSource from the committed artifact instead.
+ */
+export function governedSource(preset: PresetMetadata): GovernedSource {
+  return {
+    relation: preset.datasetId,
+    policy: preset.policy,
+    minimumCohortSize: preset.minimumCohortSize,
+    columns: preset.columns,
+  };
+}
+
 export function createCustodyKernel(now: () => string = () => new Date().toISOString()): CustodyKernel {
   let datasetBytesUploaded = 0;
   let rawSensitiveValuesReleasedToTools = 0;
@@ -200,12 +215,12 @@ export function createCustodyKernel(now: () => string = () => new Date().toISOSt
 
   return {
     authorize(input) {
-      const { dataset, sql, bindings, requestedBudget } = input;
+      const { source, sql, bindings, requestedBudget } = input;
       const inspection = inspectSql({
         sql,
         bindings,
-        authorizedRelations: [dataset.datasetId],
-        schema: dataset.columns,
+        authorizedRelations: [source.relation],
+        schema: source.columns,
       });
       if (!inspection.ok) {
         return { ok: false, failure: inspection.failure };
@@ -214,7 +229,7 @@ export function createCustodyKernel(now: () => string = () => new Date().toISOSt
 
       const positionalBindings: BindingValue[] = [];
       const redactedBindingKeys: string[] = [];
-      const classification = new Map(dataset.columns.map((column) => [column.name, column]));
+      const classification = new Map(source.columns.map((column) => [column.name, column]));
       for (const name of bindingOrder) {
         const value = bindings[name] as BindingValue;
         const column = classification.get(name);
@@ -245,12 +260,12 @@ export function createCustodyKernel(now: () => string = () => new Date().toISOSt
       return {
         ok: true,
         decision: {
-          authorizedRelation: dataset.datasetId,
+          authorizedRelation: source.relation,
           positionalSql,
           positionalBindings,
           budget: clamped.budget,
           redactedBindingKeys,
-          releasePolicy: dataset.policy,
+          releasePolicy: source.policy,
         },
         warnings: clamped.warnings,
       };
@@ -266,10 +281,11 @@ export function createCustodyKernel(now: () => string = () => new Date().toISOSt
     },
 
     decideRelease(input) {
-      const { dataset, sql, resultSchema, minCohortCount, redactedBindingKeys, materializedRows, budget } = input;
+      const { source, sql, resultSchema, minCohortCount, redactedBindingKeys, materializedRows, budget } = input;
+      const { relation, policy, minimumCohortSize, columns } = source;
 
       // §5.1 row 5: direct-identifier values never leave, in any policy.
-      const classifications = resultColumnClassifications(dataset, resultSchema);
+      const classifications = resultColumnClassifications(source, resultSchema);
       const identifierColumns = [...classifications.entries()]
         .filter(([, classification]) => classification === "direct_identifier")
         .map(([name]) => name);
@@ -283,10 +299,10 @@ export function createCustodyKernel(now: () => string = () => new Date().toISOSt
         return { ok: false, failure };
       }
 
-      const sensitive = dataset.policy === "sensitive_aggregate_only";
+      const sensitive = policy === "sensitive_aggregate_only";
       if (sensitive) {
         // §5.1: raw grids are suppressed; only aggregates survive.
-        if (!inspectStatementShape(sql, [dataset.datasetId]).hasAggregate) {
+        if (!inspectStatementShape(sql, [relation]).hasAggregate) {
           const failure: CustodyFailure = {
             code: "POLICY_DENIED",
             message: "The dataset is sensitive_aggregate_only; raw rows are suppressed and only aggregates release.",
@@ -296,13 +312,13 @@ export function createCustodyKernel(now: () => string = () => new Date().toISOSt
           return { ok: false, failure };
         }
         // §5.1: every cohort must have at least `minimumCohortSize` source rows.
-        if (minCohortCount === null || minCohortCount < dataset.minimumCohortSize) {
+        if (minCohortCount === null || minCohortCount < minimumCohortSize) {
           const failure: CustodyFailure = {
             code: "POLICY_DENIED",
-            message: `A cohort is below the minimum size of ${dataset.minimumCohortSize}; the aggregate cannot release.`,
+            message: `A cohort is below the minimum size of ${minimumCohortSize}; the aggregate cannot release.`,
             retryable: false,
             details: {
-              cohortMinimum: dataset.minimumCohortSize,
+              cohortMinimum: minimumCohortSize,
               observedCohort: minCohortCount ?? -1,
             },
           };
@@ -311,7 +327,7 @@ export function createCustodyKernel(now: () => string = () => new Date().toISOSt
       }
 
       const omittedDirectIdentifiers = sensitive
-        ? dataset.columns.filter((column) => column.classification === "direct_identifier").map((column) => column.name)
+        ? columns.filter((column) => column.classification === "direct_identifier").map((column) => column.name)
         : [];
       const rawRowsToSharedCanvas = sensitive ? 0 : Math.min(materializedRows, budget.resultRows);
       // Sensitive values release only when a public policy exposes sensitive-classified columns.
@@ -329,7 +345,7 @@ export function createCustodyKernel(now: () => string = () => new Date().toISOSt
           rawRowsToAgent: 0,
           rawRowsToSharedCanvas,
           omittedDirectIdentifiers,
-          cohortMinimum: dataset.minimumCohortSize,
+          cohortMinimum: minimumCohortSize,
           redactedBindingKeys: [...redactedBindingKeys],
         },
       };

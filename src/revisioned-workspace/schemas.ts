@@ -1,20 +1,44 @@
 import { z } from "zod";
+import { PolicySchema, type Policy } from "../demo-presets/schemas";
+import {
+  AnalysisArtifactSchema,
+  AnalysisRecordSchema,
+  ArtifactSummarySchema,
+  PresentationSpecSchema,
+  ResultColumnSchema,
+} from "../analysis-artifacts/schemas";
+import { PresetMetadataSchema } from "../demo-presets/schemas";
 
 /**
  * URL search-param contract for the workspace route (ADR 0001 am5: workspace
  * vocabulary is owned here, never re-declared in the router).
  *
  * Strict about unknown params so junk URLs surface in the route
- * errorComponent instead of being stripped silently. Empty at rev 0 — no
- * search param is read by anyone; `rev` rejoins only when Slice 3's STALE
- * story gives it a reader to reconcile against `workspace.revision`
- * (ARCHITECTURE.md: no backward compatibility, no dead params).
+ * errorComponent instead of being stripped silently. Slice 3 gives the two
+ * pinned params their readers: `rev` pins the revision the link was captured
+ * at (`beforeLoad` rejects a pin that no longer matches the live workspace),
+ * and `artifact` deep-links a selected artifact. `view` stays out — the
+ * canvas tab is the human evidence plane's call (Slice 5).
  * Uncompiled by decision — compilation is the tool-schema seam, not the URL
  * seam.
  */
-export const workspaceSearchSchema = z.strictObject({});
+export const workspaceSearchSchema = z.strictObject({
+  rev: z.coerce.number().int().min(0).optional(),
+  artifact: z.string().max(80).optional(),
+});
 
 export type WorkspaceSearch = z.infer<typeof workspaceSearchSchema>;
+
+/**
+ * Slice-1's `{rev}` pin vs the live workspace (04's resolved plan): a pin is
+ * only renderable while it names the revision the URL was captured at. A
+ * mismatch — behind or ahead of the live workspace — is stale and rejected
+ * by the route's `beforeLoad` (redirect that strips the pin); junk params
+ * never get this far, the strict schema throws into `errorComponent`.
+ */
+export function staleRevisionPin(search: WorkspaceSearch, currentRevision: number): boolean {
+  return search.rev !== undefined && search.rev !== currentRevision;
+}
 
 /**
  * §9 error taxonomy. Owned here rather than in the envelope because §3.3
@@ -52,10 +76,12 @@ export const CapabilitySchema = z.enum([
 
 export type Capability = z.infer<typeof CapabilitySchema>;
 
-/** §4.2 dataset policy vocabulary — one spelling for the workspace summary and the preset catalog. */
-export const PolicySchema = z.enum(["public_synthetic", "sensitive_aggregate_only"]);
-
-export type Policy = z.infer<typeof PolicySchema>;
+/**
+ * §4.2 dataset policy vocabulary — one spelling, owned where the policy
+ * lives (demo-presets: policy travels with its dataset) and re-exported so
+ * the envelope surface keeps a single binding (ADR 0004 am4 import-equality).
+ */
+export { PolicySchema, type Policy };
 
 /** §4.6 budget knobs; the hard maxima are custody-kernel enforcement, not schema bounds. */
 export const BudgetLimitsSchema = z.strictObject({
@@ -83,17 +109,27 @@ export const OperationSummarySchema = z.strictObject({
 
 export type OperationSummary = z.infer<typeof OperationSummarySchema>;
 
-/** §4.1 workspace snapshot. */
+/**
+ * §4.1 workspace snapshot. Slice 3 adds the two fields the projection needs
+ * to serve artifact-bearing views without a second state store: the active
+ * dataset's governing metadata (policy, cohort floor, safe schema) and the
+ * committed artifact records (§4.3 + measured summary). Everything else is
+ * §4.1 verbatim; the envelope reports only §4.1 fields.
+ */
 export const WorkspaceSchema = z.strictObject({
   workspaceId: z.string(),
   revision: z.number().int().nonnegative(),
   schemaVersion: z.literal("duckstudio.webmcp/v1"),
   capabilities: z.array(CapabilitySchema),
   activeDatasetId: z.string().nullable(),
+  activeDataset: PresetMetadataSchema.nullable(),
   selectedArtifactId: z.string().nullable(),
   budgets: BudgetLimitsSchema,
   operations: z.array(OperationSummarySchema),
   recentArtifactIds: z.array(z.string()),
+  artifacts: z.array(AnalysisRecordSchema),
+  /** Relation-evicted artifact ids (grilling 32): metadata stays, access discloses. */
+  evictedArtifactIds: z.array(z.string()),
 });
 
 export type Workspace = z.infer<typeof WorkspaceSchema>;
@@ -166,6 +202,13 @@ export const GET_CONTEXT_TOOL_DESCRIPTION =
  * the doc example's 3-key fork is not encoded. `activeOperation` joins in
  * Slice 2.
  */
+export const RecentArtifactSchema = z.strictObject({
+  artifactId: z.string(),
+  evicted: z.boolean(),
+});
+
+export type RecentArtifact = z.infer<typeof RecentArtifactSchema>;
+
 export const GetContextSummaryDataSchema = z.strictObject({
   capabilities: z.array(CapabilitySchema),
   activeDataset: z
@@ -177,7 +220,8 @@ export const GetContextSummaryDataSchema = z.strictObject({
     .nullable(),
   budgets: BudgetLimitsSchema,
   selectedArtifactId: z.string().nullable(),
-  recentArtifacts: z.array(z.never()),
+  /** Grilling 32: the summary still lists evicted artifacts, flagged. */
+  recentArtifacts: z.array(RecentArtifactSchema),
 });
 
 export type GetContextSummaryData = z.infer<typeof GetContextSummaryDataSchema>;
@@ -216,3 +260,214 @@ export const GetContextEventsDataSchema = z.strictObject({
 });
 
 export type GetContextEventsData = z.infer<typeof GetContextEventsDataSchema>;
+
+// --- Mutation and evidence command inputs (§8.2, §8.3, §8.4, §8.5) ---
+
+/** §8.1/§8.6: tool-facing inputs carry parameter descriptions (≤150 chars). */
+
+/** §8.2 `duckdb_activate_dataset`. */
+export const ActivateDatasetInputSchema = z
+  .strictObject({
+    datasetId: z
+      .enum(["saas_churn", "healthcare_pii"])
+      .describe("The preset to activate in this tab; it must already be materialized locally."),
+    expectedRevision: z
+      .number()
+      .int()
+      .min(0)
+      .describe("The workspace revision this mutation was prepared against; stale values are rejected."),
+    idempotencyKey: z
+      .string()
+      .min(8)
+      .max(80)
+      .describe("Unique key for this mutation; replaying it exactly returns the original envelope."),
+  })
+  .describe("Activate one dataset already local to this tab.");
+
+export const CompiledActivateDatasetInput = z.compile(ActivateDatasetInputSchema);
+
+export type ActivateDatasetInput = z.infer<typeof ActivateDatasetInputSchema>;
+
+/** §8.3 `duckdb_execute_sql_to_canvas` presentation input: the committed spec plus the pass-through `initialView` hint, which is never stored (grilling 34). */
+export const RunPresentationInputSchema = PresentationSpecSchema.extend({
+  initialView: z
+    .enum(["insights", "grid", "sql_lineage", "custody"])
+    .describe("Human-evidence-plane hint for which tab to open after commit; never stored on the artifact.")
+    .optional(),
+});
+
+/** §8.3 `duckdb_execute_sql_to_canvas`. */
+export const RunAnalysisInputSchema = z
+  .strictObject({
+    source: z
+      .strictObject({
+        kind: z.enum(["dataset", "artifact"]).describe("Whether the analysis reads a preset relation or a prior artifact."),
+        id: z.string().max(80).describe("The datasetId, or the artifactId whose generated relation is the source."),
+      })
+      .describe("The one authorized relation the statement may reference."),
+    sql: z
+      .string()
+      .min(1)
+      .max(12000)
+      .describe("Exactly one read-only SELECT or WITH statement; values belong in bindings, not literals."),
+    bindings: z
+      .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+      .describe("Named parameter values supplied separately from the SQL; sensitive values are redacted downstream.")
+      .refine((bindings) => Object.keys(bindings).length <= 40, "bindings carries at most 40 entries"),
+    presentation: RunPresentationInputSchema.optional(),
+    budget: z
+      .strictObject({
+        executionMs: z.number().int().min(100).max(15000).describe("Execution deadline in milliseconds."),
+        resultRows: z.number().int().min(1).max(50000).describe("Maximum materialized rows."),
+        chartPoints: z.number().int().min(10).max(5000).describe("Maximum chart points."),
+      })
+      .describe("Stricter budgets are honored; requests above the workspace default are clamped and disclosed.")
+      .optional(),
+    expectedRevision: z
+      .number()
+      .int()
+      .min(0)
+      .describe("The workspace revision this mutation was prepared against; stale values are rejected."),
+    idempotencyKey: z
+      .string()
+      .min(8)
+      .max(80)
+      .describe("Unique key for this mutation; replaying it exactly returns the original envelope."),
+  })
+  .describe("Run one bounded read-only analysis and create, present, and select one immutable artifact atomically.");
+
+export const CompiledRunAnalysisInput = z.compile(RunAnalysisInputSchema);
+
+export type RunAnalysisInput = z.infer<typeof RunAnalysisInputSchema>;
+
+/** §8.4 `duckdb_verify_zero_egress`. */
+export const VerifyCustodyInputSchema = z
+  .strictObject({
+    scope: z
+      .enum(["workspace", "operation", "artifact"])
+      .describe("Evidence scope: the whole workspace, one operation, or one artifact."),
+    operationId: z
+      .string()
+      .max(80)
+      .describe("Required when scope is operation: the operation whose evidence snapshot to read.")
+      .optional(),
+    artifactId: z
+      .string()
+      .max(80)
+      .describe("Required when scope is artifact: the artifact whose evidence snapshot to read.")
+      .optional(),
+    sinceRevision: z
+      .number()
+      .int()
+      .min(0)
+      .describe("Optional: request evidence relevant to changes after this revision.")
+      .optional(),
+  })
+  .superRefine((input, ctx) => {
+    if (input.scope === "operation" && input.operationId === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "operationId is required when scope is operation",
+        path: ["operationId"],
+      });
+    }
+    if (input.scope === "artifact" && input.artifactId === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "artifactId is required when scope is artifact",
+        path: ["artifactId"],
+      });
+    }
+  })
+  .describe("Read a scoped, timestamped custody evidence snapshot with its limitations.");
+
+export const CompiledVerifyCustodyInput = z.compile(VerifyCustodyInputSchema);
+
+export type VerifyCustodyInput = z.infer<typeof VerifyCustodyInputSchema>;
+
+/** §8.5 human-only `selectArtifact` — never a WebMCP tool. */
+export const SelectArtifactInputSchema = z.strictObject({
+  artifactId: z.string().max(80),
+  expectedRevision: z.number().int().min(0),
+  idempotencyKey: z.string().min(8).max(80),
+});
+
+export const CompiledSelectArtifactInput = z.compile(SelectArtifactInputSchema);
+
+export type SelectArtifactInput = z.infer<typeof SelectArtifactInputSchema>;
+
+/** §8.5 human-only `cancelActiveOperation` — never a WebMCP tool. */
+export const CancelActiveOperationInputSchema = z.strictObject({
+  operationId: z.string().max(80).optional(),
+  expectedRevision: z.number().int().min(0),
+  idempotencyKey: z.string().min(8).max(80),
+});
+
+export const CompiledCancelActiveOperationInput = z.compile(CancelActiveOperationInputSchema);
+
+export type CancelActiveOperationInput = z.infer<typeof CancelActiveOperationInputSchema>;
+
+// --- Response data (§8.2, §8.3, §8.5) ---
+
+/** §8.2 response data. */
+export const ActivateDatasetDataSchema = z.strictObject({
+  datasetId: z.string(),
+  schemaDigest: z.string().regex(/^[0-9a-f]{64}$/),
+  rowCount: z.number().int().nonnegative(),
+  byteSizeEstimate: z.number().int().nonnegative(),
+  policy: PolicySchema,
+  minimumCohortSize: z.number().int().positive(),
+});
+
+export type ActivateDatasetData = z.infer<typeof ActivateDatasetDataSchema>;
+
+/** §8.3 response data — safe handle, projected summary, measured metrics; zero rows. */
+export const RunAnalysisDataSchema = z.strictObject({
+  operationId: z.string(),
+  artifact: AnalysisArtifactSchema.pick({
+    artifactId: true,
+    relationName: true,
+    source: true,
+    rowCount: true,
+    schema: true,
+    lineage: true,
+    release: true,
+  }),
+  summary: ArtifactSummarySchema,
+  metrics: z.strictObject({
+    executionMs: z.number(),
+    materializedRows: z.number().int().nonnegative(),
+    chartPoints: z.number().int().nonnegative(),
+  }),
+});
+
+export type RunAnalysisData = z.infer<typeof RunAnalysisDataSchema>;
+
+/** §8.5 `selectArtifact` response data. */
+export const SelectArtifactDataSchema = z.strictObject({
+  artifactId: z.string(),
+});
+
+export type SelectArtifactData = z.infer<typeof SelectArtifactDataSchema>;
+
+/** §8.5 `cancelActiveOperation` response data. */
+export const CancelActiveOperationDataSchema = z.strictObject({
+  operationId: z.string(),
+});
+
+export type CancelActiveOperationData = z.infer<typeof CancelActiveOperationDataSchema>;
+
+/** §8.1 `scope: "artifact"` data — the committed record and its measured summary. */
+export const GetContextArtifactDataSchema = AnalysisRecordSchema;
+
+export type GetContextArtifactData = z.infer<typeof GetContextArtifactDataSchema>;
+
+/** §8.1 `scope: "schema"` data — the governed source's column digest with custody omissions marked. */
+export const GetContextSchemaDataSchema = z.strictObject({
+  datasetId: z.string(),
+  policy: PolicySchema,
+  minimumCohortSize: z.number().int().positive(),
+  schema: z.array(ResultColumnSchema),
+});
+
+export type GetContextSchemaData = z.infer<typeof GetContextSchemaDataSchema>;

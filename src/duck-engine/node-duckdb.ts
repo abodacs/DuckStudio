@@ -70,6 +70,35 @@ export async function createNodeDuckRuntime(): Promise<NodeDuckRuntime> {
       }
     },
 
+    async materialize(relationName, result) {
+      const columns = result.schema.map((column) => column.name);
+      const columnList = result.schema
+        .map((column) => `"${column.name}" ${column.type}`)
+        .join(", ");
+      await connection.run(`CREATE TABLE ${relationName} (${columnList})`);
+      const placeholders = columns.map((_, index) => `$${index + 1}`).join(", ");
+      const insert = await connection.prepare(`INSERT INTO ${relationName} VALUES (${placeholders})`);
+      try {
+        let rowCount = 0;
+        for (const batch of result.batches) {
+          for (let rowIndex = 0; rowIndex < batch.rowCount; rowIndex += 1) {
+            insert.bind(
+              columns.map((name) => (batch.values[name]?.[rowIndex] as never) ?? null),
+            );
+            await insert.run();
+            rowCount += 1;
+          }
+        }
+        return { relationName, rowCount };
+      } finally {
+        insert.destroySync();
+      }
+    },
+
+    async drop(relationName) {
+      await connection.run(`DROP TABLE IF EXISTS ${relationName}`);
+    },
+
     async dispose(): Promise<void> {
       await rm(workDir, { recursive: true, force: true });
     },

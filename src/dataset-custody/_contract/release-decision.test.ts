@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createCustodyKernel } from "../kernel";
+import { createCustodyKernel, governedSource } from "../kernel";
 import { createNodeDuckRuntime, type NodeDuckRuntime } from "../../duck-engine/node-duckdb";
 import { healthcarePii, saasChurn } from "../../demo-presets/triples";
 import type { AuthorizedDecision, BindingValue, CustodyFailure, ReleaseDecision } from "../schemas";
@@ -53,7 +53,7 @@ async function cohortCountFor(
   if (plan.hasGrouping) {
     if (plan.groupExpressions.length === 0) return null;
     const probeSql = kernel.cohortProbeSql(relation, plan.groupExpressions, plan.whereExpression);
-    const probe = kernel.authorize({ dataset, sql: probeSql, bindings });
+    const probe = kernel.authorize({ source: governedSource(dataset), sql: probeSql, bindings });
     if (!probe.ok) return null;
     const read = await runtime.runBounded(probe.decision.positionalSql, probe.decision.positionalBindings, 1);
     return Number(read.rows[0]?.min_cohort ?? -1);
@@ -66,14 +66,14 @@ async function analyze(
   sql: string,
   bindings: Record<string, BindingValue> = {},
 ): Promise<AnalysisResult> {
-  const authorized = kernel.authorize({ dataset, sql, bindings });
+  const authorized = kernel.authorize({ source: governedSource(dataset), sql, bindings });
   if (!authorized.ok) return { ok: false, failure: authorized.failure };
   const decision = authorized.decision;
   const read = await runtime.runBounded(decision.positionalSql, decision.positionalBindings, decision.budget.resultRows);
   expect(read.executionMs).toBeLessThanOrEqual(decision.budget.executionMs);
   const minCohortCount = await cohortCountFor(dataset, sql, decision.authorizedRelation, bindings);
   const released = kernel.decideRelease({
-    dataset,
+    source: governedSource(dataset),
     sql: decision.positionalSql,
     resultSchema: read.schema,
     minCohortCount,
@@ -142,7 +142,7 @@ describe("sensitive_aggregate_only (healthcare_pii)", () => {
     // omission rule); the kernel guard is the backstop for any surface
     // whose result schema carries a direct identifier.
     const released = kernel.decideRelease({
-      dataset: healthcarePii.metadata,
+      source: governedSource(healthcarePii.metadata),
       sql: "SELECT mrn, COUNT(*) AS n FROM healthcare_pii GROUP BY mrn",
       resultSchema: [{ name: "mrn", type: "VARCHAR" }, { name: "n", type: "BIGINT" }],
       minCohortCount: 500,
@@ -219,7 +219,7 @@ describe("SQL and bindings row (§5.1)", () => {
     // A releasable grouped aggregate with a sensitive-classified binding:
     // the key redacts; the value never appears in the release decision.
     const authorized = kernel.authorize({
-      dataset: healthcarePii.metadata,
+      source: governedSource(healthcarePii.metadata),
       sql: "SELECT region, COUNT(*) AS patients FROM healthcare_pii WHERE diagnosis = $diagnosis GROUP BY region",
       bindings: { diagnosis: "migraine" },
     });
@@ -228,7 +228,7 @@ describe("SQL and bindings row (§5.1)", () => {
       expect(authorized.decision.redactedBindingKeys).toEqual(["diagnosis"]);
       expect(JSON.stringify(authorized.decision.redactedBindingKeys).includes("migraine")).toBe(false);
       const released = kernel.decideRelease({
-        dataset: healthcarePii.metadata,
+        source: governedSource(healthcarePii.metadata),
         sql: authorized.decision.positionalSql,
         resultSchema: [{ name: "region", type: "VARCHAR" }, { name: "patients", type: "BIGINT" }],
         minCohortCount: 1_000,
@@ -247,7 +247,7 @@ describe("SQL and bindings row (§5.1)", () => {
 
   it("keeps public-classified bindings visible on the decision", () => {
     const authorized = kernel.authorize({
-      dataset: healthcarePii.metadata,
+      source: governedSource(healthcarePii.metadata),
       sql: "SELECT COUNT(*) AS n FROM healthcare_pii WHERE region = $region",
       bindings: { region: "north" },
     });

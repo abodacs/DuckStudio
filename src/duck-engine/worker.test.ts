@@ -19,6 +19,7 @@ function fakeTransport() {
     postCount: () => 0,
     reply: (response) => respond.forEach((resolve) => resolve(response)),
     crash: () => terminateHandlers.forEach((handler) => handler()),
+    terminate: () => terminateHandlers.forEach((handler) => handler()),
   };
   return transport;
 }

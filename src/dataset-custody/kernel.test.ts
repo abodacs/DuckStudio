@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCustodyKernel } from "./kernel";
+import { createCustodyKernel, governedSource } from "./kernel";
 import { BUDGET_DEFAULTS, BUDGET_HARD_MAX, EvidenceSnapshotSchema } from "./schemas";
 import { healthcarePiiPreset, saasChurnPreset } from "../demo-presets/catalog";
 import { SAAS_CHURN_CANONICAL_SQL } from "../demo-presets/canonical-sql";
@@ -17,7 +17,7 @@ const kernel = createCustodyKernel(() => "2026-09-02T00:00:00.000Z");
 describe("authorize returns the pinned decision (grilling 22)", () => {
   it("carries relation, positional SQL, ordered bindings, budget, redaction keys, policy", () => {
     const result = kernel.authorize({
-      dataset: saasChurnPreset,
+      source: governedSource(saasChurnPreset),
       sql: "SELECT tickets FROM saas_churn WHERE region = $region AND tickets >= $min",
       bindings: { min: 5, region: "na" },
     });
@@ -37,7 +37,7 @@ describe("authorize returns the pinned decision (grilling 22)", () => {
 
   it("marks sensitive and direct-identifier bindings as redacted for every projection", () => {
     const result = kernel.authorize({
-      dataset: healthcarePiiPreset,
+      source: governedSource(healthcarePiiPreset),
       sql: "SELECT COUNT(*) FROM healthcare_pii WHERE mrn = $mrn",
       bindings: { mrn: "MRN-0042" },
     });
@@ -55,7 +55,7 @@ describe("authorize returns the pinned decision (grilling 22)", () => {
 
   it("type-checks named bindings against the schema digest (null always passes)", () => {
     const mismatch = kernel.authorize({
-      dataset: saasChurnPreset,
+      source: governedSource(saasChurnPreset),
       sql: "SELECT * FROM saas_churn WHERE tickets = $tickets",
       bindings: { tickets: "five" },
     });
@@ -65,7 +65,7 @@ describe("authorize returns the pinned decision (grilling 22)", () => {
       expect(mismatch.failure.details).toMatchObject({ field: "tickets", expected: "INTEGER", got: "string" });
     }
     const nullPasses = kernel.authorize({
-      dataset: saasChurnPreset,
+      source: governedSource(saasChurnPreset),
       sql: "SELECT * FROM saas_churn WHERE region = $region",
       bindings: { region: null },
     });
@@ -76,7 +76,7 @@ describe("authorize returns the pinned decision (grilling 22)", () => {
 describe("budget clamping (§4.6; grilling 21)", () => {
   it("honors stricter requests untouched", () => {
     const result = kernel.authorize({
-      dataset: saasChurnPreset,
+      source: governedSource(saasChurnPreset),
       sql: SAAS_CHURN_CANONICAL_SQL,
       bindings: {},
       requestedBudget: { executionMs: 1_000, resultRows: 100, chartPoints: 10 },
@@ -87,7 +87,7 @@ describe("budget clamping (§4.6; grilling 21)", () => {
 
   it("clamps a legal-but-above-default request and emits BUDGET_CLAMPED", () => {
     const result = kernel.authorize({
-      dataset: saasChurnPreset,
+      source: governedSource(saasChurnPreset),
       sql: SAAS_CHURN_CANONICAL_SQL,
       bindings: {},
       requestedBudget: { executionMs: 12_000, resultRows: 20_000 },
@@ -102,7 +102,7 @@ describe("budget clamping (§4.6; grilling 21)", () => {
 
   it("rejects a request above a hard maximum with VALIDATION_ERROR", () => {
     const result = kernel.authorize({
-      dataset: saasChurnPreset,
+      source: governedSource(saasChurnPreset),
       sql: SAAS_CHURN_CANONICAL_SQL,
       bindings: {},
       requestedBudget: { chartPoints: BUDGET_HARD_MAX.chartPoints + 1 },

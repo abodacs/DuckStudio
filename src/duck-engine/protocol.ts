@@ -51,6 +51,12 @@ export interface WarmResult {
   readonly materializationMs: number;
 }
 
+/** An artifact relation created from a committed result's batches (grilling 32). */
+export interface MaterializedRelation {
+  readonly relationName: string;
+  readonly rowCount: number;
+}
+
 /**
  * §9 EngineFailure — the single translation of anything that went wrong
  * inside the engine. Messages and details carry recovery hints only: no raw
@@ -63,31 +69,62 @@ export interface EngineFailure {
   readonly details: Readonly<Record<string, string | number | boolean | null>>;
 }
 
-/** Request union. `decision` is the custody kernel's object, consumed verbatim. */
+/** Request union. `decision` is the custody kernel's object, consumed verbatim.
+ *
+ * `materialize` / `drop` are the artifact-relation mechanics (grilling 32):
+ * the store materializes a committed result under its generated relation name
+ * so refinements can query it, and drops relations on denial cleanup and
+ * retention eviction. They carry no policy — the workspace owns the decision
+ * of when relations live and die.
+ */
 export type EngineRequest =
   | { readonly id: number; readonly kind: "warm" }
   | {
       readonly id: number;
       readonly kind: "execute";
       readonly decision: AuthorizedDecision;
-    };
+    }
+  | {
+      readonly id: number;
+      readonly kind: "materialize";
+      readonly relationName: string;
+      readonly result: ExecutionResult;
+    }
+  | { readonly id: number; readonly kind: "drop"; readonly relationName: string };
 
 /** Response union — the `kind` echoes the request `kind`. */
 export type EngineResponse =
   | { readonly id: number; readonly kind: "warm"; readonly ok: true; readonly result: WarmResult }
   | { readonly id: number; readonly kind: "warm"; readonly ok: false; readonly failure: EngineFailure }
   | { readonly id: number; readonly kind: "execute"; readonly ok: true; readonly result: ExecutionResult }
-  | { readonly id: number; readonly kind: "execute"; readonly ok: false; readonly failure: EngineFailure };
+  | { readonly id: number; readonly kind: "execute"; readonly ok: false; readonly failure: EngineFailure }
+  | {
+      readonly id: number;
+      readonly kind: "materialize";
+      readonly ok: true;
+      readonly result: MaterializedRelation;
+    }
+  | {
+      readonly id: number;
+      readonly kind: "materialize";
+      readonly ok: false;
+      readonly failure: EngineFailure;
+    }
+  | { readonly id: number; readonly kind: "drop"; readonly ok: true; readonly result: MaterializedRelation }
+  | { readonly id: number; readonly kind: "drop"; readonly ok: false; readonly failure: EngineFailure };
 
 /**
  * The transport both ends agree on. A `Worker` in the browser, an in-process
  * fake in tests; `onTerminated` fires when the worker dies while requests
- * are pending (crash-respawn is the singleton's job, not the client's).
+ * are pending (crash-respawn is the singleton's job, not the client's) —
+ * including an explicit `terminate()` (cancel = respawn, grilling 31).
  */
 export interface EngineTransport {
   postMessage(message: EngineRequest): void;
   setMessageHandler(handler: (response: EngineResponse) => void): void;
   onTerminated(handler: () => void): void;
+  /** Kills the transport; pending requests fail and the singleton respawns. */
+  terminate(): void;
 }
 
 /** Client-side safety net: the worker enforces budgets itself, so the client timeout only bounds a dead transport. */
@@ -101,6 +138,8 @@ const CLIENT_TIMEOUT_MS = 30_000;
 export interface EngineClient {
   warm(): Promise<WarmResult>;
   execute(decision: AuthorizedDecision): Promise<ExecutionResult>;
+  materializeRelation(relationName: string, result: ExecutionResult): Promise<MaterializedRelation>;
+  dropRelation(relationName: string): Promise<void>;
 }
 
 /** Distributive `Omit` so the request union stays a union without `id`. */
@@ -130,7 +169,7 @@ export function createEngineClient(transport: EngineTransport): EngineClient {
     pending.delete(response.id);
     clearTimeout(entry.timer);
     if (response.ok) {
-      (entry.resolve as (value: WarmResult | ExecutionResult) => void)(response.result);
+      (entry.resolve as (value: WarmResult | ExecutionResult | MaterializedRelation) => void)(response.result);
     } else {
       entry.reject(response.failure);
     }
@@ -145,7 +184,7 @@ export function createEngineClient(transport: EngineTransport): EngineClient {
     });
   });
 
-  function request<T extends WarmResult | ExecutionResult>(
+  function request<T extends WarmResult | ExecutionResult | MaterializedRelation>(
     message: EngineRequestInput,
   ): Promise<T> {
     const id = nextId++;
@@ -167,5 +206,10 @@ export function createEngineClient(transport: EngineTransport): EngineClient {
   return {
     warm: () => request<WarmResult>({ kind: "warm" }),
     execute: (decision) => request<ExecutionResult>({ kind: "execute", decision }),
+    materializeRelation: (relationName, result) =>
+      request<MaterializedRelation>({ kind: "materialize", relationName, result }),
+    dropRelation: async (relationName) => {
+      await request<MaterializedRelation>({ kind: "drop", relationName });
+    },
   };
 }

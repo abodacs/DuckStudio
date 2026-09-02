@@ -288,7 +288,7 @@ Only one mutating operation (`activate_dataset` or `run_analysis`) runs at a tim
 
 ### 4.5 Presentation inference
 
-`runAnalysis` does not require `presentation`. The workspace infers a safe spec from the result schema and dataset policy, then the custody kernel may downgrade it.
+`runAnalysis` does not require `presentation`. The workspace infers a safe spec from the result schema and dataset policy. Inference is policy-aware by construction: it proposes only legal candidates — never a grid for `sensitive_aggregate_only`, never a KPI or chart axis on an omitted identifier — and an empty spec is legal. (Amended 2026-09-02, grilling 34: the kernel no longer downgrades presentations; see below.)
 
 When `presentation` is omitted or a field is missing:
 
@@ -297,7 +297,7 @@ When `presentation` is omitted or a field is missing:
 3. Grid: `visible` is true only for `public_synthetic`.
 4. After commit the canvas opens `insights` when any KPI or chart remains, otherwise `sql_lineage`. It never opens `grid` for `sensitive_aggregate_only`.
 
-A supplied presentation is filled with the same rules for missing fields, then released. The custody kernel may remove or downgrade unsafe elements and returns `PRESENTATION_DOWNGRADED`. Chart downsampling is allowed and disclosed as `CHART_DOWNSAMPLED`.
+A supplied presentation is filled with the same rules for missing fields, then released. **Deny over strip (amended 2026-09-02, grilling 34):** an illegal supplied element denies the whole request with `POLICY_DENIED` carrying `blockedFields` and, when a legal spec exists, `permittedPresentation` — no element is ever silently removed or downgraded, and `PRESENTATION_DOWNGRADED` is therefore unreachable and removed from the §7 warning vocabulary. Inferred presentations never hit the denial path. Chart downsampling happens at commit and is disclosed as `CHART_DOWNSAMPLED`; the committed spec is unchanged.
 
 Presentation refers only to columns produced by the analysis.
 
@@ -385,7 +385,6 @@ type NextAction =
 
 type WarningCode =
   | "DELTA_WINDOW_EXPIRED"
-  | "PRESENTATION_DOWNGRADED"
   | "CHART_DOWNSAMPLED"
   | "BUDGET_CLAMPED"
 

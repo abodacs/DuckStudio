@@ -3,13 +3,20 @@ import { describe, expect, it } from "vitest";
 import { CompiledGetContextInput, workspaceSearchSchema } from "./schemas";
 
 describe("workspaceSearchSchema", () => {
-  it("accepts an empty query string — no param has a reader at rev 0", () => {
+  it("accepts an empty query string", () => {
     expect(workspaceSearchSchema.parse({})).toEqual({});
   });
 
+  it("coerces the rev pin and accepts the artifact deep-link (Slice 3 readers)", () => {
+    expect(workspaceSearchSchema.parse({ rev: "3" })).toEqual({ rev: 3 });
+    expect(workspaceSearchSchema.parse({ artifact: "a_01" })).toEqual({ artifact: "a_01" });
+    expect(() => workspaceSearchSchema.parse({ rev: "-1" })).toThrow();
+    expect(() => workspaceSearchSchema.parse({ rev: "abc" })).toThrow();
+  });
+
   it("rejects unknown params instead of stripping them", () => {
-    expect(() => workspaceSearchSchema.parse({ artifact: "a_01" })).toThrow();
-    expect(() => workspaceSearchSchema.parse({ rev: "3" })).toThrow();
+    expect(() => workspaceSearchSchema.parse({ view: "insights" })).toThrow();
+    expect(() => workspaceSearchSchema.parse({ bogus: "1" })).toThrow();
   });
 });
 
@@ -23,8 +30,12 @@ describe("zod adapter against zod 4", () => {
     expect(validator.parse({})).toEqual({});
   });
 
+  it("coerces the rev pin through the adapter (URL params arrive as strings)", () => {
+    expect(validator.parse({ rev: "3" })).toEqual({ rev: 3 });
+  });
+
   it("enforces the strict rejection through the adapter too", () => {
-    expect(() => validator.parse({ rev: "3" })).toThrow();
+    expect(() => validator.parse({ view: "insights" })).toThrow();
   });
 });
 
