@@ -48,13 +48,16 @@ const UNBOUNDED_INT = { type: "integer", minimum: 0, maximum: 9007199254740991 }
 function assertCaps(tool: keyof typeof DERIVED): void {
   expect(tool.length).toBeLessThanOrEqual(30);
   expect(DESCRIPTIONS[tool].length).toBeLessThanOrEqual(500);
-  const derived = DERIVED[tool];
-  const properties = (derived.properties ?? {}) as Record<string, { description?: unknown }>;
-  for (const [name, property] of Object.entries(properties)) {
-    expect(name.length).toBeLessThanOrEqual(30);
-    expect(typeof property.description).toBe("string");
-    expect((property.description as string).length).toBeLessThanOrEqual(150);
-  }
+  const walk = (node: object): void => {
+    const properties = (node as { properties?: Record<string, { description?: unknown }> }).properties;
+    for (const [name, property] of Object.entries(properties ?? {})) {
+      expect(name.length).toBeLessThanOrEqual(30);
+      expect(typeof property.description).toBe("string");
+      expect((property.description as string).length).toBeLessThanOrEqual(150);
+      walk(property);
+    }
+  };
+  walk(DERIVED[tool]);
 }
 
 describe("duckdb_get_context JSON Schema strictness (§8.1)", () => {
@@ -176,12 +179,27 @@ describe("duckdb_execute_sql_to_canvas JSON Schema strictness (§8.3)", () => {
             kpis: {
               maxItems: 6,
               type: "array",
+              description: "Up to six KPIs; committed verbatim or inferred policy-aware when omitted.",
               items: {
                 type: "object",
                 properties: {
-                  label: { type: "string", minLength: 1, maxLength: 60 },
-                  column: { type: "string", minLength: 1, maxLength: 80 },
-                  format: { type: "string", enum: ["percent", "decimal", "currency_usd", "integer"] },
+                  label: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 60,
+                    description: "Human-readable KPI heading, 1-60 characters.",
+                  },
+                  column: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 80,
+                    description: "Result column the KPI reads its value from.",
+                  },
+                  format: {
+                    type: "string",
+                    enum: ["percent", "decimal", "currency_usd", "integer"],
+                    description: "How the UI renders the KPI value; the raw number never rounds in transit.",
+                  },
                 },
                 required: ["label", "column", "format"],
                 additionalProperties: false,
@@ -189,21 +207,39 @@ describe("duckdb_execute_sql_to_canvas JSON Schema strictness (§8.3)", () => {
             },
             chart: {
               type: "object",
+              description: "Chart axes; the point count in summaries is always the measured value.",
               properties: {
-                type: { type: "string", enum: ["bar", "line", "scatter"] },
-                x: { type: "string", minLength: 1, maxLength: 80 },
-                y: { type: "string", minLength: 1, maxLength: 80 },
-                title: { type: "string", maxLength: 120 },
-                maxPoints: { type: "integer", minimum: 10, maximum: 5000 },
+                type: {
+                  type: "string",
+                  enum: ["bar", "line", "scatter"],
+                  description: "Chart family; scatter is inferred for two numeric columns.",
+                },
+                x: { type: "string", minLength: 1, maxLength: 80, description: "Result column plotted on the x axis." },
+                y: { type: "string", minLength: 1, maxLength: 80, description: "Result column plotted on the y axis." },
+                title: {
+                  type: "string",
+                  maxLength: 120,
+                  description: "Optional chart heading, at most 120 characters.",
+                },
+                maxPoints: {
+                  type: "integer",
+                  minimum: 10,
+                  maximum: 5000,
+                  description: "Requested point ceiling; values above the measured budget clamp with a warning.",
+                },
               },
               required: ["type", "x", "y"],
               additionalProperties: false,
             },
             grid: {
               type: "object",
+              description: "Grid visibility request; a grid that crosses policy denies the request, never strips.",
               properties: {
-                visible: { type: "boolean" },
-                maxRows: { type: "integer", minimum: 1, maximum: 50000 },
+                visible: {
+                  type: "boolean",
+                  description: "Whether the data grid may paint; policy can still forbid it.",
+                },
+                maxRows: { type: "integer", minimum: 1, maximum: 50000, description: "Row ceiling for the grid view." },
               },
               required: ["visible"],
               additionalProperties: false,
@@ -305,6 +341,41 @@ describe("duckdb_verify_zero_egress JSON Schema strictness (§8.4)", () => {
 
   it("keeps the §8.6 negative safety phrase in the tool description", () => {
     expect(VERIFY_ZERO_EGRESS_TOOL_DESCRIPTION).toContain("not a formal proof");
+  });
+});
+
+describe("§8 canonical example inputs parse (ticket 44)", () => {
+  it("accepts each §8 canonical input snippet through the runtime schema", () => {
+    expect(
+      ActivateDatasetInputSchema.parse({
+        datasetId: "saas_churn",
+        expectedRevision: 0,
+        idempotencyKey: "canonical-01",
+      }),
+    ).toBeTruthy();
+    expect(
+      RunAnalysisInputSchema.parse({
+        source: { kind: "dataset", id: "saas_churn" },
+        sql: "SELECT tickets, COUNT(*) AS accounts FROM saas_churn GROUP BY tickets",
+        bindings: { ticket_min: 2 },
+        presentation: {
+          kpis: [{ label: "Churn Rate", column: "churn_rate", format: "percent" }],
+          chart: { type: "scatter", x: "tickets", y: "churn_rate", title: "Churn", maxPoints: 2000 },
+          grid: { visible: true, maxRows: 100 },
+          initialView: "insights",
+        },
+        budget: { executionMs: 5000, resultRows: 10000, chartPoints: 2000 },
+        expectedRevision: 0,
+        idempotencyKey: "canonical-02",
+      }),
+    ).toBeTruthy();
+    expect(
+      VerifyCustodyInputSchema.parse({
+        scope: "artifact",
+        artifactId: "a_01",
+        sinceRevision: 3,
+      }),
+    ).toBeTruthy();
   });
 });
 

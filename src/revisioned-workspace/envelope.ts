@@ -277,13 +277,19 @@ export function forwardAction(
   subjectId: string,
 ): Extract<Envelope, { ok: true }>["nextActions"] {
   if (command === "activateDataset") {
+    const sql = CANONICAL_PRESET_SQL[subjectId];
+    // §7: nextActions are legal, executable suggestions — no known canonical
+    // analysis, no suggestion (never an input the schema would reject).
+    if (sql === undefined) {
+      return [];
+    }
     return [
       {
         kind: "tool",
         tool: "duckdb_execute_sql_to_canvas",
         input: {
           source: { kind: "dataset", id: subjectId },
-          sql: CANONICAL_PRESET_SQL[subjectId] ?? "",
+          sql,
           bindings: {},
           expectedRevision: workspace.revision,
           idempotencyKey: `analyze-${subjectId}-r${workspace.revision}`,

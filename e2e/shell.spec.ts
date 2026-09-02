@@ -107,11 +107,12 @@ test.describe("slice 2: engine warm + zero egress from first paint", () => {
   });
 });
 
-// --- Slice 4: the agent control plane in the live page (ticket 43's
-// registration e2e + the slice-4 build tickets). The page exposes the served
-// tool surface after boot (`registration.ts` picks native WebMCP under the
-// flagged e2e browser, otherwise the simulator); these tests drive exactly
-// what a browser agent would drive, one test per capability. ---
+// --- Slice 4: the agent control plane in the live page (the registration
+// e2e ticket 14 planned, widened per the slice-4 build tickets). The page
+// exposes the served tool surface after boot (`registration.ts` picks native
+// WebMCP under the flagged e2e browser, otherwise the simulator); these
+// tests drive exactly what a browser agent would drive, one test per
+// capability. ---
 
 /** The served tool surface the page exposes once boot reaches "register". */
 type AgentSurface = {

@@ -22,7 +22,6 @@ import {
   createStore,
   defaultFakeExecute,
   fakeEngine,
-  FIXED_NOW,
   type FakeEngine,
 } from "../../revisioned-workspace/_contract/harness";
 import { projectWorkspace } from "../../revisioned-workspace/projection";
@@ -215,7 +214,7 @@ describe("full-scenario parity across the six commands (ticket 46)", () => {
     const simulated = simulatedSide(holdableEngine(2));
 
     /** One scenario step: run through both surfaces, compare everything. */
-    async function step(name: string, run: (side: ParitySide) => Promise<Envelope>, parse?: (envelope: Envelope) => void): Promise<void> {
+    async function step(run: (side: ParitySide) => Promise<Envelope>, parse?: (envelope: Envelope) => void): Promise<void> {
       const [nativeEnvelope, simulatedEnvelope] = await Promise.all([run(native), run(simulated)]);
       expectSameEnvelope(nativeEnvelope, simulatedEnvelope);
       if (parse) {
@@ -227,7 +226,6 @@ describe("full-scenario parity across the six commands (ticket 46)", () => {
 
     // 1. activate_dataset — forward action suggests the canonical analysis.
     await step(
-      "activate",
       (side) => side.tool("duckdb_activate_dataset", { datasetId: "saas_churn", expectedRevision: 0, idempotencyKey: "parity-activate-01" }),
       (envelope) => {
         expect(envelope.ok).toBe(true);
@@ -238,7 +236,6 @@ describe("full-scenario parity across the six commands (ticket 46)", () => {
 
     // 2. execute_sql_to_canvas — one artifact, atomically presented+selected.
     await step(
-      "analysis",
       (side) =>
         side.tool("duckdb_execute_sql_to_canvas", {
           source: { kind: "dataset", id: "saas_churn" },
@@ -255,7 +252,6 @@ describe("full-scenario parity across the six commands (ticket 46)", () => {
 
     // 3. refinement — sources a_01; lineage names the ancestor.
     await step(
-      "refinement",
       (side) =>
         side.tool("duckdb_execute_sql_to_canvas", {
           source: { kind: "artifact", id: "a_01" },
@@ -269,7 +265,6 @@ describe("full-scenario parity across the six commands (ticket 46)", () => {
 
     // 4. verify_zero_egress — artifact-scoped evidence with limitations.
     await step(
-      "verify",
       (side) => side.tool("duckdb_verify_zero_egress", { scope: "artifact", artifactId: "a_02" }),
       (envelope) => {
         expect(envelope.ok).toBe(true);
@@ -279,7 +274,6 @@ describe("full-scenario parity across the six commands (ticket 46)", () => {
 
     // 5. get_context summary — the negotiation read.
     await step(
-      "summary",
       (side) => side.tool("duckdb_get_context", { scope: "summary" }),
       (envelope) => {
         expect(envelope.ok).toBe(true);
@@ -290,7 +284,6 @@ describe("full-scenario parity across the six commands (ticket 46)", () => {
     // 6. human-only selectArtifact — store.dispatch on the native side, the
     // simulator's command seam on the other; same domain events (§14).
     await step(
-      "selectArtifact",
       (side) =>
         side.human({
           kind: "selectArtifact",
@@ -322,7 +315,6 @@ describe("full-scenario parity across the six commands (ticket 46)", () => {
     await Promise.resolve();
 
     await step(
-      "cancelActiveOperation",
       (side) =>
         side.human({
           kind: "cancelActiveOperation",
@@ -574,7 +566,4 @@ describe("emission policy at the seam (grilling 42; ticket 46)", () => {
     }
   });
 
-  it("timestamps are the harness clock so both surfaces see identical envelopes", () => {
-    expect(FIXED_NOW).toBe("2026-09-02T12:00:00.000Z");
-  });
 });

@@ -89,7 +89,7 @@ Human controls, prompt chips, Agent Simulator, and WebMCP adapters must dispatch
 
 - Gate native registration on `document.modelContext`.
 - Register tools with full JSON Schema and `readOnlyHint` where applicable.
-- Use an `AbortController` to clean up registrations on lifecycle teardown.
+- Registration is page-lifetime (slice-4 ruling, ticket 45): the module-owned `AbortController` is never aborted in the MLP — one page, one lifetime, no unmount teardown path; the signal remains the test/HMR handle. `start()`'s `app ??=` memo plus registration-after-mount keeps mount/unmount duplicate-free.
 - Duplicate registration is a defect; do not catch it and silently continue.
 - The simulator remains available when native WebMCP is absent, but it uses the same domain commands rather than a mock registry.
 - Boot is a module, not a pile. `studio-shell/boot.ts` exposes one `start()` whose order is exported data — `BOOT_PLAN`: secure-context gate → warm worker (Slice 2) → mount router → register tools | simulator fallback — and `boot()` executes the plan as its control flow, so body and promise cannot drift. The container and gate are injectable, and `boot.test.ts` asserts the order headlessly. The workspace store is not a boot step: `revisioned-workspace/store.ts` exports the one app binding (`workspaceStore`) the agent adapters and the UI both hold. `main.tsx` shrinks to the sole importer that calls `start()`.
