@@ -29,15 +29,37 @@ const SELF_HOSTED_BUNDLES = {
   },
 };
 
+// Lazy Bundle Resolution
+let bundlePromise: Promise<duckdb.DuckDBBundle> | null = null;
+function resolveBundle(): Promise<duckdb.DuckDBBundle> {
+  bundlePromise ??= duckdb.selectBundle(SELF_HOSTED_BUNDLES).catch((error: unknown) => {
+    // A failed selection must not poison the memo: the next request retries.
+    bundlePromise = null;
+    throw error;
+  });
+  return bundlePromise;
+}
+
 async function createBrowserRuntime(): Promise<DuckEngineRuntime> {
-  const bundle = await duckdb.selectBundle(SELF_HOSTED_BUNDLES);
+  const bundle = await resolveBundle();
   if (!bundle.mainWorker) {
     throw new Error("duck-engine: the self-hosted bundle carries no main worker script");
   }
   const duckWorker = new Worker(bundle.mainWorker);
   const db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING), duckWorker);
-  await db.instantiate(bundle.mainModule);
-  const connection = await db.connect();
+  let connection: duckdb.AsyncDuckDBConnection;
+  try {
+    await db.instantiate(bundle.mainModule);
+    connection = await db.connect();
+  } catch (error) {
+    // Initialization failed: this instance is unusable and the next request
+    // spawns a fresh AsyncDuckDB. Terminate the nested worker so a failed
+    // init cannot leak it, log the diagnostic (worker console in DevTools),
+    // and fail the request — the response stays §9-shaped.
+    console.error("duck-engine: engine initialization failed; terminating the engine worker", error);
+    duckWorker.terminate();
+    throw error;
+  }
   let warmResult: WarmResult | null = null;
 
   return {
@@ -154,23 +176,64 @@ function duckDbType(fieldType: { toString(): string }): string {
 
 const workerSelf = self as unknown as WorkerSelf;
 
-// Register the message hook before instantiation finishes: the main thread
-// may post the warm request while the module body is still awaiting the
-// runtime, and a null `onmessage` would silently drop it.
 type Handler = Awaited<ReturnType<typeof createWorkerHandler>>;
-let handler: Handler | null = null;
-const queued: EngineRequest[] = [];
-const dispatch = (request: EngineRequest): void => {
-  void handler?.(request).then((response) => {
-    workerSelf.postMessage(response);
-  });
-};
-workerSelf.onmessage = (event: { data: EngineRequest }) => {
-  if (handler) dispatch(event.data);
-  else queued.push(event.data);
-};
+let handlerPromise: Promise<Handler> | null = null;
 
-void createBrowserRuntime().then((runtime) => {
-  handler = createWorkerHandler(runtime);
-  for (const request of queued.splice(0)) dispatch(request);
-});
+function getHandler(): Promise<Handler> {
+  if (!handlerPromise) {
+    handlerPromise = (async () => {
+      try {
+        const runtime = await createBrowserRuntime();
+        return createWorkerHandler(runtime);
+      } catch (error) {
+        handlerPromise = null;
+        throw error;
+      }
+    })();
+  }
+  return handlerPromise;
+}
+
+// Batched Pending Requests: queue requests and drain them sequentially
+const queued: EngineRequest[] = [];
+let isProcessing = false;
+
+async function drainPendingRequests(): Promise<void> {
+  if (isProcessing) return;
+  isProcessing = true;
+  try {
+    while (queued.length > 0) {
+      const batch = queued.splice(0, queued.length);
+      for (const request of batch) {
+        try {
+          const handler = await getHandler();
+          const response = await handler(request);
+          workerSelf.postMessage(response);
+        } catch (error) {
+          // The §9-shaped response below fails the request; the diagnostic
+          // itself stays in the worker console (DevTools) — it may quote
+          // engine internals and never crosses custody.
+          console.error("duck-engine: request failed", request.kind, error);
+          workerSelf.postMessage({
+            id: request.id,
+            kind: request.kind === "materialize" ? "materialize" : request.kind === "drop" ? "drop" : request.kind,
+            ok: false,
+            failure: {
+              code: "INTERNAL_ERROR",
+              message: "The engine worker failed to execute the authorized statement; read context and retry.",
+              retryable: true,
+              details: { phase: "worker" },
+            },
+          } as EngineResponse);
+        }
+      }
+    }
+  } finally {
+    isProcessing = false;
+  }
+}
+
+workerSelf.onmessage = (event: { data: EngineRequest }) => {
+  queued.push(event.data);
+  void drainPendingRequests();
+};

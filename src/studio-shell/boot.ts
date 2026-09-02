@@ -48,15 +48,25 @@ export interface StartInjection {
 }
 
 /**
- * One page, one boot (05's belt): a second `start()` — HMR re-execution or
- * accidental double import — is a no-op returning the existing app. This
- * memo is also the one duplicate-registration guard: `registerTools` runs
- * only here, exactly once.
+ * One page, one boot (05's belt): concurrent `start()` callers share one
+ * in-flight promise. A boot that fails **before** the register step clears
+ * the memo, so the next `start()` re-runs the plan instead of handing every
+ * later caller the same immortal rejection (a failed warm is retryable by
+ * design — the engine singleton and the worker's warm slot both reset on
+ * failure). Once `registerTools` has been reached, the memo keeps its guard:
+ * the WebMCP surface has no unregister, so a retry could double-register,
+ * and a register-step failure stays terminal.
  */
 let app: Promise<App> | undefined;
+let registrationReached = false;
 
 export function start(inject: StartInjection = {}): Promise<App> {
-  app ??= boot(inject);
+  app ??= boot(inject).catch((error: unknown) => {
+    if (!registrationReached) {
+      app = undefined;
+    }
+    throw error;
+  });
   return app;
 }
 
@@ -111,6 +121,7 @@ async function boot(inject: StartInjection): Promise<App> {
         root = mountInto(container, (await import("./router")).router);
         break;
       case "register":
+        registrationReached = true;
         await registerTools(workspaceStore, nativeAvailable);
         break;
     }
