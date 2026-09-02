@@ -33,6 +33,8 @@ Run tests, lint, typecheck, and production build after code changes. Fix failure
 
 The deployed origin has an opt-in smoke pass: `E2E_BASE_URL=https://<deploy>.pages.dev pnpm e2e` points the whole suite at the live site instead of the local build.
 
+The served surface has a standing assertion-only check: `pnpm verify:webmcp [https://origin]` drives the flagged Chromium against a deployed origin and exits non-zero unless the origin is cross-origin isolated, `document.modelContext` serves `webmcp_native` with exactly the four canonical tools, and both read-only tools answer success envelopes. It pins the native path, which the suite accepts in either form (native or simulator).
+
 ## Self-Hosted DuckDB-WASM Assets
 
 The engine's runtime assets (wasm + worker scripts) are self-hosted from `public/duckdb/` (COEP `require-corp` blocks third-party responses). A clean checkout must fetch them once before building:
