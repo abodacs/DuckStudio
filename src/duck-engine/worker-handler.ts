@@ -150,8 +150,12 @@ export function createWorkerHandler(runtime: DuckEngineRuntime): WorkerHandler {
         // Idempotent: concurrent or repeated warm calls share one materialization.
         warmPromise ??= runtime.warm();
         return { id: request.id, kind: "warm", ok: true, result: await warmPromise };
-      } catch {
+      } catch (error) {
+        // The memo clears so the next warm call retries instantiation; the
+        // diagnostic stays in the worker console (DevTools) — the §9-shaped
+        // response below never quotes engine internals.
         warmPromise = null;
+        console.error("duck-engine: warm failed; the next warm call retries instantiation", error);
         return {
           id: request.id,
           kind: "warm",

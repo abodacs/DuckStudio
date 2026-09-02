@@ -21,6 +21,18 @@ Colocate tests with each feature. At minimum cover:
 
 Run tests, lint, typecheck, and production build after code changes. Fix failures rather than bypassing checks.
 
+## End-to-End QA Suite
+
+`pnpm e2e` runs Playwright against the shipped build served by `wrangler pages dev dist` (production isolation headers), in Chromium with the `WebMCPTesting` flag. Requires `pnpm duckdb:download` and `pnpm build` first; CI runs the same suite.
+
+- `e2e/shell.spec.ts` — the walking skeleton: origin isolation, boot, route errors, agent control plane happy paths.
+- `e2e/qa-envelope-contracts.spec.ts` — envelope contract QA (`agent-system-design.md` §15 scenarios 1, 4, 8, 9): one-read legibility under the byte budget, zero raw rows, stale-revision recovery, idempotent replay vs key conflict.
+- `e2e/qa-custody.spec.ts` — custody QA (scenarios 5, 6, 7, 12, 17): SQL isolation, cohort guard, sensitive-DOM suppression, honest evidence, no preview grid.
+- `e2e/qa-analysis-flows.spec.ts` — analysis lifecycle QA (scenarios 2, 3, 10, 14, 15): two-call analysis, artifact refinement, budget denial with no partial commit, one projection, re-registration without duplicates.
+- `e2e/agent-surface.ts` — the shared driver for the page's served tool surface.
+
+The deployed origin has an opt-in smoke pass: `E2E_BASE_URL=https://<deploy>.pages.dev pnpm e2e` points the whole suite at the live site instead of the local build.
+
 ## Self-Hosted DuckDB-WASM Assets
 
 The engine's runtime assets (wasm + worker scripts) are self-hosted from `public/duckdb/` (COEP `require-corp` blocks third-party responses). A clean checkout must fetch them once before building:

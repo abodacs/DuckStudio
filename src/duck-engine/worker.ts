@@ -66,14 +66,24 @@ export function createEngineSingleton(spawn: EngineTransportSpawner): EngineSing
  * `terminate()` (cancel) also fires the terminated handlers, because
  * `worker.terminate()` itself raises no error event.
  */
+let activeBrowserWorker: Worker | null = null;
+
+export function getActiveWorker(): Worker | null {
+  return activeBrowserWorker;
+}
+
 export function spawnBrowserTransport(): EngineTransport {
   const worker = new Worker(new URL("./duckdb.worker.ts", import.meta.url), { type: "module" });
+  activeBrowserWorker = worker;
   let messageHandler: ((response: EngineResponse) => void) | null = null;
   let terminated = false;
   const terminatedHandlers: Array<() => void> = [];
   const fireTerminated = () => {
     if (terminated) return;
     terminated = true;
+    if (activeBrowserWorker === worker) {
+      activeBrowserWorker = null;
+    }
     for (const handler of terminatedHandlers) handler();
   };
   worker.onmessage = (event: MessageEvent) => {
@@ -100,6 +110,12 @@ export function spawnBrowserTransport(): EngineTransport {
 
 /** The one app engine binding; boot warms it before the store can be used (ADR 0002 am3). */
 const appEngine = createEngineSingleton(spawnBrowserTransport);
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => {
+    appEngine.respawn();
+  });
+}
 
 export async function warmEngine(): Promise<void> {
   const engine = await appEngine.get();
