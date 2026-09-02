@@ -535,21 +535,36 @@ test.describe("slice 6: demo wiring and parity", () => {
     await page.getByRole("button", { name: ACTIVATE_CHURN }).click();
     await expect(page.getByText("rev 1", { exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: CHIP_LABEL }).click();
+    // A five-second default budget holds the operation slot open long enough
+    // to make the collision deterministic — the canonical analysis can
+    // settle faster than a click on a fast runner. The served surface (the
+    // same seam the chip dispatches through) starts the hold.
+    await page.evaluate(() => {
+      const surface = (window as SurfaceWindow).__duckstudioAgentSurface;
+      if (!surface) throw new Error("the agent surface never registered");
+      void surface.invoke("duckdb_execute_sql_to_canvas", {
+        source: { kind: "dataset", id: "saas_churn" },
+        sql: "SELECT COUNT(*) AS n FROM saas_churn a, saas_churn b",
+        bindings: {},
+        expectedRevision: 1,
+        idempotencyKey: "e2e-conflict-hold-01",
+      });
+    });
     // The card never disables (grilling 61): while the analysis runs, the
     // second dispatch happens and the envelope teaches recovery.
-    await expect(page.locator(".chip-operation.op-running, .chip-operation.op-queued").first()).toBeVisible();
+    await expect(page.locator(".chip-operation.op-running").first()).toBeVisible();
     await page.getByRole("button", { name: ACTIVATE_HEALTH }).click();
 
-    await expect(page.getByText("OPERATION_CONFLICT", { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText("OPERATION_CONFLICT", { exact: true })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("Another operation is running; wait for it or cancel it.")).toBeVisible();
     // The card is transient by design — it lives only while the colliding
     // operation does — so the recovery move's exact copy is pinned by the
     // canvas contract test rather than raced here.
 
-    // The conflict committed nothing: the churn analysis still settles at rev 2.
-    await expect(page.getByText("ws_local_01 · rev 2 · saas_churn · public_synthetic")).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByText("rev 3", { exact: true })).not.toBeVisible();
+    // The conflict committed nothing: the workspace stays at rev 1 with churn
+    // active even after the held operation pays its budget denial.
+    await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("rev 2", { exact: true })).not.toBeVisible();
   });
 
   test("simulator mode drives the same commands to the same revisions and KPIs", async ({ page }) => {
