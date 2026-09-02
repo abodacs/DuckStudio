@@ -34,6 +34,97 @@
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
 }
 
+/*
+ * Component primitives named from DESIGN.md's own vocabulary (card-panel,
+ * chip-tool, preset-card, the title/label/meta/mono type roles, the motion
+ * contract) so future slices compose the instrument-panel system instead of
+ * re-typing utility strings and drifting from the design doc. Compositions
+ * that mix conflicting properties (card-operation's amber border over
+ * card-panel's hairline) resolve inside @apply order, never in TSX class
+ * attributes, so the winner is deterministic.
+ */
+@utility title {
+  @apply text-lg font-semibold tracking-[-0.01em];
+}
+
+@utility pane-label {
+  @apply text-xs font-semibold tracking-wide text-ink-secondary;
+}
+
+@utility card-label {
+  @apply text-xs font-medium tracking-wide text-ink-secondary;
+}
+
+@utility meta {
+  @apply text-xs text-ink-secondary;
+}
+
+/* The Mono-Means-Machine rule: mono values read Readout White on grey meta. */
+@utility mono-value {
+  @apply font-mono text-ink;
+}
+
+@utility card-panel {
+  @apply rounded-md border border-edge bg-surface px-3 py-2;
+}
+
+/* The one card variant: agent operations flag amber at 40%. */
+@utility card-operation {
+  @apply card-panel border-amber/40;
+}
+
+@utility badge-zero-upload {
+  @apply ml-auto inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-accent/30 bg-surface px-3 py-1 text-sm;
+}
+
+@utility badge-dot {
+  @apply size-1.5 rounded-full bg-accent;
+}
+
+@utility chip-tool {
+  @apply rounded-full border border-amber/40 px-2 py-0.5 font-mono text-amber;
+}
+
+@utility chip-policy-sensitive {
+  @apply rounded-full border border-amber/40 px-2 py-0.5 text-xs text-amber;
+}
+
+@utility chip-policy-public {
+  @apply rounded-full border border-edge px-2 py-0.5 text-xs text-ink-secondary;
+}
+
+@utility preset-card {
+  @apply card-panel block w-full text-left state-shift press focus-ring;
+}
+
+@utility tab-evidence {
+  @apply rounded-t-md border border-b-0 px-3 py-1.5 text-sm state-shift press focus-ring;
+}
+
+@utility button-recovery {
+  @apply rounded-md border border-edge bg-surface px-3 py-1.5 text-sm transition-[background-color,border-color] duration-150 ease-out hover:border-ink-secondary focus-ring motion-reduce:transition-none;
+}
+
+/* Empty states state the invariant: one centered Meta sentence, >=144px row. */
+@utility empty-state {
+  @apply meta flex min-h-36 flex-1 items-center justify-center text-center;
+}
+
+/* Motion contract: 150ms ease-out state shifts, a 0.97 press, full
+   motion-reduce compliance (Tailwind v4's scale property needs its own
+   reduced-motion reset — transform-none does not cover it). */
+@utility state-shift {
+  @apply transition-[background-color,border-color,color,transform] duration-150 ease-out motion-reduce:transition-none motion-reduce:transform-none;
+}
+
+@utility press {
+  @apply active:scale-[0.97] motion-reduce:active:scale-100;
+}
+
+@utility focus-ring {
+  @apply focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent;
+}
+
 :root {
   color-scheme: dark;
 }
