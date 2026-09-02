@@ -10,11 +10,14 @@ import { BOOT_PLAN, findRootContainer, start } from "./boot";
  * reviewed, ordered change.
  */
 describe("boot order (ADR 0001 am5)", () => {
-  it("executes exactly the planned steps: gate first, mount before register", () => {
-    expect(BOOT_PLAN).toEqual(["gate", "mount", "register"]);
+  it("executes exactly the planned steps: gate, warm, mount, register in order", () => {
+    // Slice 2 inserted "warm" between "gate" and "mount" (ADR 0007): the
+    // engine worker warms before anything mounts (ADR 0002 am3).
+    expect(BOOT_PLAN).toEqual(["gate", "warm", "mount", "register"]);
 
     const indexOf = (step: string) => BOOT_PLAN.indexOf(step as never);
-    expect(indexOf("gate")).toBeLessThan(indexOf("mount"));
+    expect(indexOf("gate")).toBeLessThan(indexOf("warm"));
+    expect(indexOf("warm")).toBeLessThan(indexOf("mount"));
     expect(indexOf("mount")).toBeLessThan(indexOf("register"));
   });
 });

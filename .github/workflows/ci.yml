@@ -65,6 +65,12 @@ jobs:
       - name: Test (Vitest)
         run: pnpm test
 
+      # public/duckdb/ is gitignored — a clean checkout fetches the
+      # exact-pinned wasm + workers once before the build guard lets
+      # `vite build` run (CONTRIBUTING: Self-Hosted DuckDB-WASM Assets).
+      - name: Download DuckDB-WASM runtime assets
+        run: pnpm duckdb:download
+
       - name: Build
         run: pnpm build
 
@@ -103,6 +109,11 @@ jobs:
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
+
+      # Same gitignored-assets fetch as the quality job — the build guard
+      # requires them.
+      - name: Download DuckDB-WASM runtime assets
+        run: pnpm duckdb:download
 
       # Build before serving so e2e exercises the shipped static origin
       # (COOP/COEP headers included), not a dev server.
@@ -154,6 +165,11 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Same gitignored-assets fetch as the quality job — the build guard
+      # requires them, and the deployed dist must serve them.
+      - name: Download DuckDB-WASM runtime assets
+        run: pnpm duckdb:download
 
       - name: Build
         run: pnpm build

@@ -3,7 +3,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
-import { healthcarePii, saasChurn, type PresetTriple } from "../triples";
+import { healthcarePii, saasChurn, materializedColumns, type PresetTriple } from "../triples";
+import { toCsv } from "../csv";
 import { SAAS_CHURN_HEADLINE_SQL } from "../canonical-sql";
 import { SAAS_CHURN_PINNED } from "../saas-churn";
 
@@ -21,10 +22,6 @@ import { SAAS_CHURN_PINNED } from "../saas-churn";
  */
 
 const triples = [saasChurn, healthcarePii] as const;
-
-/** Direct identifiers exist in the catalog for custody to suppress; the generator never materializes them. */
-const materializedColumns = (triple: Pick<PresetTriple, "metadata">) =>
-  triple.metadata.columns.filter((column) => column.classification !== "direct_identifier");
 
 const csvPath = (triple: Pick<PresetTriple, "metadata">, workDir: string) =>
   join(workDir, `${triple.metadata.datasetId}.csv`);
@@ -49,23 +46,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await rm(workDir, { recursive: true, force: true });
 });
-
-function csvField(value: string | number | boolean): string {
-  const text = String(value);
-  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
-
-function toCsv(header: readonly string[], rows: readonly Record<string, unknown>[]): string {
-  const lines = [header.join(",")];
-  for (const row of rows) {
-    lines.push(
-      header
-        .map((name) => csvField(row[name] as string | number | boolean))
-        .join(","),
-    );
-  }
-  return lines.join("\n") + "\n";
-}
 
 async function queryRows(
   connection: DuckDBConnection,

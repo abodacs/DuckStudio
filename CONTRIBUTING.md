@@ -21,6 +21,16 @@ Colocate tests with each feature. At minimum cover:
 
 Run tests, lint, typecheck, and production build after code changes. Fix failures rather than bypassing checks.
 
+## Self-Hosted DuckDB-WASM Assets
+
+The engine's runtime assets (wasm + worker scripts) are self-hosted from `public/duckdb/` (COEP `require-corp` blocks third-party responses). A clean checkout must fetch them once before building:
+
+```sh
+pnpm duckdb:download
+```
+
+The script packs the exact `@duckdb/duckdb-wasm` pin from `package.json` and fails loudly when an expected asset is missing; `pnpm build` fails when the assets are absent.
+
 ## Pre-Publish WebMCP Audit
 
 Audit before you publish:
