@@ -1,6 +1,6 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
 import { createWorkerHandler, presetCsv, PRESET_TRIPLES, type BoundedRead, type DuckEngineRuntime } from "./worker-handler";
-import { decimalCellToNumber, isDecimalField } from "./decimal-cells";
+import { decimalCellToNumber, decimalScale } from "./decimal-cells";
 import type { EngineColumn, EngineRequest, EngineResponse, WarmResult } from "./protocol";
 
 /**
@@ -99,11 +99,10 @@ async function createBrowserRuntime(): Promise<DuckEngineRuntime> {
         // closes the stream (ADR 0002: streamArrow → bounded cursor).
         schema = batch.schema.fields.map((field) => ({ name: field.name, type: duckDbType(field.type) }));
         const vectors = batch.schema.fields.map((field) => batch.getChild(field.name));
-        // Decimal results (HUGEINT/DECIMAL aggregates) read as raw words;
-        // decode to scaled numbers so rows, inserts, and summaries stay numbers.
-        const decimalScales = batch.schema.fields.map((field) =>
-          isDecimalField(field.type) ? field.type.scale : null,
-        );
+        // Decimal results (HUGEINT/DECIMAL aggregates) read as raw unscaled
+        // words or numbers; decode to scaled numbers so rows, inserts, and
+        // summaries stay plain numbers.
+        const decimalScales = batch.schema.fields.map((field) => decimalScale(field.type));
         const batchLength = Math.min(batch.numRows, maxRows - rows.length);
         for (let rowIndex = 0; rowIndex < batchLength; rowIndex += 1) {
           const row: Record<string, unknown> = {};

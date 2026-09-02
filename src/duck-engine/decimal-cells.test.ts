@@ -1,11 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { decimalCellToNumber, decimalWordsToNumber, isDecimalField } from "./decimal-cells";
+import { decimalCellToNumber, decimalScale, decimalWordsToNumber } from "./decimal-cells";
 
 /**
  * The decimal-cell decoders (dbxlite's type-converters recipe): HUGEINT and
  * DECIMAL results must reach rows, INSERT bindings, and measured summaries
  * as plain numbers — never as raw Arrow words or unparseable type strings.
+ * Detection rides the type's `toString()` contract because the shipped
+ * worker bundle minifies constructor names.
  */
+
+describe("decimalScale", () => {
+  it("reads the scale property off decimal type objects", () => {
+    const type = {
+      toString: () => "Decimal[38e+2]",
+      precision: 38,
+      scale: 2,
+    };
+    expect(decimalScale(type)).toBe(2);
+  });
+
+  it("parses the rendered string when no scale property survives", () => {
+    expect(decimalScale({ toString: () => "Decimal[38e+2]" })).toBe(2);
+    expect(decimalScale({ toString: () => "Decimal[38e0]" })).toBe(0);
+    expect(decimalScale({ toString: () => "Decimal(38, 2)" })).toBe(2);
+    expect(decimalScale({ toString: () => "Decimal[38e-3]" })).toBe(-3);
+  });
+
+  it("returns null for non-decimal types", () => {
+    expect(decimalScale(null)).toBeNull();
+    expect(decimalScale("Utf8")).toBeNull();
+    expect(decimalScale({ toString: () => "Float64" })).toBeNull();
+    expect(decimalScale({ scale: 2 })).toBeNull(); // decimal-shaped name required
+  });
+});
 
 describe("decimalWordsToNumber", () => {
   it("decodes little-endian 128-bit words with the scale applied", () => {
@@ -43,27 +70,5 @@ describe("decimalCellToNumber", () => {
 
   it("returns null for shapes it cannot read rather than guessing", () => {
     expect(decimalCellToNumber("142", 2)).toBeNull();
-  });
-});
-
-describe("isDecimalField", () => {
-  class Decimal {
-    constructor(
-      public precision: number,
-      public scale: number,
-    ) {}
-  }
-  class Int64 {}
-
-  it("recognizes arrow Decimal fields by their scale", () => {
-    expect(isDecimalField(new Decimal(38, 2))).toBe(true);
-    expect(isDecimalField(new Decimal(38, 0))).toBe(true);
-  });
-
-  it("rejects non-decimal fields and scale-less shapes", () => {
-    expect(isDecimalField(new Int64())).toBe(false);
-    expect(isDecimalField({ constructor: { name: "Decimal" } })).toBe(false);
-    expect(isDecimalField(null)).toBe(false);
-    expect(isDecimalField("Utf8")).toBe(false);
   });
 });

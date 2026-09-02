@@ -478,10 +478,12 @@ test.describe("slice 6: judge-path 1-click journey", () => {
     await expect(page.getByText("a_01", { exact: true })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText("ws_local_01 · rev 2 · saas_churn · public_synthetic")).toBeVisible();
 
-    // Headline KPIs measured from the canonical SQL's first row.
-    await expect(page.getByText("Churn Rate", { exact: true })).toBeVisible();
+    // Headline KPIs measured from the canonical SQL's first row — the same
+    // object renders in the artifact card and the Insights tiles, so scope
+    // to the first.
+    await expect(page.getByText("Churn Rate", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("14.2%", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("$182,400", { exact: true })).toBeVisible();
+    await expect(page.getByText("$182,400", { exact: true }).first()).toBeVisible();
 
     // The chart paints, and the runtime line is measured — never a promised
     // fixed query time (prd.md §8).
