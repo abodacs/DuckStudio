@@ -87,6 +87,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # --only-changed diffs against origin/<base_ref>, so the base
+          # branch's tip must exist locally; the default depth-1 checkout
+          # omits it and Playwright aborts with a shallow-clone error.
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -120,8 +125,23 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # PRs whose diff is confined to e2e specs (or the Playwright config)
+      # run only the changed files; every other diff runs the full suite.
+      # --only-changed selects test files affected by the git diff, so an
+      # app-only (src/) change would otherwise select zero specs and pass
+      # without exercising the app at all. Pushes to main (no
+      # github.base_ref, deploys ride on it) always run the full suite.
+      # `pnpm e2e`, not `npx playwright`: the pinned @playwright/test
+      # devDependency rules out a floating npx fetch, same as wrangler above.
       - name: Run E2E
-        run: pnpm e2e
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && \
+             git diff --quiet "origin/${{ github.base_ref }}" -- \
+               . ':(exclude)e2e/*.spec.ts' ':(exclude)playwright.config.ts'; then
+            pnpm e2e --only-changed="origin/${{ github.base_ref }}"
+          else
+            pnpm e2e
+          fi
 
       - name: Upload Playwright report on failure
         if: failure()
@@ -179,3 +199,21 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  # Ticket 65 (grilling 62's resolution): the pre-publish audit runs against
+  # the live origin after every production deploy and its four-pillar
+  # breakdown (shared experience 30 / task completion 25 / tool quality 25 /
+  # trust 20) is recorded in the job log. Informational by ruling — the
+  # external CLI must not gate the pipeline on flakiness; the binding
+  # assertion (score ≥ 70 overall, availability gate passed) is made in the
+  # release PR per docs/release-checklist.md.
+  audit:
+    name: Audit (webmcp-audit on the live origin)
+    needs: deploy
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Record the four-pillar audit breakdown
+        continue-on-error: true
+        run: npx -y ax webmcp-audit https://duckstudio.pages.dev

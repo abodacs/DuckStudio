@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -10,6 +10,7 @@ import { InsightsView } from "../insights-view";
 import { WorkspaceShell } from "../../studio-shell/shell";
 import { workspaceStore } from "../../revisioned-workspace/store";
 import type { WorkspaceStore } from "../../revisioned-workspace/store";
+import { saasChurn } from "../../demo-presets/triples";
 import type { AuthorizedDecision } from "../../dataset-custody/schemas";
 import type { ExecutionResult } from "../../duck-engine/protocol";
 import type { WorkspaceEngine } from "../../duck-engine/worker";
@@ -324,5 +325,134 @@ describe("tab and dispatch contracts (§7.2, §15.16)", () => {
     expect(screen.getByText("0 B")).toBeDefined();
     expect(screen.getAllByText("Application shell traffic is outside dataset-upload accounting.")).toHaveLength(1);
     expect(screen.getAllByText("Runtime interception is operational evidence, not a formal proof.")).toHaveLength(1);
+  });
+});
+
+describe("judge-path gestures (slice 6: preset cards, the canonical prompt chip, capability chip)", () => {
+  /**
+   * The gestures dispatch through the human seam's real store singleton, so
+   * these tests pin the seam's behavior at that seam: `getSnapshot` reads the
+   * injected view's state and `dispatch` resolves the activation envelope,
+   * making the chain deterministic without polluting the singleton.
+   */
+  function sealSeam() {
+    const snapshot = vi
+      .spyOn(workspaceStore, "getSnapshot")
+      .mockReturnValue(current.getSnapshot() as ReturnType<typeof workspaceStore.getSnapshot>);
+    const dispatch = vi
+      .spyOn(workspaceStore, "dispatch")
+      .mockImplementation(() => Promise.resolve({ ok: true, revision: 1 } as never));
+    return { snapshot, dispatch };
+  }
+
+  const presetCard = (name: string | RegExp) =>
+    within(screen.getByRole("group", { name: "Dataset presets" })).getByRole("button", { name });
+
+  it("a preset-card click dispatches activateDataset once with a fresh key", () => {
+    render(<WorkspaceShell />);
+    const seam = sealSeam();
+    fireEvent.click(presetCard(/saas_churn/));
+    expect(seam.dispatch).toHaveBeenCalledTimes(1);
+    const command = seam.dispatch.mock.calls[0]?.[0];
+    expect(command?.kind).toBe("activateDataset");
+    if (command?.kind === "activateDataset") {
+      expect(command.input.datasetId).toBe("saas_churn");
+      expect(command.input.expectedRevision).toBe(current.getSnapshot().revision);
+      expect(command.input.idempotencyKey).not.toBe("");
+    }
+    seam.snapshot.mockRestore();
+    seam.dispatch.mockRestore();
+  });
+
+  it("the active preset card paints the ACTIVE chip and stays enabled — the envelope teaches", async () => {
+    current = await churnWorkspace();
+    render(<WorkspaceShell />);
+    const seam = sealSeam();
+    const card = presetCard(/saas_churn/);
+    expect(card).toHaveProperty("disabled", false);
+    expect(screen.getByText("ACTIVE")).toBeDefined();
+    // Grilling 61: no disabled state, no local gating — a second click is a
+    // second dispatch whose envelope (OPERATION_CONFLICT or replay) teaches.
+    fireEvent.click(card);
+    expect(seam.dispatch).toHaveBeenCalledTimes(1);
+    expect(seam.dispatch.mock.calls[0]?.[0]?.kind).toBe("activateDataset");
+    seam.snapshot.mockRestore();
+    seam.dispatch.mockRestore();
+  });
+
+  it("the canonical prompt chip scripts getContext then runAnalysis at the read's revision", async () => {
+    render(<WorkspaceShell />);
+    const seam = sealSeam();
+    fireEvent.click(screen.getByRole("button", { name: /Analyze churn against support tickets\./ }));
+    await waitFor(() => expect(seam.dispatch).toHaveBeenCalledTimes(2));
+    const [context, run] = seam.dispatch.mock.calls.map((call) => call[0]);
+    // Grilling 61: the exact two-call sequence, pill-for-pill with tape
+    // beats 3–4 — a summary read, then the canonical analysis at the
+    // revision the read returned.
+    expect(context?.kind).toBe("getContext");
+    if (context?.kind === "getContext") {
+      expect(context.input.scope).toBe("summary");
+    }
+    expect(run?.kind).toBe("runAnalysis");
+    if (run?.kind === "runAnalysis") {
+      expect(run.input.source).toEqual({ kind: "dataset", id: "saas_churn" });
+      expect(run.input.sql).toBe(saasChurn.sql);
+      expect(run.input.expectedRevision).toBe(1);
+      expect(run.input.presentation?.kpis?.map((kpi: { label: string }) => kpi.label)).toEqual([
+        "Churn Rate",
+        "Avg Tickets",
+        "Impacted MRR",
+      ]);
+      expect(run.input.presentation?.chart?.threshold).toEqual({
+        column: "tickets",
+        value: 5,
+        label: "churn accelerates above 5 tickets",
+      });
+    }
+    seam.snapshot.mockRestore();
+    seam.dispatch.mockRestore();
+  });
+
+  it("a preset click during a running operation renders the OPERATION_CONFLICT recovery card", async () => {
+    // A live operation (never-settling engine) holds the slot; the envelope
+    // verdict of the second dispatch echoes as the standard recovery card.
+    const store = createStore(holdableEngine());
+    await activateSaasChurn(store);
+    void store.dispatch({
+      kind: "runAnalysis",
+      input: {
+        source: { kind: "dataset", id: "saas_churn" },
+        sql: CHURN_SQL,
+        bindings: {},
+        expectedRevision: 1,
+        idempotencyKey: "canvas-contract-conflict-hold",
+      },
+    });
+    current = store;
+    render(<WorkspaceShell />);
+    const seam = sealSeam();
+    seam.dispatch.mockImplementation(
+      () => Promise.resolve({ ok: false, error: { code: "OPERATION_CONFLICT" } }) as never,
+    );
+    fireEvent.click(presetCard(/healthcare_pii/));
+    await waitFor(() => expect(screen.getByText("OPERATION_CONFLICT")).toBeDefined());
+    expect(screen.getByText("Another operation is running; wait for it or cancel it.")).toBeDefined();
+    expect(screen.getByText("Recovery: wait for the running operation or cancel it.")).toBeDefined();
+    seam.snapshot.mockRestore();
+    seam.dispatch.mockRestore();
+  });
+
+  it("the capability chip names the served surface from the projection, next to the badge", async () => {
+    current = await churnWorkspace();
+    current.appendCapability("simulator_only");
+    render(<WorkspaceShell />);
+    expect(screen.getByText("simulator_only · same workspace")).toBeDefined();
+    expect(screen.queryByText(/connecting/)).toBeNull();
+    cleanup();
+
+    current = await churnWorkspace();
+    current.appendCapability("webmcp_native");
+    render(<WorkspaceShell />);
+    expect(screen.getByText("webmcp_native")).toBeDefined();
   });
 });

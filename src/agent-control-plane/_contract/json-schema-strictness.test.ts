@@ -236,6 +236,30 @@ describe("duckdb_execute_sql_to_canvas JSON Schema strictness (§8.3)", () => {
                   maximum: 5000,
                   description: "Requested point ceiling; values above the measured budget clamp with a warning.",
                 },
+                threshold: {
+                  type: "object",
+                  description:
+                    "Emphasis zone above a threshold on the scatter's x axis; styling only, never a release rule.",
+                  properties: {
+                    column: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 80,
+                      description: "X-axis column the threshold reads on; it must name the chart's x column.",
+                    },
+                    value: {
+                      type: "number",
+                      description: "X value where the emphasis zone begins; the zone covers plotted values above it.",
+                    },
+                    label: {
+                      type: "string",
+                      maxLength: 80,
+                      description: "Optional zone caption, at most 80 characters.",
+                    },
+                  },
+                  required: ["column", "value"],
+                  additionalProperties: false,
+                },
               },
               required: ["type", "x", "y"],
               additionalProperties: false,

@@ -50,6 +50,20 @@ export const PresentationSpecSchema = z.strictObject({
         .max(5000)
         .describe("Requested point ceiling; values above the measured budget clamp with a warning.")
         .optional(),
+      threshold: z
+        .strictObject({
+          column: z
+            .string()
+            .min(1)
+            .max(80)
+            .describe("X-axis column the threshold reads on; it must name the chart's x column."),
+          value: z
+            .number()
+            .describe("X value where the emphasis zone begins; the zone covers plotted values above it."),
+          label: z.string().max(80).describe("Optional zone caption, at most 80 characters.").optional(),
+        })
+        .describe("Emphasis zone above a threshold on the scatter's x axis; styling only, never a release rule.")
+        .optional(),
     })
     .describe("Chart axes; the point count in summaries is always the measured value.")
     .optional(),

@@ -5,7 +5,7 @@ import { ToolNameSchema } from "../agent-control-plane/envelope";
 import type { OperationSummary } from "../revisioned-workspace/schemas";
 import { projectWorkspace } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
-import { cancelActiveOperation, selectArtifact } from "../live-canvas/human-commands";
+import { cancelActiveOperation, selectArtifact, activatePreset, runCanonicalChurnAnalysis, type RunnablePresetId } from "../live-canvas/human-commands";
 import { formatKpiValue } from "../live-canvas/kpi";
 import { consumeInitialView, resolvePostCommitView } from "../live-canvas/view-intent";
 import { CustodyView } from "../live-canvas/custody-view";
@@ -83,9 +83,9 @@ const TRANSPORTS = ["fetch", "XMLHttpRequest", "sendBeacon", "WebSocket", "WebTr
 
 /**
  * The first-run path (PRD §7.3 first paint): three moves to the aha —
- * governed evidence on glass while the badge still reads zero upload. Each
- * move names real UI; the current move derives from workspace state, never
- * from a tour counter.
+ * governed evidence on glass while the badge still reads zero upload. The
+ * moves are guidance, not chrome state: the current move derives from
+ * workspace state, never from a tour counter.
  */
 const FIRST_RUN_MOVES = [
   {
@@ -157,6 +157,13 @@ export function WorkspaceShell() {
   const tabRefs = useRef<Map<ViewId, HTMLButtonElement | null>>(new Map());
   const appliedRuns = useRef<Set<string>>(new Set());
   const switchTo = switchView(setActiveView);
+  /**
+   * The human dispatches' rejected envelopes (grilling 61: "the envelope
+   * teaches"). Canvas-local echo only — the workspace never records a
+   * rejected command, so the card renders while the operation it conflicted
+   * with is live and disappears when the stream settles.
+   */
+  const [dispatchFailure, setDispatchFailure] = useState<{ code: string } | null>(null);
 
   // The post-commit tab (grilling 52): the human adapter's captured
   // `initialView` applies once per succeeded analysis, else §4.5 inference.
@@ -218,6 +225,23 @@ export function WorkspaceShell() {
   );
   const runtime = expandedOperation ? measuredRuntime(expandedOperation) : null;
 
+  /**
+   * The judge-path surface facts (slice 6) read from the one projection:
+   * the served capability names the header chip, and the active dataset
+   * highlights its preset card. Neither gates a dispatch — grilling 61
+   * keeps every gesture enabled so the envelope teaches recovery.
+   */
+  const activeDatasetId = vm.datasetState.kind === "active" ? vm.datasetState.datasetId : null;
+  const nativeSurface = vm.capabilities.includes("webmcp_native");
+
+  /** One dispatch per click; the envelope's verdict echoes in the canvas. */
+  const activate = (datasetId: RunnablePresetId) => {
+    const pending = activatePreset(datasetId, vm.revision);
+    void pending.then((verdict) => {
+      setDispatchFailure(verdict.ok ? null : { code: verdict.code });
+    });
+  };
+
   return (
     <div className="relative flex h-dvh min-w-[960px] flex-col overflow-hidden">
       <div aria-hidden className="lamp-field" />
@@ -240,6 +264,14 @@ export function WorkspaceShell() {
           <span className="badge-zero-upload">
             <span aria-hidden className={`badge-dot ${operationsLive ? "badge-dot-live" : ""}`} />
             {vm.badge}
+          </span>
+          <span
+            aria-label="Agent capability"
+            title="The served agent surface"
+            className="chip-capability"
+          >
+            <span aria-hidden className={`agent-dot ${nativeSurface ? "agent-dot-native" : "agent-dot-simulator"}`} />
+            <span className="mono-value">{nativeSurface ? "webmcp_native" : "simulator_only · same workspace"}</span>
           </span>
         </div>
       </header>
@@ -287,6 +319,25 @@ export function WorkspaceShell() {
                   );
                 })}
               </ol>
+            </div>
+          </div>
+          <div role="group" aria-label="Canonical runs" className="card-panel rise mt-2" style={rise(130)}>
+            <div className="card-core">
+              <h3 className="card-label">ASK THE AGENT</h3>
+              <button
+                type="button"
+                className="button-run"
+                onClick={() => {
+                  void runCanonicalChurnAnalysis();
+                }}
+              >
+                <span aria-hidden>⚡</span> Analyze churn against support tickets.
+              </button>
+              <p className="meta mt-1.5">
+                One prompt, two calls — <span className="mono-value">duckdb_get_context</span> then{" "}
+                <span className="mono-value">duckdb_execute_sql_to_canvas</span>: the same commands, budgets, and
+                custody as the agent.
+              </p>
             </div>
           </div>
           <div role="group" aria-label="Workspace context" className="card-panel rise mt-2" style={rise(160)}>
@@ -384,6 +435,18 @@ export function WorkspaceShell() {
                       )}
                     </div>
                   )}
+                  {/* Grilling 61: a rejected preset dispatch (OPERATION_CONFLICT
+                      and friends) renders the standard recovery card while the
+                      operation it collided with is live — the envelope teaches. */}
+                  {operationsLive && dispatchFailure && (
+                    <div className="operation-card operation-card-failed">
+                      <p className="mt-1.5 flex items-center gap-2">
+                        <span className="chip-error">{dispatchFailure.code}</span>
+                        <span className="meta">{RECOVERY_MESSAGE[dispatchFailure.code] ?? ""}</span>
+                      </p>
+                      <p className="meta mt-1">{RECOVERY_MOVE[dispatchFailure.code] ?? ""}</p>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -439,43 +502,47 @@ export function WorkspaceShell() {
           <div role="group" aria-label="Dataset presets" className="rise mt-3 space-y-2" style={rise(340)}>
             <h3 className="card-label">DATASETS</h3>
             <p id="preset-status" className="meta">
-              Dataset activation is coming online.
+              Click a preset to activate it — in this tab's memory only; rows never leave the browser.
             </p>
-            {PRESETS.map((preset) => (
-              <button
-                key={preset.datasetId}
-                type="button"
-                disabled
-                aria-describedby="preset-status"
-                className="preset-card opacity-75"
-              >
-                <span className="card-core flex items-center justify-between gap-3">
-                  <span className="min-w-0">
-                    <span className="mono-value block text-sm">{preset.datasetId}</span>
-                    <span className="meta mt-1 block">{presetMeta(preset)}</span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-2">
-                    <span
-                      className={
-                        preset.policy === "sensitive_aggregate_only"
-                          ? "chip-policy-sensitive"
-                          : "chip-policy-public"
-                      }
-                    >
-                      {preset.policy}
+            {PRESETS.map((preset) => {
+              const isActive = activeDatasetId === preset.datasetId;
+              return (
+                <button
+                  key={preset.datasetId}
+                  type="button"
+                  aria-label={`Activate dataset ${preset.datasetId} · ${preset.policy} policy`}
+                  aria-describedby="preset-status"
+                  onClick={() => activate(preset.datasetId as RunnablePresetId)}
+                  className={isActive ? "preset-card preset-card-active" : "preset-card"}
+                >
+                  <span className="card-core flex items-center justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="mono-value block text-sm">{preset.datasetId}</span>
+                      <span className="meta mt-1 block">{presetMeta(preset)}</span>
                     </span>
-                    <span aria-hidden className="preset-arrow opacity-60">
-                      <ArrowGlyph />
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span
+                        className={
+                          preset.policy === "sensitive_aggregate_only"
+                            ? "chip-policy-sensitive"
+                            : "chip-policy-public"
+                        }
+                      >
+                        {preset.policy}
+                      </span>
+                      {isActive ? (
+                        <span className="chip-active">ACTIVE</span>
+                      ) : (
+                        <span aria-hidden className="preset-arrow opacity-60">
+                          <ArrowGlyph />
+                        </span>
+                      )}
                     </span>
                   </span>
-                </span>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
-          <p className="meta rise mt-3" style={rise(400)}>
-            Agent channel: <span className="mono-value">simulator</span> ·{" "}
-            <span className="mono-value">native WebMCP</span> — connecting.
-          </p>
           <div role="group" aria-label="Custody monitoring" className="card-panel rise mt-2" style={rise(440)}>
             <div className="card-core">
               <h3 className="card-label">CUSTODY</h3>

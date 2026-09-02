@@ -217,6 +217,12 @@ body {
   @apply ml-auto inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-accent/30 bg-accent/[0.06] py-1 pr-3 pl-2.5 text-sm text-ink;
 }
 
+/* The served-surface chip (grilling 61): `webmcp_native` or
+   `simulator_only · same workspace`, sitting next to the zero-upload badge. */
+.chip-capability {
+  @apply inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-edge bg-white/[0.03] px-2.5 py-1 text-xs text-ink-secondary;
+}
+
 @utility badge-dot {
   @apply size-1.5 rounded-full bg-accent animate-pulse-dot;
 }
@@ -363,6 +369,43 @@ body {
   @apply card-panel block w-full text-left state-shift press focus-ring;
 }
 
+/* Slice 6: the active preset wires the cyan lamp — the same selection voice
+   as the selected artifact card, never a second accent. */
+@utility preset-card-active {
+  @apply border-accent/40 bg-accent/[0.05] shadow-[0_24px_48px_-24px_rgb(0_0_0/0.55),0_0_24px_-10px_rgb(0_242_254/0.3)];
+}
+
+.preset-card-active .mono-value:first-child {
+  color: var(--color-accent);
+}
+
+@utility chip-active {
+  @apply rounded-full border border-accent/40 bg-accent/[0.08] px-2 py-0.5 font-mono text-[10px] tracking-[0.14em] text-accent;
+}
+
+/* The canonical-run chips (slice 6): buttons in the amber agent voice. */
+@utility button-run {
+  @apply flex w-full items-center gap-2 rounded-panel-inner border border-amber/35 bg-amber/[0.05] px-3 py-2 text-left text-[13px] text-ink state-shift press focus-ring hover:border-amber/60 hover:bg-amber/[0.09] disabled:pointer-events-none disabled:opacity-45;
+}
+
+/* The agent-channel dot: cyan when the native WebMCP surface is live, amber
+   for the simulator — the room's two voices, no third color. */
+.agent-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+}
+
+.agent-dot-native {
+  background-color: var(--color-accent);
+  animation: var(--animate-pulse-dot);
+}
+
+.agent-dot-simulator {
+  background-color: var(--color-amber);
+}
+
 @utility preset-arrow {
   @apply flex size-6 shrink-0 items-center justify-center rounded-full border border-edge bg-white/[0.04] text-ink-secondary transition-[transform,border-color,background-color,color] duration-300 ease-glide;
 }
@@ -450,6 +493,10 @@ body {
   }
 
   .ghost-draw {
+    animation: none;
+  }
+
+  .agent-dot-native {
     animation: none;
   }
 

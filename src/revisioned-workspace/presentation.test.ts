@@ -146,6 +146,71 @@ describe("deny over strip (grilling 34: supplied illegal elements are never remo
   });
 });
 
+describe("chart thresholds (slice 6: styling emphasis, never a release rule)", () => {
+  const scatterSupplied = (chart: Record<string, unknown>) =>
+    resolvePresentation({
+      policy: "public_synthetic",
+      resultSchema: [...publicResult],
+      omittedColumns: [],
+      supplied: { chart: chart as never },
+    });
+
+  it("commits a supplied threshold verbatim on the scatter it names", () => {
+    const outcome = scatterSupplied({
+      type: "scatter",
+      x: "tickets",
+      y: "churn_rate",
+      threshold: { column: "tickets", value: 5, label: "danger" },
+    });
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.spec.chart).toEqual({
+        type: "scatter",
+        x: "tickets",
+        y: "churn_rate",
+        threshold: { column: "tickets", value: 5, label: "danger" },
+      });
+    }
+  });
+
+  it("refuses a threshold on a non-scatter chart instead of stripping it", () => {
+    const outcome = scatterSupplied({
+      type: "bar",
+      x: "plan",
+      y: "churn_rate",
+      threshold: { column: "plan", value: 2 },
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok && "validation" in outcome) {
+      expect(outcome.validation.code).toBe("VALIDATION_ERROR");
+      expect(outcome.validation.details.field).toBe("presentation.chart.threshold");
+    }
+  });
+
+  it("refuses a threshold whose column is not the chart's x column", () => {
+    const outcome = scatterSupplied({
+      type: "scatter",
+      x: "tickets",
+      y: "churn_rate",
+      threshold: { column: "churn_rate", value: 0.2 },
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok && "validation" in outcome) {
+      expect(outcome.validation.code).toBe("VALIDATION_ERROR");
+      expect(outcome.validation.details.unknown).toBe("churn_rate");
+    }
+  });
+
+  it("inference never proposes a threshold", () => {
+    const spec = inferPresentation({
+      policy: "public_synthetic",
+      resultSchema: [...publicResult],
+      omittedColumns: [],
+    });
+    expect(spec.chart).toEqual({ type: "scatter", x: "tickets", y: "churn_rate" });
+  });
+});
+
 describe("measured summary and downsampling (§8.3, grilling 34)", () => {
   const result: ExecutionResult = {
     schema: [

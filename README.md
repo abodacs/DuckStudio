@@ -6,7 +6,7 @@ The core idea is **controlled release**. A browser agent can observe both tool p
 
 ## Status
 
-Slices 1–4 are implemented: the walking skeleton deploys from CI, dataset custody and the DuckDB-WASM engine run in a worker, the revisioned workspace creates immutable artifacts, and the agent control plane registers all four WebMCP tools, covered end to end. Slices 5–6 remain open — the evidence canvas views currently render pinned empty states, and preset button/prompt-chip wiring, production hardening, and the demo pack are still ahead. The slice tracker in [`docs/prd.md`](./docs/prd.md) §9 is canonical.
+All slices of the one-day build are implemented: the walking skeleton deploys from CI, dataset custody and the DuckDB-WASM engine run in a worker, the revisioned workspace creates immutable artifacts, the agent control plane registers all four WebMCP tools, the evidence canvas paints the four views — measured KPI tiles, the lazy chart, the virtualized grid with policy suppression, and captured custody evidence — and the demo surface ships proof: preset cards and the one canonical prompt chip dispatch the same domain commands as the agent, the deploy and audit gates run in CI, and the submission pack lives in [`docs/submission.md`](./docs/submission.md). The slice tracker in [`docs/prd.md`](./docs/prd.md) §9 is canonical.
 
 - Shared language: [`CONTEXT.md`](./CONTEXT.md)
 - Product intent: [`PRODUCT.md`](./PRODUCT.md)
@@ -36,7 +36,7 @@ Two synthetic presets are generated in browser memory and activated by ID — `s
 
 ## Stack
 
-Vite, React, TypeScript, Tailwind CSS, and `@tanstack/react-router`, with `@duckdb/duckdb-wasm` in a Web Worker, hand-rolled SVG charts in `src/live-canvas/`, and self-hosted fonts. Full stack and platform rationale: [`PRODUCT.md`](./PRODUCT.md).
+Vite, React, TypeScript, Tailwind CSS, and `@tanstack/react-router`, with `@duckdb/duckdb-wasm` in a Web Worker, ECharts behind a lazy boundary in `src/live-canvas/chart.tsx`, and self-hosted fonts. Full stack and platform rationale: [`PRODUCT.md`](./PRODUCT.md).
 
 ## Platform Boundaries
 

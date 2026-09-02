@@ -5,13 +5,23 @@
  * rows and holds the pinned prd.md §6 values.
  */
 
-/** The prd.md §6.1 churn-vs-tickets analysis: one bucket per ticket count. */
+/**
+ * The prd.md §6.1 churn-vs-tickets analysis: one bucket per ticket count.
+ * The trailing window columns repeat the rollup on every row, so a summary's
+ * first-row KPI read (§8.3) yields the pinned headline values from this one
+ * statement — `churn_rate` as a fraction for the percent renderer,
+ * `churn_rate_pct` per bucket for the scatter's y axis.
+ */
 export const SAAS_CHURN_CANONICAL_SQL = `
 SELECT
   tickets,
   COUNT(*) AS accounts,
   SUM(CASE WHEN churned THEN 1 ELSE 0 END) AS churned_accounts,
-  SUM(CASE WHEN churned THEN mrr ELSE 0 END) AS churned_mrr
+  SUM(CASE WHEN churned THEN mrr ELSE 0 END) AS churned_mrr,
+  ROUND(100.0 * SUM(CASE WHEN churned THEN 1 ELSE 0 END) / COUNT(*), 1) AS churn_rate_pct,
+  ROUND(SUM(SUM(CASE WHEN churned THEN 1 ELSE 0 END)) OVER () / SUM(COUNT(*)) OVER (), 4) AS churn_rate,
+  ROUND(SUM(tickets * COUNT(*)) OVER () / SUM(COUNT(*)) OVER (), 4) AS avg_tickets,
+  ROUND(SUM(SUM(CASE WHEN churned THEN mrr ELSE 0 END)) OVER (), 2) AS impacted_mrr
 FROM saas_churn
 GROUP BY tickets
 ORDER BY tickets
