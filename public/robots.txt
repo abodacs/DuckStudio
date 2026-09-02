@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://duckstudio.pages.dev/sitemap.xml
