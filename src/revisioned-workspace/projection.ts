@@ -226,20 +226,26 @@ export function projectWorkspace(workspace: Workspace): WorkspaceViewModel {
         evicted: workspace.evictedArtifactIds.includes(record.artifact.artifactId),
       })),
     operations: [...workspace.operations].reverse(),
-    artifactCards: [...workspace.recentArtifactIds].map((artifactId) => {
+    // `recentArtifactIds` only ever names committed records (the store
+    // appends both atomically), so a missing record is a defect the filter
+    // drops rather than a card of invented metadata.
+    artifactCards: [...workspace.recentArtifactIds].flatMap((artifactId) => {
       const record = byId.get(artifactId);
-      const artifact = record?.artifact;
-      return {
-        artifactId,
-        evicted: workspace.evictedArtifactIds.includes(artifactId),
-        selected: workspace.selectedArtifactId === artifactId,
-        sourceId: artifact?.source.id ?? "",
-        policy: artifact?.policy ?? "public_synthetic",
-        releaseStatus: artifact?.release.status ?? "allowed",
-        rowCount: artifact?.rowCount ?? 0,
-        kpis: (record?.summary.kpis ?? []).slice(0, 3),
-        hasChart: record?.summary.chart !== undefined,
-      };
+      if (!record) return [];
+      const { artifact, summary } = record;
+      return [
+        {
+          artifactId,
+          evicted: workspace.evictedArtifactIds.includes(artifactId),
+          selected: workspace.selectedArtifactId === artifactId,
+          sourceId: artifact.source.id,
+          policy: artifact.policy,
+          releaseStatus: artifact.release.status,
+          rowCount: artifact.rowCount,
+          kpis: summary.kpis.slice(0, 3),
+          hasChart: summary.chart !== undefined,
+        },
+      ];
     }),
   };
   lastInput = workspace;

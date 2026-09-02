@@ -216,6 +216,7 @@ export function WorkspaceShell() {
   const expandedOperation = vm.operations.find(
     (operation) => operation.status === "running" || operation.status === "failed",
   );
+  const runtime = expandedOperation ? measuredRuntime(expandedOperation) : null;
 
   return (
     <div className="relative flex h-dvh min-w-[960px] flex-col overflow-hidden">
@@ -340,11 +341,11 @@ export function WorkspaceShell() {
                           <span className="font-mono">{TOOL_FOR_KIND[expandedOperation.kind]}</span>
                         </span>
                         <span className="mono-value">{expandedOperation.status}</span>
-                        {measuredRuntime(expandedOperation) && (
-                          <span aria-hidden> · </span>
-                        )}
-                        {measuredRuntime(expandedOperation) && (
-                          <span className="mono-value">{measuredRuntime(expandedOperation)}</span>
+                        {runtime && (
+                          <>
+                            <span aria-hidden> · </span>
+                            <span className="mono-value">{runtime}</span>
+                          </>
                         )}
                       </p>
                       <p className="meta mt-1">

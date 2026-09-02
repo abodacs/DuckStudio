@@ -1,8 +1,7 @@
 import { lazy, Suspense } from "react";
 import { projectArtifact } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
-import { UnavailableArtifact } from "./artifact-states";
-import { formatKpiValue } from "./kpi";
+import { KpiTile, UnavailableArtifact } from "./artifact-states";
 
 /**
  * The lazy ECharts boundary (ADR 0007, grilling 52): `chart.tsx` is the only
@@ -60,12 +59,7 @@ export function InsightsView() {
           {insights.kpis.length > 0 && (
             <div className="grid grid-cols-3 gap-2.5">
               {insights.kpis.map((kpi) => (
-                <div key={kpi.column} className="ghost-tile flex min-w-0 flex-col gap-1 px-3 py-2.5">
-                  <span className="truncate text-xs uppercase tracking-[0.08em] text-ink-secondary">{kpi.label}</span>
-                  <span className="font-ui text-2xl font-semibold tabular-nums text-ink">
-                    {formatKpiValue(kpi.value, kpi.format)}
-                  </span>
-                </div>
+                <KpiTile key={kpi.column} kpi={kpi} />
               ))}
             </div>
           )}

@@ -753,7 +753,9 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       try {
         await engine.dropRelation(relationName);
         graph.markEvicted(evictedId);
-        // The ring dropped the relation; its page memory goes with it.
+        // The ring dropped the relation; its page memory goes with it. A
+        // failed drop leaves the artifact retained — the cache stays so the
+        // retry on a later commit (grilling 32) still finds its rows.
         releaseArtifactMemory(evictedId);
       } catch {
         continue;

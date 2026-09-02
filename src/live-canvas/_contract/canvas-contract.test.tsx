@@ -115,6 +115,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("healthcare suppression contract (grilling 51 item 2)", () => {
+  it("paints no rows from activation alone (acceptance 17)", async () => {
+    const store = createStore(fakeEngine());
+    await activateSaasChurn(store);
+    current = store;
+    const { container } = render(<DataGridView />);
+
+    // The honest empty state, and not one record-shaped element.
+    expect(screen.getByText("No artifact — the grid paints rows only from an approved artifact.")).toBeDefined();
+    expect(container.querySelectorAll("[data-grid-row]")).toHaveLength(0);
+  });
+
   it("renders the pinned banner plus released data and zero raw rows in the DOM", async () => {
     current = await healthcareWorkspace();
     const { container } = render(<DataGridView />);
@@ -206,6 +217,22 @@ describe("module boundary: echarts is importable only from chart.tsx (grilling 5
     };
     walk(join(srcRoot, "src"));
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("badge pulse contract (grilling 53.4)", () => {
+  it("pulses amber only while an operation is live, and reduces with motion", async () => {
+    render(<WorkspaceShell />);
+    // Rev-0 snapshot: no operations, no live pulse.
+    expect(document.querySelector(".badge-dot-live")).toBeNull();
+
+    // The reduce compliance lives in the stylesheet next to the keyframe.
+    const css = readFileSync(
+      join(fileURLToPath(import.meta.url), "../../../studio-shell/shell.css"),
+      "utf8",
+    );
+    expect(css).toMatch(/\.badge-dot-live/);
+    expect(css).toMatch(/prefers-reduced-motion: reduce[\s\S]*badge-dot-live[\s\S]*animation: none/s);
   });
 });
 

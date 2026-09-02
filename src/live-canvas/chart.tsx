@@ -31,14 +31,20 @@ export default function EvidenceChart({ insights }: { insights: InsightsData }) 
     instance.setOption({
       animation: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
       grid: { left: 48, right: 16, top: 16, bottom: 32 },
-      xAxis: { type: "category", data: points.map((point) => point.x), axisLabel: { color: "#9aa4b2" } },
+      // §4.5: scatter infers on two numeric columns, so its x axis is a
+      // value axis; bar/line read a category x.
+      xAxis: {
+        type: chart.type === "scatter" ? "value" : "category",
+        ...(chart.type === "scatter" ? {} : { data: points.map((point) => point.x) }),
+        axisLabel: { color: "#9aa4b2" },
+      },
       yAxis: { type: "value", axisLabel: { color: "#9aa4b2" }, splitLine: { lineStyle: { color: "rgb(255 255 255 / 9%)" } } },
       series: [
         {
-          type: chart.type === "scatter" ? "scatter" : chart.type,
-          data: points.map((point) => point.y),
-          itemStyle: { color: ACCENT },
-          ...(chart.type === "bar" ? { itemStyle: { color: ACCENT } } : chart.type === "line" ? { lineStyle: { color: AMBER } } : {}),
+          type: chart.type,
+          data: points.map((point) => (chart.type === "scatter" ? [point.x, point.y] : point.y)),
+          itemStyle: { color: chart.type === "line" ? AMBER : ACCENT },
+          ...(chart.type === "line" ? { lineStyle: { color: AMBER } } : {}),
         },
       ],
     });
