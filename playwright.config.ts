@@ -15,6 +15,13 @@ const WEBMCP_TESTING_ARGS = [
 
 export default defineConfig({
   testDir: "e2e",
+  // Every page load pays the BOOT_PLAN warm slot (DuckDB WASM compile +
+  // preset materialization) before the shell can render, so assertions race
+  // engine warm-up, not app defects. 30s matches the suite's explicit
+  // worker/surface waits; the test timeout leaves room for multi-assertion
+  // cold starts.
+  timeout: 60_000,
+  expect: { timeout: 30_000 },
   use: {
     baseURL,
     launchOptions: { args: WEBMCP_TESTING_ARGS },

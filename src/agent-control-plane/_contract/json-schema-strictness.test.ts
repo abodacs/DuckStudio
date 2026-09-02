@@ -1,14 +1,65 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { GET_CONTEXT_TOOL_DESCRIPTION, GetContextInputSchema } from "../envelope";
+import {
+  ACTIVATE_DATASET_TOOL_DESCRIPTION,
+  EXECUTE_SQL_TO_CANVAS_TOOL_DESCRIPTION,
+  GET_CONTEXT_TOOL_DESCRIPTION,
+  ActivateDatasetInputSchema,
+  GetContextInputSchema,
+  RunAnalysisInputSchema,
+  VERIFY_ZERO_EGRESS_TOOL_DESCRIPTION,
+  VerifyCustodyInputSchema,
+} from "../envelope";
+
+/**
+ * The JSON-Schema strictness contract (§8, ADR 0004 am1/am4; ticket 46):
+ * `z.toJSONSchema` over the one schema module must reproduce the §8
+ * canonical input schemas — a diff fails this test — with the §8.6 adopted
+ * descriptions riding each parameter. Two divergences from the doc's human
+ * copy are deliberate (§8.6 strict-in-code/loose-in-schema):
+ *
+ * 1. `allOf`/`if`/`then` conditionals are absent — the `.superRefine`
+ *    refinement is the seam, the advertised schema stays flat;
+ * 2. code-side refine bounds (≤40 bindings) are absent — runtime `.parse()`
+ *    enforces them, discoverability does not duplicate every rule.
+ */
 
 // Tool inputs are advertised to agents, so the derivation uses `io: "input"`:
-// `limit` stays optional-with-default instead of joining `required`.
-const derived = z.toJSONSchema(GetContextInputSchema, { io: "input" });
+// optional-with-default fields stay optional instead of joining `required`.
+const DERIVED = {
+  duckdb_get_context: z.toJSONSchema(GetContextInputSchema, { io: "input" }),
+  duckdb_activate_dataset: z.toJSONSchema(ActivateDatasetInputSchema, { io: "input" }),
+  duckdb_execute_sql_to_canvas: z.toJSONSchema(RunAnalysisInputSchema, { io: "input" }),
+  duckdb_verify_zero_egress: z.toJSONSchema(VerifyCustodyInputSchema, { io: "input" }),
+} as const;
+
+/** Tool descriptions, §8 verbatim — the ≤500-cap audit rides the same table. */
+const DESCRIPTIONS: Record<keyof typeof DERIVED, string> = {
+  duckdb_get_context: GET_CONTEXT_TOOL_DESCRIPTION,
+  duckdb_activate_dataset: ACTIVATE_DATASET_TOOL_DESCRIPTION,
+  duckdb_execute_sql_to_canvas: EXECUTE_SQL_TO_CANVAS_TOOL_DESCRIPTION,
+  duckdb_verify_zero_egress: VERIFY_ZERO_EGRESS_TOOL_DESCRIPTION,
+};
+
+/** zod's int check emits the MAX_SAFE_INTEGER ceiling on unbounded integers. */
+const UNBOUNDED_INT = { type: "integer", minimum: 0, maximum: 9007199254740991 };
+
+/** The §8.6 caps, asserted for every tool: names ≤30, descriptions ≤150, tool text ≤500. */
+function assertCaps(tool: keyof typeof DERIVED): void {
+  expect(tool.length).toBeLessThanOrEqual(30);
+  expect(DESCRIPTIONS[tool].length).toBeLessThanOrEqual(500);
+  const derived = DERIVED[tool];
+  const properties = (derived.properties ?? {}) as Record<string, { description?: unknown }>;
+  for (const [name, property] of Object.entries(properties)) {
+    expect(name.length).toBeLessThanOrEqual(30);
+    expect(typeof property.description).toBe("string");
+    expect((property.description as string).length).toBeLessThanOrEqual(150);
+  }
+}
 
 describe("duckdb_get_context JSON Schema strictness (§8.1)", () => {
   it("derives the §8.1 object with §8.6 descriptions", () => {
-    expect(derived).toEqual({
+    expect(DERIVED.duckdb_get_context).toEqual({
       $schema: "https://json-schema.org/draft/2020-12/schema",
       type: "object",
       properties: {
@@ -30,10 +81,7 @@ describe("duckdb_get_context JSON Schema strictness (§8.1)", () => {
           description: "Required when scope is artifact: the artifact to summarize.",
         },
         sinceRevision: {
-          // zod's int check emits the MAX_SAFE_INTEGER ceiling on unbounded integers.
-          type: "integer",
-          minimum: 0,
-          maximum: 9007199254740991,
+          ...UNBOUNDED_INT,
           description:
             "Optional with scope events: return only workspace events appended after this revision.",
         },
@@ -51,21 +99,224 @@ describe("duckdb_get_context JSON Schema strictness (§8.1)", () => {
   });
 
   it("deliberately omits the §8.1 allOf/if/then copy — the refinement is the seam (§8.6)", () => {
-    expect(derived).not.toHaveProperty("allOf");
-    expect(derived).not.toHaveProperty("if");
-    expect(derived).not.toHaveProperty("then");
+    expect(DERIVED.duckdb_get_context).not.toHaveProperty("allOf");
+    expect(DERIVED.duckdb_get_context).not.toHaveProperty("if");
+    expect(DERIVED.duckdb_get_context).not.toHaveProperty("then");
+  });
+});
+
+describe("duckdb_activate_dataset JSON Schema strictness (§8.2)", () => {
+  it("derives the §8.2 object with §8.6 descriptions", () => {
+    expect(DERIVED.duckdb_activate_dataset).toEqual({
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        datasetId: {
+          type: "string",
+          enum: ["saas_churn", "healthcare_pii"],
+          description: "The preset to activate in this tab; it must already be materialized locally.",
+        },
+        expectedRevision: {
+          ...UNBOUNDED_INT,
+          description: "The workspace revision this mutation was prepared against; stale values are rejected.",
+        },
+        idempotencyKey: {
+          type: "string",
+          minLength: 8,
+          maxLength: 80,
+          description: "Unique key for this mutation; replaying it exactly returns the original envelope.",
+        },
+      },
+      required: ["datasetId", "expectedRevision", "idempotencyKey"],
+      additionalProperties: false,
+      description: "Activate one dataset already local to this tab.",
+    });
+  });
+});
+
+describe("duckdb_execute_sql_to_canvas JSON Schema strictness (§8.3)", () => {
+  it("derives the §8.3 object with §8.6 descriptions", () => {
+    expect(DERIVED.duckdb_execute_sql_to_canvas).toEqual({
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        source: {
+          type: "object",
+          properties: {
+            kind: {
+              type: "string",
+              enum: ["dataset", "artifact"],
+              description: "Whether the analysis reads a preset relation or a prior artifact.",
+            },
+            id: {
+              type: "string",
+              maxLength: 80,
+              description: "The datasetId, or the artifactId whose generated relation is the source.",
+            },
+          },
+          required: ["kind", "id"],
+          additionalProperties: false,
+          description: "The one authorized relation the statement may reference.",
+        },
+        sql: {
+          type: "string",
+          minLength: 1,
+          maxLength: 12000,
+          description: "Exactly one read-only SELECT or WITH statement; values belong in bindings, not literals.",
+        },
+        bindings: {
+          type: "object",
+          propertyNames: { type: "string" },
+          additionalProperties: { type: ["string", "number", "boolean", "null"] },
+          description: "Named parameter values supplied separately from the SQL; sensitive values are redacted downstream.",
+        },
+        presentation: {
+          type: "object",
+          properties: {
+            kpis: {
+              maxItems: 6,
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  label: { type: "string", minLength: 1, maxLength: 60 },
+                  column: { type: "string", minLength: 1, maxLength: 80 },
+                  format: { type: "string", enum: ["percent", "decimal", "currency_usd", "integer"] },
+                },
+                required: ["label", "column", "format"],
+                additionalProperties: false,
+              },
+            },
+            chart: {
+              type: "object",
+              properties: {
+                type: { type: "string", enum: ["bar", "line", "scatter"] },
+                x: { type: "string", minLength: 1, maxLength: 80 },
+                y: { type: "string", minLength: 1, maxLength: 80 },
+                title: { type: "string", maxLength: 120 },
+                maxPoints: { type: "integer", minimum: 10, maximum: 5000 },
+              },
+              required: ["type", "x", "y"],
+              additionalProperties: false,
+            },
+            grid: {
+              type: "object",
+              properties: {
+                visible: { type: "boolean" },
+                maxRows: { type: "integer", minimum: 1, maximum: 50000 },
+              },
+              required: ["visible"],
+              additionalProperties: false,
+            },
+            initialView: {
+              type: "string",
+              enum: ["insights", "grid", "sql_lineage", "custody"],
+              description: "Human-evidence-plane hint for which tab to open after commit; never stored on the artifact.",
+            },
+          },
+          additionalProperties: false,
+          description:
+            "KPI, chart, and grid spec to commit; gaps are inferred policy-aware and a supplied element that crosses policy denies.",
+        },
+        budget: {
+          type: "object",
+          properties: {
+            executionMs: {
+              type: "integer",
+              minimum: 100,
+              maximum: 15000,
+              description: "Execution deadline in milliseconds.",
+            },
+            resultRows: {
+              type: "integer",
+              minimum: 1,
+              maximum: 50000,
+              description: "Maximum materialized rows.",
+            },
+            chartPoints: {
+              type: "integer",
+              minimum: 10,
+              maximum: 5000,
+              description: "Maximum chart points.",
+            },
+          },
+          required: ["executionMs", "resultRows", "chartPoints"],
+          additionalProperties: false,
+          description: "Stricter budgets are honored; requests above the workspace default are clamped and disclosed.",
+        },
+        expectedRevision: {
+          ...UNBOUNDED_INT,
+          description: "The workspace revision this mutation was prepared against; stale values are rejected.",
+        },
+        idempotencyKey: {
+          type: "string",
+          minLength: 8,
+          maxLength: 80,
+          description: "Unique key for this mutation; replaying it exactly returns the original envelope.",
+        },
+      },
+      required: ["source", "sql", "bindings", "expectedRevision", "idempotencyKey"],
+      additionalProperties: false,
+      description:
+        "Run one bounded read-only analysis and create, present, and select one immutable artifact atomically.",
+    });
   });
 
-  it("keeps parameter names and descriptions under the §8.6 caps", () => {
-    const properties = derived.properties as Record<string, { description?: unknown }>;
-    for (const [name, property] of Object.entries(properties)) {
-      expect(name.length).toBeLessThanOrEqual(30);
-      expect(typeof property.description).toBe("string");
-      expect((property.description as string).length).toBeLessThanOrEqual(150);
-    }
+  it("keeps the §8.6 negative safety phrase in the tool description", () => {
+    expect(EXECUTE_SQL_TO_CANVAS_TOOL_DESCRIPTION).toContain("never result rows");
+  });
+});
+
+describe("duckdb_verify_zero_egress JSON Schema strictness (§8.4)", () => {
+  it("derives the §8.4 object with §8.6 descriptions", () => {
+    expect(DERIVED.duckdb_verify_zero_egress).toEqual({
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        scope: {
+          type: "string",
+          enum: ["workspace", "operation", "artifact"],
+          description: "Evidence scope: the whole workspace, one operation, or one artifact.",
+        },
+        operationId: {
+          type: "string",
+          maxLength: 80,
+          description: "Required when scope is operation: the operation whose evidence snapshot to read.",
+        },
+        artifactId: {
+          type: "string",
+          maxLength: 80,
+          description: "Required when scope is artifact: the artifact whose evidence snapshot to read.",
+        },
+        sinceRevision: {
+          ...UNBOUNDED_INT,
+          description: "Optional: request evidence relevant to changes after this revision.",
+        },
+      },
+      required: ["scope"],
+      additionalProperties: false,
+      description: "Read a scoped, timestamped custody evidence snapshot with its limitations.",
+    });
   });
 
-  it("keeps the tool description under the §8.6 500-character cap", () => {
-    expect(GET_CONTEXT_TOOL_DESCRIPTION.length).toBeLessThanOrEqual(500);
+  it("deliberately omits the §8.4 allOf/if/then copy — the refinement is the seam (§8.6)", () => {
+    expect(DERIVED.duckdb_verify_zero_egress).not.toHaveProperty("allOf");
+  });
+
+  it("keeps the §8.6 negative safety phrase in the tool description", () => {
+    expect(VERIFY_ZERO_EGRESS_TOOL_DESCRIPTION).toContain("not a formal proof");
+  });
+});
+
+describe("§8.6 conformance caps (ticket 44/46)", () => {
+  for (const tool of Object.keys(DERIVED) as (keyof typeof DERIVED)[]) {
+    it(`keeps ${tool} names, parameter descriptions, and tool description under the caps`, () => {
+      assertCaps(tool);
+    });
+  }
+
+  it("keeps the deliberate negative phrases as the only negative tool copy", () => {
+    expect(GET_CONTEXT_TOOL_DESCRIPTION).toContain("never returns raw rows");
+    expect(ACTIVATE_DATASET_TOOL_DESCRIPTION).not.toMatch(/\bnever\b|\bnot a\b/);
   });
 });

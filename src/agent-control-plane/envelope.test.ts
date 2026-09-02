@@ -21,7 +21,7 @@ describe("CompiledEnvelopeFailure", () => {
         details: { expectedRevision: 3, currentRevision: 4 },
       },
       nextActions: [
-        { kind: "tool", tool: "duckdb_get_context", input: { scope: "summary", sinceRevision: 3 } },
+        { kind: "tool", tool: "duckdb_get_context", input: { scope: "events", sinceRevision: 3 } },
       ],
     });
 
@@ -32,7 +32,7 @@ describe("CompiledEnvelopeFailure", () => {
       details: { expectedRevision: 3, currentRevision: 4 },
     });
     expect(parsed.nextActions).toEqual([
-      { kind: "tool", tool: "duckdb_get_context", input: { scope: "summary", sinceRevision: 3 } },
+      { kind: "tool", tool: "duckdb_get_context", input: { scope: "events", sinceRevision: 3 } },
     ]);
   });
 

@@ -93,6 +93,9 @@ export const ReleaseDecisionSchema = z.strictObject({
 
 export type ReleaseDecision = z.infer<typeof ReleaseDecisionSchema>;
 
+/** Compiled per ADR 0004's hot-path rule (ticket 44): the release decision is one of the six compiled forms. */
+export const CompiledReleaseDecision = z.compile(ReleaseDecisionSchema);
+
 /** §8.4 evidence snapshot — scoped, timestamped, honest. */
 export const EvidenceSnapshotSchema = z.strictObject({
   observedAt: z.string().min(1),

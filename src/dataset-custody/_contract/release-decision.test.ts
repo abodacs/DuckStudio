@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { CompiledReleaseDecision } from "../schemas";
 import { createCustodyKernel, governedSource } from "../kernel";
 import { createNodeDuckRuntime, type NodeDuckRuntime } from "../../duck-engine/node-duckdb";
 import { healthcarePii, saasChurn } from "../../demo-presets/triples";
@@ -90,6 +91,9 @@ describe("public_synthetic (saas_churn)", () => {
     const result = await analyze(saasChurn.metadata, saasChurn.sql);
     expect(result.ok).toBe(true);
     if (result.ok) {
+      // Every kernel verdict parses against the compiled release-decision
+      // schema — the envelope-facing shape is the shipped one (ticket 44).
+      expect(CompiledReleaseDecision.parse(result.release)).toBeTruthy();
       expect(result.release.status).toBe("allowed");
       expect(result.release.rawRowsToAgent).toBe(0);
       expect(result.release.rawRowsToSharedCanvas).toBeGreaterThan(0);

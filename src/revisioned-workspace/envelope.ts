@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { EvidenceSnapshotSchema } from "../dataset-custody/schemas";
+import { HEALTHCARE_PII_CANONICAL_SQL, SAAS_CHURN_CANONICAL_SQL } from "../demo-presets/canonical-sql";
+import type { WorkspaceViewModel } from "./projection";
 import {
   ActivateDatasetDataSchema,
   CancelActiveOperationDataSchema,
@@ -144,9 +146,15 @@ export type EnvelopeSuccessData =
 
 // --- Builders: the one place a response is assembled ---
 
+/** Optional success decorations a command may attach (§7); omissions stay absent, never `undefined`. */
+export type SuccessExtras = Partial<
+  Pick<Extract<Envelope, { ok: true }>, "contextDelta" | "warnings" | "nextActions">
+>;
+
 export function successEnvelope(
   workspace: Workspace,
   data: EnvelopeSuccessData,
+  extras: SuccessExtras = {},
 ): Extract<Envelope, { ok: true }> {
   return {
     ok: true,
@@ -154,8 +162,9 @@ export function successEnvelope(
     workspaceId: workspace.workspaceId,
     revision: workspace.revision,
     data,
-    warnings: [],
-    nextActions: [],
+    ...(extras.contextDelta === undefined ? {} : { contextDelta: extras.contextDelta }),
+    warnings: extras.warnings ?? [],
+    nextActions: extras.nextActions ?? [],
   };
 }
 
@@ -192,4 +201,121 @@ export function validationFailure(workspace: Workspace, zodError: z.ZodError): E
     },
     [],
   );
+}
+
+// --- Emission policy (grilling 42): the tables both builders draw from ---
+
+/**
+ * §9's required-recovery column as executable `nextActions` — floor equals
+ * ceiling: a failure carries exactly the actions the table names, in table
+ * order, least-cost as tie-break. Only rows whose recovery is expressible as
+ * a tool call or the named human gesture emit an entry; the rest recover
+ * through `error.details` alone. Every suggested mutation input is complete
+ * (full schema-shaped input, fresh deterministic key) so the agent can fire
+ * it verbatim.
+ */
+export function recoveryActions(
+  error: EnvelopeFailure["error"],
+  workspace: Workspace,
+): EnvelopeFailure["nextActions"] {
+  switch (error.code) {
+    case "STALE_REVISION":
+      // The delta read from the revision the caller prepared against (§12:
+      // recover from stale state), not a second full summary.
+      return [
+        {
+          kind: "tool",
+          tool: "duckdb_get_context",
+          input: { scope: "events", sinceRevision: error.details.expectedRevision },
+        },
+      ];
+    case "DATASET_UNAVAILABLE":
+      return [
+        {
+          kind: "tool",
+          tool: "duckdb_activate_dataset",
+          input: {
+            datasetId: error.details.datasetId,
+            expectedRevision: workspace.revision,
+            idempotencyKey: `recover-activate-r${workspace.revision}`,
+          },
+        },
+        { kind: "human_action", action: "select_local_file" },
+      ];
+    case "ARTIFACT_UNAVAILABLE":
+      // §9: read recent artifacts; recompute only if necessary.
+      return [{ kind: "tool", tool: "duckdb_get_context", input: { scope: "summary" } }];
+    case "OPERATION_CONFLICT":
+      // §9: read events (the executable half; cancel is a human command).
+      return [{ kind: "tool", tool: "duckdb_get_context", input: { scope: "events" } }];
+    case "INTERNAL_ERROR":
+      // §9: read current context; do not expose sensitive stack data.
+      return [{ kind: "tool", tool: "duckdb_get_context", input: { scope: "summary" } }];
+    default:
+      // VALIDATION_ERROR, IDEMPOTENCY_CONFLICT, POLICY_DENIED, UNSAFE_SQL,
+      // BUDGET_EXCEEDED, OPERATION_CANCELLED, UNSUPPORTED_CAPABILITY: the
+      // recovery runs through `error.details`, not a tool call.
+      return [];
+  }
+}
+
+/** The preset each datasetId activates to, for the forward analysis action. */
+const CANONICAL_PRESET_SQL: Record<string, string> = {
+  saas_churn: SAAS_CHURN_CANONICAL_SQL,
+  healthcare_pii: HEALTHCARE_PII_CANONICAL_SQL,
+};
+
+/**
+ * The one forward action a successful mutation suggests (grilling 42: at
+ * most one): `activate_dataset` → run the preset's canonical SQL;
+ * `run_analysis` → verify the artifact it just committed (the custody
+ * story). Human-only successes carry none.
+ */
+export function forwardAction(
+  command: "activateDataset" | "runAnalysis",
+  workspace: Workspace,
+  subjectId: string,
+): Extract<Envelope, { ok: true }>["nextActions"] {
+  if (command === "activateDataset") {
+    return [
+      {
+        kind: "tool",
+        tool: "duckdb_execute_sql_to_canvas",
+        input: {
+          source: { kind: "dataset", id: subjectId },
+          sql: CANONICAL_PRESET_SQL[subjectId] ?? "",
+          bindings: {},
+          expectedRevision: workspace.revision,
+          idempotencyKey: `analyze-${subjectId}-r${workspace.revision}`,
+        },
+      },
+    ];
+  }
+  return [
+    {
+      kind: "tool",
+      tool: "duckdb_verify_zero_egress",
+      input: { scope: "artifact", artifactId: subjectId },
+    },
+  ];
+}
+
+/**
+ * §7's `contextDelta` (grilling 42): the `projectWorkspace` output
+ * immediately before the commit diffed against the output after, restricted
+ * to changed top-level fields — never a second model. Projection fields are
+ * plain JSON, so per-field stringify equality is the change test.
+ */
+export function contextDelta(
+  before: WorkspaceViewModel,
+  after: WorkspaceViewModel,
+): Record<string, unknown> {
+  const delta: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(after)) {
+    const previous = before[key as keyof WorkspaceViewModel];
+    if (previous !== value && JSON.stringify(previous) !== JSON.stringify(value)) {
+      delta[key] = value;
+    }
+  }
+  return delta;
 }
