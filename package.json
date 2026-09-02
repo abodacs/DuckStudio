@@ -17,7 +17,8 @@
     "build": "bash -c '[ -f public/duckdb/duckdb-eh.wasm ] || { echo \"ERROR: public/duckdb/ runtime assets are missing — run: pnpm duckdb:download\" >&2; exit 1; }' && vite build && bash scripts/gzip-wasm.sh",
     "docs:parity": "bash scripts/doc-parity-check.sh",
     "e2e": "playwright test",
-    "e2e:changed": "playwright test --only-changed"
+    "e2e:changed": "playwright test --only-changed",
+    "verify:webmcp": "node scripts/verify-webmcp-surface.mjs"
   },
   "dependencies": {
     "@tanstack/react-router": "1.170.32",
