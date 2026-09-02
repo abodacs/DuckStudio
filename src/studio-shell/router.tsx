@@ -1,17 +1,15 @@
-import { createRootRouteWithContext, createRoute, createRouter } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
-import type { WorkspaceStore } from "../revisioned-workspace/store";
 import { workspaceSearchSchema } from "../revisioned-workspace/schemas";
 import { WorkspaceShell } from "./shell";
 import { WorkspaceError } from "./workspace-error";
 
 /**
- * The router context is the store seam (ticket 14): boot creates the store
- * and supplies it through the `RouterProvider` `context` prop. Consumers
- * (notably `useWorkspace`) read it from here once wired — the shell stays
- * on the binding module's instance until then.
+ * The router owns the URL, not the workspace (ADR 0001): views read the
+ * store through `useWorkspace`, so no router context carries it and there is
+ * no `store: undefined!` placeholder to keep honest.
  */
-const rootRoute = createRootRouteWithContext<{ store: WorkspaceStore }>()();
+const rootRoute = createRootRoute();
 
 const workspaceRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -26,8 +24,7 @@ const workspaceRoute = createRoute({
 export const router = createRouter({
   routeTree: rootRoute.addChildren([workspaceRoute]),
   defaultPreload: "intent",
-  // Declaring the context type makes `context` required here, but the real
-  // store only exists in boot — it arrives through the RouterProvider
-  // `context` prop before any route renders (TanStack's documented pattern).
-  context: { store: undefined! },
 });
+
+/** The inferred router instance type, consumed by boot's mount step. */
+export type WorkspaceRouter = typeof router;

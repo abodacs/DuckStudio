@@ -1,14 +1,34 @@
-import { z } from "zod";
-import { ErrorCodeSchema, GetContextEventsDataSchema, GetContextSummaryDataSchema } from "../revisioned-workspace/schemas";
-
 /**
- * Transport vocabulary for the §7 uniform envelope, plus re-exports of the
- * domain schemas (ADR 0004 am4). This is the single trust-seam import surface
- * for adapters and tests; it owns no domain-named schema, so deleting
- * `agent-control-plane/` removes no domain type.
+ * The adapter import surface for the §7 envelope (ADR 0004 am5): every
+ * export here is a re-export of a domain binding, so adapters and tests keep
+ * one import path while each definition lives in the module that owns it —
+ * the envelope vocabulary and shape in `revisioned-workspace/envelope.ts`,
+ * the workspace schemas in `revisioned-workspace/schemas.ts`. This module
+ * owns nothing: deleting `agent-control-plane/` removes no domain type, at
+ * the type level and at the build level. Import-equality is contract-tested
+ * in `_contract/`.
  */
 
-// --- Domain re-exports (import-equality is contract-tested in _contract/) ---
+// --- Envelope vocabulary and shape (defined in revisioned-workspace/envelope.ts) ---
+
+export {
+  CompiledEnvelopeFailure,
+  CompiledEnvelopeSuccess,
+  CompiledGetContextEnvelopeSuccess,
+  CompiledGetContextEventsEnvelopeSuccess,
+  EnvelopeFailureSchema,
+  EnvelopeSuccessSchema,
+  NextActionSchema,
+  SchemaVersionSchema,
+  ToolNameSchema,
+  WarningCodeSchema,
+  WarningSchema,
+  type Envelope,
+  type EnvelopeFailure,
+  type EnvelopeSuccessData,
+} from "../revisioned-workspace/envelope";
+
+// --- Domain schemas (import-equality is contract-tested in _contract/) ---
 
 export {
   BudgetLimitsSchema,
@@ -23,6 +43,7 @@ export {
   WorkspaceEventSchema,
   WorkspaceSchema,
 } from "../revisioned-workspace/schemas";
+export { ErrorCodeSchema } from "../revisioned-workspace/schemas";
 export type {
   BudgetLimits,
   Capability,
@@ -35,83 +56,3 @@ export type {
   Workspace,
   WorkspaceEvent,
 } from "../revisioned-workspace/schemas";
-export { ErrorCodeSchema };
-
-// --- Transport vocabulary (§7) ---
-
-export const SchemaVersionSchema = z.literal("duckstudio.webmcp/v1");
-
-export const ToolNameSchema = z.enum([
-  "duckdb_get_context",
-  "duckdb_activate_dataset",
-  "duckdb_execute_sql_to_canvas",
-  "duckdb_verify_zero_egress",
-]);
-
-export const WarningCodeSchema = z.enum([
-  "DELTA_WINDOW_EXPIRED",
-  "PRESENTATION_DOWNGRADED",
-  "CHART_DOWNSAMPLED",
-  "BUDGET_CLAMPED",
-]);
-
-export const WarningSchema = z.strictObject({
-  code: WarningCodeSchema,
-  message: z.string(),
-  details: z
-    .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
-    .optional(),
-});
-
-export const NextActionSchema = z.discriminatedUnion("kind", [
-  z.strictObject({
-    kind: z.literal("tool"),
-    tool: ToolNameSchema,
-    input: z.record(z.string(), z.unknown()),
-  }),
-  z.strictObject({ kind: z.literal("human_action"), action: z.literal("select_local_file") }),
-]);
-
-// --- Envelope (§7 verbatim) ---
-
-export const EnvelopeSuccessSchema = z.strictObject({
-  ok: z.literal(true),
-  schemaVersion: SchemaVersionSchema,
-  workspaceId: z.string().min(1).max(80),
-  revision: z.number().int().nonnegative(),
-  data: z.unknown(),
-  contextDelta: z.record(z.string(), z.unknown()).optional(),
-  warnings: z.array(WarningSchema),
-  nextActions: z.array(NextActionSchema).max(3),
-});
-
-export const EnvelopeFailureSchema = z.strictObject({
-  ok: z.literal(false),
-  schemaVersion: SchemaVersionSchema,
-  workspaceId: z.string().min(1).max(80),
-  revision: z.number().int().nonnegative(),
-  error: z.strictObject({
-    code: ErrorCodeSchema,
-    message: z.string(),
-    retryable: z.boolean(),
-    details: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
-  }),
-  nextActions: z.array(NextActionSchema).max(3),
-});
-
-export const CompiledEnvelopeSuccess = z.compile(EnvelopeSuccessSchema);
-export const CompiledEnvelopeFailure = z.compile(EnvelopeFailureSchema);
-
-/** Per-command composition: extend with the command's `data`, then re-compile — compose, never fork. */
-export const CompiledGetContextEnvelopeSuccess = z.compile(
-  EnvelopeSuccessSchema.extend({ data: GetContextSummaryDataSchema }),
-);
-
-export const CompiledGetContextEventsEnvelopeSuccess = z.compile(
-  EnvelopeSuccessSchema.extend({ data: GetContextEventsDataSchema }),
-);
-
-/** The one awaited result type every adapter shares (ADR 0004 am4). */
-export type Envelope =
-  | z.infer<typeof EnvelopeSuccessSchema>
-  | z.infer<typeof EnvelopeFailureSchema>;

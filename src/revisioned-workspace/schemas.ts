@@ -5,12 +5,14 @@ import { z } from "zod";
  * vocabulary is owned here, never re-declared in the router).
  *
  * Strict about unknown params so junk URLs surface in the route
- * errorComponent instead of being stripped silently. Uncompiled by decision —
- * compilation is the tool-schema seam, not the URL seam.
+ * errorComponent instead of being stripped silently. Empty at rev 0 — no
+ * search param is read by anyone; `rev` rejoins only when Slice 3's STALE
+ * story gives it a reader to reconcile against `workspace.revision`
+ * (ARCHITECTURE.md: no backward compatibility, no dead params).
+ * Uncompiled by decision — compilation is the tool-schema seam, not the URL
+ * seam.
  */
-export const workspaceSearchSchema = z.strictObject({
-  rev: z.coerce.number().int().optional(),
-});
+export const workspaceSearchSchema = z.strictObject({});
 
 export type WorkspaceSearch = z.infer<typeof workspaceSearchSchema>;
 

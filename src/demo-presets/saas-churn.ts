@@ -9,8 +9,8 @@ import { intBetween, mulberry32, pickWeighted } from "./prng";
  * chrome constants: exactly 35,500 churned of 250,000 (14.2%), exactly
  * 1,200,000 tickets (avg 4.8), and exactly $182,400 of churned MRR. The
  * per-ticket churn profile rises steeply above 5 tickets, which is what the
- * canonical scatter shows. `seed.contract.test.ts` runs the canonical SQL in
- * real DuckDB and fails if any pinned value drifts.
+ * canonical scatter shows. `_contract/preset-numbers.test.ts` runs the
+ * canonical SQL in real DuckDB and fails if any pinned value drifts.
  */
 
 export const SAAS_CHURN_ROW_COUNT = 250_000;

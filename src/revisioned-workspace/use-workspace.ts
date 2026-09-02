@@ -1,14 +1,14 @@
 import { useSyncExternalStore } from "react";
-import { createWorkspaceStore, type WorkspaceStore } from "./store";
+import { workspaceStore } from "./store";
 import type { Workspace } from "./schemas";
 
 /**
  * The React binding for the workspace store (ticket 02's resolution): one
- * tab, one workspace, so this module owns the app instance and consumers
- * import the hook — nothing outside `revisioned-workspace/` calls
- * `subscribe` / `getSnapshot` directly (ADR 0004 am4).
+ * tab, one workspace, so consumers import the hook — nothing outside
+ * `revisioned-workspace/` calls `subscribe` / `getSnapshot` directly
+ * (ADR 0004 am4). The instance is the domain module's exported
+ * `workspaceStore`, the same store the agent adapters hold (ADR 0001 am6).
  */
-const workspaceStore: WorkspaceStore = createWorkspaceStore();
 
 /**
  * Reads the workspace through a selector. Selectors are one-line

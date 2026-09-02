@@ -24,14 +24,14 @@ src/
 
 Folder meaning:
 
-- `revisioned-workspace/` owns the domain-command interface, revision, idempotency, single-flight operations, events, atomic commit, and the projection functions. Human, chip, simulator, and WebMCP adapters dispatch into it.
+- `revisioned-workspace/` owns the domain-command interface, revision, idempotency, single-flight operations, events, atomic commit, the §7 envelope (transport vocabulary, shape, builders, tool-summary budget), and the projection functions. Human, chip, simulator, and WebMCP adapters dispatch into it, and it exports the one app store binding (`workspaceStore`) that both the agent adapters and the UI hold.
 - `dataset-custody/` is the custody kernel behind that interface: policy, SQL inspection, release, cohort confirmation, and upload/release evidence. Do not add `egress-audit/`.
 - `duck-engine/` is the worker, bindings, budgets, and cancellation. It executes custody decisions verbatim; it never re-derives them.
 - `analysis-artifacts/` is the immutable graph and lineage.
 - `live-canvas/` renders artifact-scope projections: the four evidence views. Tab clicks are not workspace commands.
-- `agent-control-plane/` is thin adapters, the envelope module (transport vocabulary, re-exporting domain schemas), and WebMCP registration. It does not own the workspace or any domain schema.
+- `agent-control-plane/` is thin adapters, the envelope import surface (`envelope.ts` re-exports the domain envelope and schemas, owning nothing), and WebMCP registration. It does not own the workspace or any domain schema.
 - `studio-shell/` composes the two-pane chrome; its `boot.ts` owns ordered startup behind one `start()` interface.
-- `demo-presets/` is the two seeded datasets. A preset's interface is the seed→relation triple: deterministic row generator, dataset metadata carrying its release policy, and canonical SQL. Policy travels with its dataset, and a contract test runs the SQL and asserts the pinned `prd.md` §6 values, so the demo numbers are load-bearing.
+- `demo-presets/` is the two seeded datasets. A preset's interface is the seed→relation triple — deterministic row generator, dataset metadata carrying its release policy, and canonical SQL — encoded as `PresetTriple` in `demo-presets/triples.ts`, one exported triple per preset. Policy travels with its dataset, and a contract test (`_contract/preset-numbers.test.ts`) runs the SQL and asserts the pinned `prd.md` §6 values, so the demo numbers are load-bearing.
 
 `selectArtifact` and `cancelActiveOperation` live on the workspace interface. They are not registered WebMCP tools.
 
@@ -48,7 +48,7 @@ stores/
 
 Colocate each feature’s UI, domain commands, projections, schemas, and tests. A tiny shared kernel is allowed only for primitives genuinely used across features; it must not become a miscellaneous bucket.
 
-Schema ownership follows the same rule. Each module owns its schemas (`revisioned-workspace/schemas.ts`, `dataset-custody/schemas.ts`, `analysis-artifacts/schemas.ts`); `agent-control-plane/envelope.ts` holds only transport vocabulary (`schemaVersion`, envelope shape) and re-exports the domain schemas for adapters and tests. A schema change lands in the folder that owns the concept, deleting `agent-control-plane/` removes no domain type, and the schemas contract test is import equality.
+Schema ownership follows the same rule. Each module owns its schemas (`revisioned-workspace/schemas.ts`, `dataset-custody/schemas.ts`, `analysis-artifacts/schemas.ts`); the §7 envelope is the store's result type, so the domain owns it too — `revisioned-workspace/envelope.ts` holds the transport vocabulary, envelope shape, response builders, and the tool-summary budget, and `agent-control-plane/envelope.ts` re-exports all of it for adapters and tests while owning nothing. A schema change lands in the folder that owns the concept, deleting `agent-control-plane/` removes no domain type, and the schemas contract test is import equality.
 
 The custody → engine seam is one object. `dataset-custody/` returns a single authorized-execution decision — authorized relation, prepared positional SQL, clamped budget, redaction keys — and `duck-engine/` consumes it verbatim, owning only cancellation and respawn-on-cancel (ADR 0002). The engine never re-derives relation, SQL, budget, or redaction; each custody rule is written and tested once, and engine tests run against fake decision objects with no worker.
 
@@ -92,7 +92,7 @@ Human controls, prompt chips, Agent Simulator, and WebMCP adapters must dispatch
 - Use an `AbortController` to clean up registrations on lifecycle teardown.
 - Duplicate registration is a defect; do not catch it and silently continue.
 - The simulator remains available when native WebMCP is absent, but it uses the same domain commands rather than a mock registry.
-- Boot is a module, not a pile. `studio-shell/boot.ts` exposes one `start()`: secure-context gate → warm worker → create store → mount router → register tools → simulator fallback, each step a pure decision function. `main.tsx` shrinks to the sole importer that calls `start()`, so boot order is testable headlessly.
+- Boot is a module, not a pile. `studio-shell/boot.ts` exposes one `start()` whose order is exported data — `BOOT_PLAN`: secure-context gate → warm worker (Slice 2) → mount router → register tools | simulator fallback — and `boot()` executes the plan as its control flow, so body and promise cannot drift. The container and gate are injectable, and `boot.test.ts` asserts the order headlessly. The workspace store is not a boot step: `revisioned-workspace/store.ts` exports the one app binding (`workspaceStore`) the agent adapters and the UI both hold. `main.tsx` shrinks to the sole importer that calls `start()`.
 
 ## No Backward Compatibility
 

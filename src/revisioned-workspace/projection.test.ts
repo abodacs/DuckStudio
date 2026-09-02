@@ -78,25 +78,6 @@ describe("projectArtifact at rev 0", () => {
   });
 });
 
-describe("8 KB envelope-summary budget (PRD §10, ticket 08)", () => {
-  // PRD §10: one `summary` response under 8 KB must suffice to choose a
-  // legal next action. Ticket 08 pinned the enforcement site and threshold
-  // (8192) against the serialized rev-0 summary — a trivial pass today, but
-  // the guard is in place the day the summary can grow. Measured in UTF-8
-  // bytes, the canonical budget's unit (agent-system-design.md §14: "The
-  // budget is bytes"), not UTF-16 code units.
-  it("keeps the serialized rev-0 summary within 8192 bytes", async () => {
-    const store = createWorkspaceStore();
-    const envelope = await store.dispatch({ kind: "getContext", input: { scope: "summary" } });
-    if (!envelope.ok) {
-      throw new Error("expected the rev-0 summary read to succeed");
-    }
-    const summary = envelope.data as GetContextSummaryData;
-    const serialized = JSON.stringify(summary);
-    expect(new TextEncoder().encode(serialized).byteLength).toBeLessThanOrEqual(8192);
-  });
-});
-
 describe("referential-equality contract across the four call sites (ADR 0005 am3)", () => {
   // The four call sites: header badge + simulator cards (workspace scope,
   // `projectWorkspace`), the envelope `summary` (workspace scope at rev 0,

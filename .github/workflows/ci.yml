@@ -54,6 +54,11 @@ jobs:
       - name: Lint (oxlint — ADR-0003)
         run: pnpm lint
 
+      # ADR-0003: the trust-seam files get the strict rule set — plain lint
+      # alone is not the gate the ADR promises.
+      - name: Lint strict (trust-seam files — ADR-0003)
+        run: pnpm lint:strict
+
       - name: Type check
         run: pnpm typecheck
 

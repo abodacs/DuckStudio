@@ -59,7 +59,7 @@ Chosen: **pnpm + Vite + React + TanStack Router + Tailwind + Vitest + Playwright
 | Tests (e2e)             | `@playwright/test`                                                                                            |
 | Deploy                  | Cloudflare Pages (static)                                                                                     |
 | Origin headers          | COOP `same-origin`, COEP `require-corp`, CORP `same-origin` on all self-hosted assets                         |
-| Fonts                   | self-hosted Inter, Space Grotesk, JetBrains Mono                                                              |
+| Fonts                   | self-hosted Inter and JetBrains Mono (variable; Space Grotesk dropped before ship)                            |
 | ID / hash               | `crypto.randomUUID` (always available), `crypto.subtle.digest('SHA-256', ...)` (guarded by `isSecureContext`) |
 | License                 | MIT                                                                                                           |
 

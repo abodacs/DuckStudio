@@ -1,32 +1,23 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   CompiledEnvelopeSuccess,
   GET_CONTEXT_TOOL_DESCRIPTION,
   GetContextInputSchema,
 } from "./envelope";
+import { registerTools } from "./registration";
+import { invokeTool } from "./simulator";
 import { createWorkspaceStore } from "../revisioned-workspace/store";
-
 /**
- * `registerTools` carries module state (the `registered` flag, the
- * simulator's bound store), so every test re-imports fresh modules after
- * `vi.resetModules()` instead of sharing one instance. The node env has no
- * `document` / `isSecureContext`; `vi.stubGlobal` supplies exactly what the
- * gate reads.
+ * Idempotency lives at the caller seam (ADR 0001 am6): `start()`'s memo is
+ * the one double-registration guard, so these tests cross `registerTools`
+ * directly — no `vi.resetModules()` module-identity surgery. The node env
+ * has no `document` / `isSecureContext`; `vi.stubGlobal` supplies exactly
+ * what the gate reads.
  */
-beforeEach(() => {
-  vi.resetModules();
-});
-
 afterEach(() => {
   vi.unstubAllGlobals();
 });
-
-async function importAdapters() {
-  const registration = await import("./registration");
-  const simulator = await import("./simulator");
-  return { ...registration, ...simulator };
-}
 
 describe("registerTools native path (ticket 14)", () => {
   it("registers exactly once with the derived definition, appends webmcp_native, and leaves the simulator unbound", async () => {
@@ -34,7 +25,6 @@ describe("registerTools native path (ticket 14)", () => {
     vi.stubGlobal("isSecureContext", true);
     vi.stubGlobal("document", { modelContext: { registerTool } });
 
-    const { registerTools, invokeTool } = await importAdapters();
     const store = createWorkspaceStore();
     await registerTools(store);
 
@@ -63,7 +53,6 @@ describe("registerTools native path (ticket 14)", () => {
 
 describe("registerTools simulator fallback (ticket 14)", () => {
   it("absent API: the simulator serves and simulator_only is appended", async () => {
-    const { registerTools, invokeTool } = await importAdapters();
     const store = createWorkspaceStore();
 
     await registerTools(store);
@@ -78,7 +67,6 @@ describe("registerTools simulator fallback (ticket 14)", () => {
     vi.stubGlobal("isSecureContext", false);
     vi.stubGlobal("document", { modelContext: { registerTool } });
 
-    const { registerTools, invokeTool } = await importAdapters();
     const store = createWorkspaceStore();
 
     await registerTools(store);
@@ -96,7 +84,6 @@ describe("registerTools simulator fallback (ticket 14)", () => {
     vi.stubGlobal("isSecureContext", true);
     vi.stubGlobal("document", { modelContext: { registerTool } });
 
-    const { registerTools, invokeTool } = await importAdapters();
     const store = createWorkspaceStore();
 
     await expect(registerTools(store)).resolves.toBeUndefined();
@@ -114,7 +101,6 @@ describe("registerTools simulator fallback (ticket 14)", () => {
     vi.stubGlobal("isSecureContext", true);
     vi.stubGlobal("document", {});
 
-    const { registerTools, invokeTool } = await importAdapters();
     const store = createWorkspaceStore();
 
     await expect(registerTools(store)).resolves.toBeUndefined();
@@ -130,7 +116,6 @@ describe("registerTools simulator fallback (ticket 14)", () => {
     vi.stubGlobal("isSecureContext", true);
     vi.stubGlobal("document", { modelContext: {} });
 
-    const { registerTools, invokeTool } = await importAdapters();
     const store = createWorkspaceStore();
 
     await expect(registerTools(store)).resolves.toBeUndefined();
@@ -138,16 +123,5 @@ describe("registerTools simulator fallback (ticket 14)", () => {
     expect(store.getSnapshot().capabilities).toContain("simulator_only");
     const envelope = await invokeTool("duckdb_get_context", { scope: "summary" });
     expect(envelope.ok).toBe(true);
-  });
-});
-
-describe("duplicate registration (ticket 14)", () => {
-  it("a second registerTools call throws loudly instead of being swallowed", async () => {
-    const { registerTools } = await importAdapters();
-    const store = createWorkspaceStore();
-
-    await registerTools(store);
-
-    await expect(registerTools(store)).rejects.toThrow(/duplicate registration/);
   });
 });

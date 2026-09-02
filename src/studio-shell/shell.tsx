@@ -1,5 +1,6 @@
 import { useRef, useState, type KeyboardEvent } from "react";
-import { saasChurnPreset } from "../demo-presets/catalog";
+import { healthcarePiiPreset, saasChurnPreset } from "../demo-presets/catalog";
+import { ToolNameSchema } from "../agent-control-plane/envelope";
 import { projectWorkspace } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
 import { CustodyView } from "../live-canvas/custody-view";
@@ -19,15 +20,20 @@ type ViewId = keyof typeof VIEWS;
 
 const VIEW_ORDER: readonly ViewId[] = ["insights", "grid", "sql_lineage", "custody"];
 
+/** The one tool the skeleton serves — the envelope's spelling, never a literal. */
+const GET_CONTEXT_TOOL = ToolNameSchema.enum.duckdb_get_context;
+
 /**
- * Rev-0 preset-chip chrome constants (ticket 10). The chips keep their
- * static cards until activation exists (Slice 2); the header's preset line
- * reads the seeded catalog's canonical spelling directly.
+ * Rev-0 preset-chip chrome (ticket 10). The chips keep their static cards
+ * until activation exists (Slice 2); every chip field reads the seeded
+ * catalog, so ids and policies have one spelling.
  */
-const PRESETS = [
-  { id: "saas_churn", meta: "250k rows · ~14.2 MB", policy: "public_synthetic" },
-  { id: "healthcare_pii", meta: "100k rows", policy: "sensitive_aggregate_only" },
-] as const;
+const PRESETS = [saasChurnPreset, healthcarePiiPreset];
+
+/** Chip display line, composed from the catalog's own size facts. */
+function presetMeta(preset: (typeof PRESETS)[number]): string {
+  return `${Math.round(preset.rowCount / 1000)}k rows · ~${(preset.byteSizeEstimate / 1_000_000).toFixed(1)} MB`;
+}
 
 /**
  * Canonical monitored-transport list from the custody evidence contract
@@ -122,7 +128,7 @@ export function WorkspaceShell() {
             <h3 className="text-xs font-medium tracking-wide text-ink-secondary">OPERATION</h3>
             <p className="mt-1 flex items-center gap-2 text-xs">
               <span className="rounded-full border border-amber/40 px-2 py-0.5 font-mono text-amber">
-                duckdb_get_context
+                {GET_CONTEXT_TOOL}
               </span>
               <span className="text-ink-secondary">idle</span>
             </p>
@@ -148,14 +154,14 @@ export function WorkspaceShell() {
             <h3 className="text-xs font-medium tracking-wide text-ink-secondary">DATASETS</h3>
             {PRESETS.map((preset) => (
               <button
-                key={preset.id}
+                key={preset.datasetId}
                 type="button"
                 disabled
                 aria-describedby="preset-status"
                 className={`block w-full rounded-md border border-edge bg-surface px-3 py-2 text-left ${TAB_TRANSITION}`}
               >
                 <span className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-sm text-ink">{preset.id}</span>
+                  <span className="font-mono text-sm text-ink">{preset.datasetId}</span>
                   <span
                     className={`rounded-full border px-2 py-0.5 text-xs ${
                       preset.policy === "sensitive_aggregate_only"
@@ -166,7 +172,7 @@ export function WorkspaceShell() {
                     {preset.policy}
                   </span>
                 </span>
-                <span className="mt-1 block text-xs text-ink-secondary">{preset.meta}</span>
+                <span className="mt-1 block text-xs text-ink-secondary">{presetMeta(preset)}</span>
               </button>
             ))}
             <p id="preset-status" className="text-xs text-ink-secondary">
