@@ -265,6 +265,8 @@ The MLP is this one-day scope: two presets, custody kernel, DuckDB-WASM engine, 
 
 ## 10. Acceptance Criteria
 
+A derived BDD rendering of these criteria lives in `docs/bdd/`; the canonical wording stays here.
+
 ### Agent ergonomics
 
 - One `summary` response under 8 KB is sufficient to choose a legal next action.
