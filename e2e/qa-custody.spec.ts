@@ -154,8 +154,8 @@ test.describe("qa: sensitive dataset custody", () => {
     // no row cells, anywhere in the document.
     await page.getByRole("tab", { name: "Data Grid" }).click();
     const panel = page.getByRole("tabpanel");
-    await expect(panel).toContainText(new RegExp(`${data.artifact.artifactId} · \\d+ rows · policy sensitive_aggregate_only`));
-    await expect(panel).toContainText("Policy suppresses raw rows for sensitive datasets — aggregates only.");
+    await expect(panel).toContainText("Data Grid — suppressed by policy");
+    await expect(panel).toContainText("Raw records never paint on the shared canvas.");
     await expect(page.locator("table")).toHaveCount(0);
     await expect(page.locator("td")).toHaveCount(0);
   });
