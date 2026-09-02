@@ -1,5 +1,6 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
 import { createWorkerHandler, presetCsv, PRESET_TRIPLES, type BoundedRead, type DuckEngineRuntime } from "./worker-handler";
+import { decimalCellToNumber, isDecimalField } from "./decimal-cells";
 import type { EngineColumn, EngineRequest, EngineResponse, WarmResult } from "./protocol";
 
 /**
@@ -98,11 +99,18 @@ async function createBrowserRuntime(): Promise<DuckEngineRuntime> {
         // closes the stream (ADR 0002: streamArrow → bounded cursor).
         schema = batch.schema.fields.map((field) => ({ name: field.name, type: duckDbType(field.type) }));
         const vectors = batch.schema.fields.map((field) => batch.getChild(field.name));
+        // Decimal results (HUGEINT/DECIMAL aggregates) read as raw words;
+        // decode to scaled numbers so rows, inserts, and summaries stay numbers.
+        const decimalScales = batch.schema.fields.map((field) =>
+          isDecimalField(field.type) ? field.type.scale : null,
+        );
         const batchLength = Math.min(batch.numRows, maxRows - rows.length);
         for (let rowIndex = 0; rowIndex < batchLength; rowIndex += 1) {
           const row: Record<string, unknown> = {};
           batch.schema.fields.forEach((field, columnIndex) => {
-            row[field.name] = (vectors[columnIndex] as { get(rowIndex: number): unknown }).get(rowIndex);
+            const scale = decimalScales[columnIndex] ?? null;
+            const raw = (vectors[columnIndex] as { get(rowIndex: number): unknown }).get(rowIndex);
+            row[field.name] = scale === null ? raw : decimalCellToNumber(raw, scale);
           });
           rows.push(row);
         }
@@ -145,6 +153,8 @@ async function createBrowserRuntime(): Promise<DuckEngineRuntime> {
  * the presentation inference, and this worker's own `CREATE TABLE` in
  * `materialize` — speaks DuckDB type names. The node runtime reports DuckDB
  * names natively; this map gives the browser runtime the same vocabulary.
+ * Arrow decimals render as `Decimal[precision e scale]` (e.g. `Decimal[38e+2]`
+ * for DECIMAL(38,2)) and must become parseable `DECIMAL(p,s)` DDL.
  */
 const ARROW_TO_DUCKDB_TYPES: Readonly<Record<string, string>> = {
   Utf8: "VARCHAR",
@@ -169,7 +179,7 @@ const ARROW_TO_DUCKDB_TYPES: Readonly<Record<string, string>> = {
 
 function duckDbType(fieldType: { toString(): string }): string {
   const name = String(fieldType);
-  const decimal = /^Decimal\((\d+),\s*(\d+)\)$/.exec(name);
+  const decimal = /^Decimal\((\d+),\s*(\d+)\)$/.exec(name) ?? /^Decimal\[(\d+)e\+?(-?\d+)\]$/.exec(name);
   if (decimal) return `DECIMAL(${decimal[1]},${decimal[2]})`;
   return ARROW_TO_DUCKDB_TYPES[name] ?? name;
 }
