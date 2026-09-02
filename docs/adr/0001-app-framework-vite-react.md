@@ -6,6 +6,7 @@
 - Technical Area: Frontend
 - Amendment 4: 2026-08-31 (template conformance: Deciders, Technical Area, reformat Options, split Consequences into Positive/Negative/Neutral, add Implementation, References, Decision Log)
 - Amendment 5: 2026-09-01 (boot module: studio-shell/boot.ts owns ordered startup behind start(); search-param schema lives with the workspace)
+- Amendment 6: 2026-09-02 (one workspace store binding exported by revisioned-workspace; boot plan is exported data with a headless test; router imports the search schema from the domain module directly)
 - Amendment 3: 2026-08-31 (WebMCP API surface pinned against the 2026 modern-web-guidance `webmcp` and `agentic-javascript-tools` guides: `document.modelContext` only, `annotations` inside the tool def, `AbortSignal` for unregister, secure-context required, dynamic per-context controllers)
 - Amendment 2: 2026-08-31 (revise "no router" to "TanStack Router with typed query state via @tanstack/zod-adapter")
 - Amendment 1: 2026-08-31 (registration owner, deep-link owner, cold-start cost, WebMCP mount lifecycle)
@@ -101,9 +102,9 @@ The route guard reads, never mutates URL. View changes write back to the URL thr
 
 `agent-control-plane/registration.ts` is the single owner of WebMCP and simulator registration. It is imported exactly once, from `studio-shell/boot.ts`'s `start()`. Registration uses an `AbortController` so that React StrictMode double-mount or future re-mounts never produce duplicate tool registrations. The router does **not** own registration.
 
-### Boot module (amended 5)
+### Boot module (amended 6)
 
-`studio-shell/boot.ts` exposes one `start(): Promise<App>` and owns ordered startup as pure decision functions: secure-context gate → warm DuckDB worker → create workspace store → mount router → register WebMCP tools → fall back to the simulator when `document.modelContext` is absent. `main.tsx` keeps its sole-importer role (it is the only importer of `boot.ts`) and shrinks to calling `start()`. Boot order — gate first, warm before mount, register after mount — becomes a headless test surface instead of browser folklore.
+`studio-shell/boot.ts` exposes one `start(inject?): Promise<App>`. The startup order is exported data — `BOOT_PLAN`: secure-context gate → warm DuckDB worker (from Slice 2) → mount router → register WebMCP tools (the simulator fallback rides the register step) — and `boot()` executes that plan as its control flow, so the body and the promised order cannot drift. The container and the gate read are injectable, and `boot.test.ts` asserts the order headlessly, without a DOM. The workspace store is not a boot step (amendment 6): it is the one binding exported by `revisioned-workspace/store.ts` (`workspaceStore`), which exists before any step runs and is the same instance the UI reads through `useWorkspace` — agents and humans cannot hold two different workspaces. `start()`'s `app ??=` memo is the one duplicate-registration guard. `main.tsx` keeps its sole-importer role (it is the only importer of `boot.ts`) and shrinks to calling `start()`.
 
 ### WebMCP mount lifecycle (carried from Amendment 1)
 
@@ -169,7 +170,7 @@ Rules that come from the 2026 guides, not from our taste:
 
 - `studio-shell/router.tsx` defines the root route and the workspace route. It is the only file that imports `@tanstack/react-router`.
 - `studio-shell/main.tsx` is the sole importer of `studio-shell/boot.ts` and shrinks to calling `start()`. `boot.ts` owns ordered startup (see Boot module) and is the sole importer of `agent-control-plane/registration.ts` and the router; the router is mounted inside a `RouterProvider` inside `start()`.
-- The search-param `zod` schema lives in `revisioned-workspace/schemas.ts` — artifact and view are workspace vocabulary (ADR 0004 amendment 4) — and reaches `studio-shell/router.tsx` via the envelope re-export. A drift here fails the contract test in `agent-control-plane/_contract/`.
+- The search-param `zod` schema lives in `revisioned-workspace/schemas.ts` — artifact and view are workspace vocabulary (ADR 0004 amendment 4) — and `studio-shell/router.tsx` imports it from the domain module directly; the envelope surface deliberately does not carry the URL seam, and `agent-control-plane/_contract/envelope-reexports.test.ts` documents that absence (amended 6). The schema is strict-empty at rev 0: no search param has a reader until the artifact/view deep links land (Slice 3).
 - A `beforeLoad` route guard on the workspace route dispatches `selectArtifact` and `setView` into the workspace store on `enter` and `initialLoad` only. Back/forward is handled by `useSyncExternalStore` over the workspace event log; the guard does not re-dispatch.
 - TanStack Router v1 is code-split: `studio-shell/router.tsx` is a dynamic `import()` boundary so the route table does not block first paint (see ADR 0007).
 
@@ -196,3 +197,4 @@ Rules that come from the 2026 guides, not from our taste:
 | 2026-08-31 | Amendment 4: template conformance | @senior-frontend-architect |
 | 2026-08-31 | Accepted | @senior-frontend-architect |
 | 2026-09-01 | Amendment 5: boot module (studio-shell/boot.ts start(), main.tsx shrinks to sole importer), search-param schema moved to revisioned-workspace/schemas.ts | @senior-frontend-architect |
+| 2026-09-02 | Amendment 6: one workspace store binding (revisioned-workspace exports workspaceStore), boot plan as exported data with a headless boot-order test, router imports the search schema directly | @senior-frontend-architect |

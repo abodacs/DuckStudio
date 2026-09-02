@@ -1,15 +1,18 @@
 import { z } from "zod";
 import {
-  GetContextEventsDataSchema,
   GetContextInputSchema,
-  GetContextSummaryDataSchema,
   type BudgetLimits,
   type Capability,
   type GetContextInput,
   type Workspace,
 } from "./schemas";
 import { projectWorkspace } from "./projection";
-import { EnvelopeFailureSchema, type Envelope } from "../agent-control-plane/envelope";
+import {
+  failureEnvelope,
+  successEnvelope,
+  validationFailure,
+  type Envelope,
+} from "./envelope";
 
 /**
  * The revisioned workspace (ADR 0004 am4): a React-compatible external store
@@ -94,56 +97,6 @@ function createRev0Workspace(): Workspace {
   return Object.freeze(workspace);
 }
 
-type EnvelopeFailure = z.infer<typeof EnvelopeFailureSchema>;
-type EnvelopeSuccessData = z.infer<typeof GetContextSummaryDataSchema> | z.infer<typeof GetContextEventsDataSchema>;
-
-function successEnvelope(workspace: Workspace, data: EnvelopeSuccessData): Envelope {
-  return {
-    ok: true,
-    schemaVersion: workspace.schemaVersion,
-    workspaceId: workspace.workspaceId,
-    revision: workspace.revision,
-    data,
-    warnings: [],
-    nextActions: [],
-  };
-}
-
-function failureEnvelope(
-  workspace: Workspace,
-  error: EnvelopeFailure["error"],
-  nextActions: EnvelopeFailure["nextActions"],
-): Envelope {
-  return {
-    ok: false,
-    schemaVersion: workspace.schemaVersion,
-    workspaceId: workspace.workspaceId,
-    revision: workspace.revision,
-    error,
-    nextActions,
-  };
-}
-
-function validationFailure(workspace: Workspace, zodError: z.ZodError): Envelope {
-  const details: EnvelopeFailure["error"]["details"] = {};
-  for (const issue of zodError.issues) {
-    const field = issue.path.length > 0 ? issue.path.map(String).join(".") : "(command)";
-    if (!(field in details)) {
-      details[field] = issue.message;
-    }
-  }
-  return failureEnvelope(
-    workspace,
-    {
-      code: "VALIDATION_ERROR",
-      message: "Command failed schema validation; correct the fields named in details.",
-      retryable: false,
-      details,
-    },
-    [],
-  );
-}
-
 /**
  * The one read path (ticket 04's rev-0 scope table). The seed's catalog
  * metadata stays in `demo-presets/` — the envelope reports state, the catalog
@@ -204,9 +157,9 @@ function executeGetContext(workspace: Workspace, input: GetContextInput): Envelo
 }
 
 /**
- * One tab, one workspace. The React binding (`use-workspace.ts`) owns the
- * app instance; tests drive the store headlessly through this factory
- * without mounting React (ADR 0004 am4).
+ * One tab, one workspace. The app instance is the exported binding below;
+ * tests drive fresh stores headlessly through this factory without mounting
+ * React (ADR 0004 am4).
  */
 export function createWorkspaceStore(): WorkspaceStore {
   const listeners = new Set<() => void>();
@@ -253,3 +206,12 @@ export function createWorkspaceStore(): WorkspaceStore {
     },
   };
 }
+
+/**
+ * The one app store binding (ADR 0001 am6): the agent adapters register
+ * against it and the UI reads it through `useWorkspace`, so a tool dispatch
+ * and the header render can never hold two different workspaces. There is no
+ * second instantiation site — `boot.ts` consumes this binding, it does not
+ * create a store.
+ */
+export const workspaceStore: WorkspaceStore = createWorkspaceStore();

@@ -5,16 +5,17 @@
 - Deciders: @senior-frontend-architect
 - Technical Area: Frontend, Performance
 - Amendment 1: 2026-09-01 (worker warm-up is awaited from studio-shell/boot.ts start(), not main.tsx)
+- Amendment 2: 2026-09-02 (shipped font set is two self-hosted variable fonts — Inter, JetBrains Mono; Space Grotesk dropped; preload tags live in index.html, `public/_headers` pins only the isolation headers)
 
 ## Context
 
-The static build serves a single COOP/COEP origin (ADR 0006). The COEP header enables `SharedArrayBuffer`, which DuckDB-WASM needs, but the first analysis cannot pay a multi-second cold start once a user reaches the canvas. Three things load on the critical path: the DuckDB-WASM worker, ECharts, and the self-hosted fonts (Inter, Space Grotesk, JetBrains Mono per ADR 0006). TanStack Router v1 adds ~30 KB gzipped to the main bundle (ADR 0001). The PRD measures the time from first paint to the first `duckdb_get_context` envelope; the demo tape will too.
+The static build serves a single COOP/COEP origin (ADR 0006). The COEP header enables `SharedArrayBuffer`, which DuckDB-WASM needs, but the first analysis cannot pay a multi-second cold start once a user reaches the canvas. Three things load on the critical path: the DuckDB-WASM worker, ECharts, and the self-hosted fonts (Inter and JetBrains Mono; Space Grotesk was dropped from the shipped set before release — amendment 2). TanStack Router v1 adds ~30 KB gzipped to the main bundle (ADR 0001). The PRD measures the time from first paint to the first `duckdb_get_context` envelope; the demo tape will too.
 
 ## Decision
 
 - **DuckDB-WASM warms inside the worker on first paint.** The worker singleton from ADR 0002 is created at app boot, before the canvas mounts. First-paint cost includes the worker init; first-analysis cost does not.
 - **ECharts lazy-loads on first chart render.** The chart bundle is split into its own chunk and only fetched when a user opens a view that renders a chart. Insights, Grid, SQL & Lineage, and Custody do not import ECharts.
-- **Fonts preload with `<link rel="preload" as="font" crossorigin>`.** Inter, Space Grotesk, and JetBrains Mono are self-hosted in `public/fonts/`. Preload headers are emitted by the Vite plugin and pinned by the `public/_headers` file (CORP `same-origin` per ADR 0006).
+- **Fonts preload with `<link rel="preload" as="font" crossorigin>` (amended 2).** Inter and JetBrains Mono are self-hosted in `public/fonts/`, and their preload tags live in `index.html`. `public/_headers` pins only the isolation headers (COOP/COEP/CORP); it emits no font preloads. Space Grotesk was dropped from the shipped font set.
 - **TanStack Router is code-split.** The `studio-shell/router.tsx` module is the only router import; it is a dynamic `import()` boundary so the route table does not block first paint.
 
 ## Consequences
@@ -61,7 +62,7 @@ The static build serves a single COOP/COEP origin (ADR 0006). The COEP header en
 
 - `duck-engine/worker.ts` calls `getWorker()` at module top-level (see ADR 0002 worker singleton). The promise is awaited once inside `studio-shell/boot.ts`'s `start()` — after the secure-context gate, before the router mounts (ADR 0001 amendment 5).
 - ECharts is imported via `await import("echarts")` inside the chart component, behind a Suspense boundary.
-- `public/_headers` adds `Link: </fonts/inter-400.woff2>; rel=preload; as=font; crossorigin` (and the two sibling font files) per ADR 0006 CORP rules.
+- `index.html` carries the font preload tags — `<link rel="preload" href="/fonts/inter-latin-var.woff2" as="font" type="font/woff2" crossorigin>` and the `jetbrains-mono-latin-var.woff2` sibling (amended 2). `public/_headers` pins COOP/COEP/CORP only.
 - `vite.config.ts` uses `build.rollupOptions.output.manualChunks` to split the ECharts vendor and the router into named chunks.
 
 ## References
@@ -80,3 +81,4 @@ The static build serves a single COOP/COEP origin (ADR 0006). The COEP header en
 | 2026-08-31 | Proposed | @senior-frontend-architect |
 | 2026-08-31 | Accepted | @senior-frontend-architect |
 | 2026-09-01 | Amendment 1: worker warm-up awaited from studio-shell/boot.ts start() | @senior-frontend-architect |
+| 2026-09-02 | Amendment 2: shipped font set is two self-hosted variable fonts (Inter, JetBrains Mono); preloads in index.html, not public/_headers | @senior-frontend-architect |

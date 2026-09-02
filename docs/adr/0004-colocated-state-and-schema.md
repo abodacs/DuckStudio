@@ -6,6 +6,7 @@
 - Technical Area: Schema, Validation
 - Amendment 3: 2026-08-31 (template conformance: Deciders, Technical Area, reformat Alternatives, split Consequences into Positive/Negative/Neutral, add Implementation, References, Decision Log)
 - Amendment 4: 2026-09-01 (schema placement: domain schemas colocate with their owning modules, envelope.ts is transport vocabulary plus re-exports; store contract: dispatch is honest about time)
+- Amendment 5: 2026-09-02 (envelope concentration: the §7 envelope vocabulary, shape, builders, and tool-summary budget are domain vocabulary in `revisioned-workspace/envelope.ts`; `agent-control-plane/envelope.ts` becomes a pure re-export surface)
 - Amendment 2: 2026-08-31 (upgrade to `zod@4.5.4`, adopt `z.compile()` AOT fast path, drop `zod-to-json-schema` post-processing in favor of `z.strictObject`)
 - Amendment 1: 2026-08-31 (JSON Schema strictness, store API contract, no-shared-kernel rule)
 
@@ -61,11 +62,13 @@ Encode every domain shape once in `zod@4.5.4`. Use `z.strictObject(...)` for eve
 
 State is colocated. Each feature owns its store. The revisioned workspace is the source of truth. UI reads through a thin `useSyncExternalStore` selector over the workspace event log. No Redux, no Zustand-by-default, no global "last result."
 
-### Schema placement (amended 4)
+### Schema placement (amended 5)
 
-Each domain shape is encoded in the module that owns it: `revisioned-workspace/schemas.ts` (the four tool input schemas, the projection input schema, the URL search-param schema), `dataset-custody/schemas.ts` (release decision, cohort confirmation), `analysis-artifacts/schemas.ts` (artifact and lineage shapes). `agent-control-plane/envelope.ts` holds only transport vocabulary — `schemaVersion` and the success/failure envelope shapes — and re-exports the domain schemas for adapters and tests.
+Each domain shape is encoded in the module that owns it: `revisioned-workspace/schemas.ts` (the four tool input schemas, the projection input schema, the URL search-param schema), `dataset-custody/schemas.ts` (release decision, cohort confirmation), `analysis-artifacts/schemas.ts` (artifact and lineage shapes).
 
-The original placement put every schema in `envelope.ts`. That made the adapter folder a de-facto shared kernel with the widest fan-in in the tree, violating the no-shared-kernel rule this ADR already carries: deleting `agent-control-plane/` would have deleted the domain's types. A contract test in `agent-control-plane/_contract/` asserts the re-exports are import-equal to the domain exports.
+Amendment 4 placed the transport vocabulary — `schemaVersion` and the envelope shapes — in `agent-control-plane/envelope.ts`. Amendment 5 flips only the definition home, for that amendment's own stated reason: the §7 envelope is the store's *result type* (`dispatch(): Promise<Envelope>`), so it is domain vocabulary. `revisioned-workspace/envelope.ts` owns the envelope vocabulary, shapes, response builders, and the tool-summary budget — one file tells the whole envelope story, and the store imports it inside the domain folder with no adapter edge. `agent-control-plane/envelope.ts` remains the adapter import surface: a pure re-export of the domain envelope and schemas, owning nothing. Deleting `agent-control-plane/` removes no domain type — now at the build level, not just the type level. The 8 KB tool-summary budget lives beside the builder: the knob is the store's seeded `budgets.toolSummaryBytes`, and `revisioned-workspace/envelope.test.ts` measures the whole serialized response against it, not just `data`.
+
+A contract test in `agent-control-plane/_contract/` asserts the re-exports are import-equal to the domain exports.
 
 ### Compile strategy (amended)
 
@@ -156,7 +159,7 @@ Trigger to migrate off `zod`: schema module bundle size > 30 KB gzipped, measure
 
 ### Negative (amended 4)
 
-- Adapters and the router reach domain schemas through the envelope re-export — one indirection, bought in exchange for the deletion test passing.
+- Adapters reach domain schemas through the envelope re-export — one indirection, bought in exchange for the deletion test passing. The router imports the URL search schema from the domain module directly (ADR 0001 amendment 6); the URL seam does not ride the envelope.
 - The cost of `z.compile()` is `new Function` at schema construction time, which is acceptable on a COEP origin where we already load WASM but could trip a future CSP-strict environment.
 - The schema module's gzipped bundle is the trigger to revisit `valibot` or `@standard-schema` (carried from Amendment 1).
 - `zod` v4 issue format is the new `z.core.$ZodIssue*` shape. Anything that consumed the v3 `.format()` output must migrate to `z.treeifyError()`.
@@ -168,7 +171,7 @@ Trigger to migrate off `zod`: schema module bundle size > 30 KB gzipped, measure
 ## Implementation (amended 4)
 
 - Domain schemas live with their owners per the Schema placement rule: `revisioned-workspace/schemas.ts`, `dataset-custody/schemas.ts`, `analysis-artifacts/schemas.ts`. All schemas use `z.strictObject(...)` and are exported in their compiled form (`CompiledEnvelopeSuccess = z.compile(EnvelopeSuccessSchema)`).
-- `agent-control-plane/envelope.ts` exports the success/failure envelope schemas (transport vocabulary) and re-exports the domain schemas for adapters and tests. It exports no schema that names a domain concept.
+- `revisioned-workspace/envelope.ts` defines the §7 envelope vocabulary, shapes, and response builders (amendment 5). `agent-control-plane/envelope.ts` re-exports them, with the domain schemas, as the adapter import surface; it defines nothing that names a domain concept.
 - `agent-control-plane/registration.ts` derives JSON Schema via `z.toJSONSchema(schema)` and passes it to `document.modelContext.registerTool`. The runtime `.parse()` remains the real trust boundary.
 - The revisioned workspace store lives in `revisioned-workspace/`. It is a React-compatible external store (`subscribe`, `getSnapshot`, `getServerSnapshot`, `dispatch`). It is the only place that increments `revision`.
 - The no-shared-kernel rule is enforced by review: a feature's UI, store, schemas, and tests colocate under `src/<feature>/`. Three-or-more importers triggers promotion to `src/<feature>/kernel/`, not a top-level `src/shared/`.
@@ -197,3 +200,4 @@ Trigger to migrate off `zod`: schema module bundle size > 30 KB gzipped, measure
 | 2026-08-31 | Amendment 3: template conformance | @senior-frontend-architect |
 | 2026-08-31 | Accepted | @senior-frontend-architect |
 | 2026-09-01 | Amendment 4: schema placement (colocate with owners, envelope re-exports), store contract (dispatch honest about time) | @senior-frontend-architect |
+| 2026-09-02 | Amendment 5: envelope concentration (§7 envelope vocabulary, shapes, builders, budget owned by revisioned-workspace/envelope.ts; agent-control-plane/envelope.ts is a pure re-export surface) | @senior-frontend-architect |

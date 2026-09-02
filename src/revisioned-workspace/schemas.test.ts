@@ -3,21 +3,13 @@ import { describe, expect, it } from "vitest";
 import { CompiledGetContextInput, workspaceSearchSchema } from "./schemas";
 
 describe("workspaceSearchSchema", () => {
-  it("parses an integer rev from its URL string form", () => {
-    expect(workspaceSearchSchema.parse({ rev: "3" })).toEqual({ rev: 3 });
-  });
-
-  it("accepts an absent rev", () => {
+  it("accepts an empty query string — no param has a reader at rev 0", () => {
     expect(workspaceSearchSchema.parse({})).toEqual({});
-  });
-
-  it("rejects a rev that is not an integer", () => {
-    expect(() => workspaceSearchSchema.parse({ rev: "abc" })).toThrow();
-    expect(() => workspaceSearchSchema.parse({ rev: "1.5" })).toThrow();
   });
 
   it("rejects unknown params instead of stripping them", () => {
     expect(() => workspaceSearchSchema.parse({ artifact: "a_01" })).toThrow();
+    expect(() => workspaceSearchSchema.parse({ rev: "3" })).toThrow();
   });
 });
 
@@ -28,7 +20,11 @@ describe("zod adapter against zod 4", () => {
   const validator = zodValidator(workspaceSearchSchema);
 
   it("parses the search schema", () => {
-    expect(validator.parse({ rev: "3" })).toEqual({ rev: 3 });
+    expect(validator.parse({})).toEqual({});
+  });
+
+  it("enforces the strict rejection through the adapter too", () => {
+    expect(() => validator.parse({ rev: "3" })).toThrow();
   });
 });
 

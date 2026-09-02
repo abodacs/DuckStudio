@@ -18,11 +18,14 @@ import type { WorkspaceStore } from "../revisioned-workspace/store";
  * the skeleton never aborts (one page, one lifetime).
  */
 
+/** A JSON Schema document, as derived by `z.toJSONSchema` for agent discovery. */
+export type JsonSchema = z.core.JSONSchema.BaseSchema;
+
 /** Minimal hand-declared shape of a WebMCP tool definition (field order per 05). */
 export interface WebMCPToolDefinition {
   name: string;
   description: string;
-  inputSchema: object;
+  inputSchema: JsonSchema;
   execute(input: unknown): Promise<Envelope>;
   annotations: { readOnlyHint: boolean };
 }
@@ -44,9 +47,6 @@ declare global {
  * same handle.
  */
 const registrationAbortController = new AbortController();
-
-/** A second registration would claim the tool twice — a defect, never silent (ARCHITECTURE.md). */
-let registered = false;
 
 /**
  * The tool definition agents see. `execute` is one line and never throws:
@@ -84,19 +84,17 @@ export function nativeModelContextAvailable(): boolean {
 
 /**
  * Registers the tool natively or hands the surface to the simulator —
- * exactly one of the two paths serves the tool. The `nativeAvailable`
- * parameter is the boot-time gate read, injectable so tests can drive both
- * paths without a DOM.
+ * exactly one of the two paths serves the tool. Idempotency is a contract
+ * of the caller: `start()`'s `app ??=` memo is the one real guard, so this
+ * runs once per page (ADR 0001 am6); a second call would claim the tool
+ * twice — a caller defect, not a state this module hides. The
+ * `nativeAvailable` parameter is the boot-time gate read, injectable so
+ * tests can drive both paths without a DOM.
  */
 export async function registerTools(
   store: WorkspaceStore,
   nativeAvailable: boolean = nativeModelContextAvailable(),
 ): Promise<void> {
-  if (registered) {
-    throw new Error("registration: registerTools called twice — duplicate registration is a defect");
-  }
-  registered = true;
-
   const registry = nativeAvailable ? document.modelContext : undefined;
   if (registry && "registerTool" in registry) {
     try {

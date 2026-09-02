@@ -1,8 +1,9 @@
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { createWorkspaceStore } from "../revisioned-workspace/store";
+import { workspaceStore } from "../revisioned-workspace/store";
 import { nativeModelContextAvailable, registerTools } from "../agent-control-plane/registration";
+import type { WorkspaceRouter } from "./router";
 
 /** Mounted app handle returned by {@link start} (ADR 0001 am5). */
 export interface App {
@@ -10,43 +11,92 @@ export interface App {
 }
 
 /**
+ * The ordered startup contract (ARCHITECTURE.md; ADR 0001 am6): `boot`
+ * executes exactly these steps, in this order — the plan is the control
+ * flow, so the body and the promise cannot drift. Slice 2 inserts `"warm"`
+ * between `"gate"` and `"mount"` (ADR 0007). The workspace store is not a
+ * step: it is the domain module's exported binding, which exists before any
+ * step runs.
+ */
+export const BOOT_PLAN = ["gate", "mount", "register"] as const;
+
+export type BootStep = (typeof BOOT_PLAN)[number];
+
+/** Injectable seams so `start` can be driven headlessly (ADR 0001 am6). */
+export interface StartInjection {
+  /** Defaults to the document's `#root` element. */
+  container?: Element;
+  /** Defaults to the WebMCP secure-context gate read. */
+  gate?: () => boolean;
+}
+
+/**
  * One page, one boot (05's belt): a second `start()` — HMR re-execution or
- * accidental double import — is a no-op returning the existing app.
+ * accidental double import — is a no-op returning the existing app. This
+ * memo is also the one duplicate-registration guard: `registerTools` runs
+ * only here, exactly once.
  */
 let app: Promise<App> | undefined;
 
-export function start(): Promise<App> {
-  app ??= boot();
+export function start(inject: StartInjection = {}): Promise<App> {
+  app ??= boot(inject);
   return app;
 }
 
 /**
- * Ordered startup, one step per decision (ADR 0001 am5): gate read →
- * workspace store → mount router → register tools | simulator fallback.
- * Registration stays strictly after mount — the tool's `execute` closes
- * over the store, which must already exist, and the agent cannot call a
- * tool before the shell can render its result. Registration is not in a
- * React effect, so StrictMode's double mount cannot double-fire it. The
- * worker warm step is absent, not stubbed; Slice 2 inserts
- * `await warmWorker()` ahead of the store.
+ * The container lookup (boot's only DOM query), extracted as its own
+ * decision so the failure is assertable headlessly.
  */
-async function boot(): Promise<App> {
-  const container = document.querySelector("#root");
+export function findRootContainer(doc: Pick<Document, "querySelector">): Element {
+  const container = doc.querySelector("#root");
   if (!container) {
     throw new Error("boot: #root container is missing from index.html");
   }
+  return container;
+}
 
-  const nativeAvailable = nativeModelContextAvailable();
-  const store = createWorkspaceStore();
-
-  // The route table is the dynamic-import boundary (ADR 0007): the router
-  // chunk must never block first paint.
-  const { router } = await import("./router");
-
+/**
+ * The mount step: the router renders under StrictMode. Views read the
+ * workspace through the domain module's `workspaceStore` binding, so mount
+ * carries no state of its own.
+ */
+export function mountInto(container: Element, router: WorkspaceRouter): Root {
   const root = createRoot(container);
-  root.render(createElement(StrictMode, null, createElement(RouterProvider, { router, context: { store } })));
+  root.render(createElement(StrictMode, null, createElement(RouterProvider, { router })));
+  return root;
+}
 
-  await registerTools(store, nativeAvailable);
+/**
+ * Ordered startup, driven by {@link BOOT_PLAN} (ADR 0001 am5). Registration
+ * stays strictly after mount — the tool's `execute` closes over the store,
+ * which the binding provides, and the agent cannot call a tool before the
+ * shell can render its result. Registration is not in a React effect, so
+ * StrictMode's double mount cannot double-fire it. The worker warm step is
+ * absent, not stubbed; Slice 2 inserts `await warmWorker()` into the plan.
+ */
+async function boot(inject: StartInjection): Promise<App> {
+  const container = inject.container ?? findRootContainer(document);
 
+  let nativeAvailable = false;
+  let root: Root | undefined;
+  for (const step of BOOT_PLAN) {
+    switch (step) {
+      case "gate":
+        nativeAvailable = (inject.gate ?? nativeModelContextAvailable)();
+        break;
+      // The route table is the dynamic-import boundary (ADR 0007): the
+      // router chunk must never block first paint.
+      case "mount":
+        root = mountInto(container, (await import("./router")).router);
+        break;
+      case "register":
+        await registerTools(workspaceStore, nativeAvailable);
+        break;
+    }
+  }
+  if (!root) {
+    // The plan is data; a plan without "mount" is a defect, thrown loudly.
+    throw new Error('boot: BOOT_PLAN produced no mount — the "mount" step is missing');
+  }
   return { root };
 }
