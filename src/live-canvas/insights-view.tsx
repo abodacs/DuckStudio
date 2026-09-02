@@ -1,11 +1,19 @@
+import { lazy, Suspense } from "react";
 import { projectArtifact } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
-import { UnavailableArtifact } from "./artifact-states";
+import { KpiTile, UnavailableArtifact } from "./artifact-states";
 
 /**
- * Insights evidence view. The empty state is onboarding: an abstract ghost
- * of the KPI readout (geometry only — never fabricated values) above the
- * custody rule the view enforces, and the move that unlocks it.
+ * The lazy ECharts boundary (ADR 0007, grilling 52): `chart.tsx` is the only
+ * echarts importer, loaded on the first chart render behind Suspense with a
+ * 280px "Loading chart…" fallback.
+ */
+const EvidenceChart = lazy(() => import("./chart"));
+
+/**
+ * Insights evidence view (grilling 52): KPI cards from the measured
+ * projection — values are what the analysis produced, never targets — and
+ * the lazy chart. A chart-only result stands alone.
  */
 export function InsightsView() {
   const artifact = useWorkspace((ws) => projectArtifact(ws, ws.selectedArtifactId));
@@ -44,21 +52,37 @@ export function InsightsView() {
       );
     case "unavailable":
       return <UnavailableArtifact artifactId={artifact.artifactId} reason={artifact.reason} />;
-    case "artifact":
+    case "artifact": {
+      const { insights } = artifact;
       return (
-        <div className="view-swap empty-state">
-          <p className="mono-value text-sm">
-            {artifact.artifact.artifactId} · source {artifact.artifact.source.id} · {artifact.artifact.rowCount} rows
-          </p>
-          <dl className="meta mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4">
-            {artifact.summary.kpis.map((kpi) => (
-              <div key={kpi.column} className="contents">
-                <dt>{kpi.label}</dt>
-                <dd className="mono-value">{kpi.value === null ? "—" : kpi.value}</dd>
-              </div>
-            ))}
-          </dl>
+        <div className="view-swap flex h-full flex-col gap-4 overflow-y-auto p-3">
+          {insights.kpis.length > 0 && (
+            <div className="grid grid-cols-3 gap-2.5">
+              {insights.kpis.map((kpi) => (
+                <KpiTile key={kpi.column} kpi={kpi} />
+              ))}
+            </div>
+          )}
+          {insights.chart && (
+            <section aria-label="Chart" className="ghost-tile flex flex-col gap-1.5 px-3 py-3">
+              <header className="flex flex-wrap items-baseline gap-x-3">
+                <h3 className="text-[13px] font-medium text-ink">
+                  {insights.chart.title ?? `${insights.chart.y} by ${insights.chart.x}`}
+                </h3>
+                {insights.chartDownsampled && (
+                  <p className="text-xs text-amber">
+                    Downsampled for the canvas: showing {insights.metrics.chartPoints} of{" "}
+                    {insights.metrics.materializedRows} result rows.
+                  </p>
+                )}
+              </header>
+              <Suspense fallback={<div className="flex h-[280px] items-center justify-center"><p className="meta">Loading chart…</p></div>}>
+                <EvidenceChart insights={insights} />
+              </Suspense>
+            </section>
+          )}
         </div>
       );
+    }
   }
 }

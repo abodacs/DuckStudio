@@ -534,7 +534,14 @@ describe("emission policy at the seam (grilling 42; ticket 46)", () => {
         }
       }
       expect(activated.contextDelta).toEqual(expected);
-      expect(Object.keys(activated.contextDelta ?? {})).toEqual(["revision", "datasetState", "datasetLine"]);
+      // Activation changes the revision, the dataset state line, and the
+      // operation stream it just settled (Slice 5's widened projection).
+      expect(Object.keys(activated.contextDelta ?? {})).toEqual([
+        "revision",
+        "datasetState",
+        "datasetLine",
+        "operations",
+      ]);
     }
 
     // A failed mutation commits nothing and carries no delta.

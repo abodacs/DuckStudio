@@ -7,6 +7,7 @@
 - Amendment 1: 2026-09-01 (worker warm-up is awaited from studio-shell/boot.ts start(), not main.tsx)
 - Amendment 2: 2026-09-02 (shipped font set is two self-hosted variable fonts — Inter, JetBrains Mono; Space Grotesk dropped; preload tags live in index.html, `public/_headers` pins only the isolation headers)
 - Amendment 3: 2026-09-02 (shipped font set is three self-hosted variable fonts — Geist, Space Grotesk, JetBrains Mono; Inter removed with the Custody Glass design pass)
+- Amendment 4: 2026-09-02 (Slice 5 chart boundary: `live-canvas/chart.tsx` is the only echarts importer, pulled in through React `lazy()` with a Suspense fallback; `manualChunks` dropped — Vite splits the dynamic import itself, the same mechanism as the router boundary)
 
 ## Context
 
@@ -62,9 +63,9 @@ The static build serves a single COOP/COEP origin (ADR 0006). The COEP header en
 ## Implementation
 
 - `duck-engine/worker.ts` calls `getWorker()` at module top-level (see ADR 0002 worker singleton). The promise is awaited once inside `studio-shell/boot.ts`'s `start()` — after the secure-context gate, before the router mounts (ADR 0001 amendment 5).
-- ECharts is imported via `await import("echarts")` inside the chart component, behind a Suspense boundary.
+- ECharts is imported statically inside `live-canvas/chart.tsx` and nothing else; the Insights view loads the module through `lazy(() => import("./chart"))` behind a 280px "Loading chart…" Suspense fallback.
 - `index.html` carries the font preload tags — `<link rel="preload" href="/fonts/inter-latin-var.woff2" as="font" type="font/woff2" crossorigin>` and the `jetbrains-mono-latin-var.woff2` sibling (amended 2). `public/_headers` pins COOP/COEP/CORP only.
-- `vite.config.ts` uses `build.rollupOptions.output.manualChunks` to split the ECharts vendor and the router into named chunks.
+- `vite.config.ts` declares no `manualChunks`: Vite splits each dynamic `import()` into its own chunk, so the router boundary and the chart chunk ship as separate files without a hand-maintained map.
 
 ## References
 

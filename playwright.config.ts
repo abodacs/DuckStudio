@@ -15,6 +15,9 @@ const WEBMCP_TESTING_ARGS = [
 
 export default defineConfig({
   testDir: "e2e",
+  // Every page load pays the wasm warm slot; more than a handful of
+  // concurrent warm-ups thrash the box and turn boot into a flake.
+  workers: 2,
   // Every page load pays the BOOT_PLAN warm slot (DuckDB WASM compile +
   // preset materialization) before the shell can render, so assertions race
   // engine warm-up, not app defects. 30s matches the suite's explicit

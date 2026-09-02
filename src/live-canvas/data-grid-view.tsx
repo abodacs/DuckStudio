@@ -1,11 +1,14 @@
 import { projectArtifact } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
-import { UnavailableArtifact } from "./artifact-states";
+import { KpiTile, UnavailableArtifact } from "./artifact-states";
+import { VirtualGrid } from "./virtual-grid";
 
 /**
- * Data Grid evidence view. The empty-state ghost previews the grid's
- * geometry — rows as glass bars, never painted values — above the custody
- * rule the view enforces.
+ * Data Grid evidence view (grilling 51): virtualized committed rows only
+ * when an artifact exists and the policy permits; for
+ * `sensitive_aggregate_only` the pinned suppression banner plus the legally
+ * released data — KPI aggregates and column metadata — and zero raw rows,
+ * ever. No-artifact and evicted states keep M0's honest-empty copy.
  */
 export function DataGridView() {
   const artifact = useWorkspace((ws) => projectArtifact(ws, ws.selectedArtifactId));
@@ -34,18 +37,76 @@ export function DataGridView() {
     case "unavailable":
       return <UnavailableArtifact artifactId={artifact.artifactId} reason={artifact.reason} />;
     case "artifact":
-      return (
-        <div className="view-swap empty-state">
-          <p className="mono-value text-sm">
-            {artifact.artifact.artifactId} · {artifact.artifact.rowCount} rows · policy{" "}
-            {artifact.artifact.policy}
-          </p>
-          <p className="meta mt-2">
-            {artifact.artifact.policy === "public_synthetic"
-              ? "Bounded rows render from the artifact relation."
-              : "Policy suppresses raw rows for sensitive datasets — aggregates only."}
-          </p>
-        </div>
-      );
+      switch (artifact.grid.kind) {
+        case "rows":
+          return (
+            <div className="view-swap flex h-full min-h-0 flex-1 flex-col p-3">
+              <VirtualGrid grid={artifact.grid} totalRows={artifact.artifact.rowCount} />
+            </div>
+          );
+        case "suppressed":
+          return (
+            <div className="view-swap flex h-full flex-col gap-4 overflow-y-auto p-3">
+              <div role="alert" className="banner-suppressed">
+                <p className="banner-suppressed-title">Data Grid — suppressed by policy</p>
+                <p>
+                  <span className="mono-value">{artifact.artifact.source.id}</span> is governed by{" "}
+                  <span className="chip-policy-sensitive">{artifact.grid.policy}</span>.
+                </p>
+                <p>
+                  Raw records never paint on the shared canvas. Only aggregates meeting{" "}
+                  <span className="mono-value">k ≥ {artifact.grid.minimumCohortSize}</span> (
+                  <span className="mono-value">minimumCohortSize</span>) are released.
+                </p>
+                <p>
+                  Omitted direct identifiers:{" "}
+                  {artifact.grid.omitted.length > 0 ? (
+                    artifact.grid.omitted.map((name) => (
+                      <span key={name} className="mono-value mr-1">{name}</span>
+                    ))
+                  ) : (
+                    <span className="mono-value">none</span>
+                  )}
+                </p>
+                <p>
+                  Uploaded to network: <span className="mono-value">{artifact.grid.bytesUploaded} B</span> · Raw values
+                  released: <span className="mono-value">{artifact.grid.rawValuesReleased}</span>
+                </p>
+              </div>
+              {artifact.grid.kpis.length > 0 && (
+                <section aria-label="Released aggregates" className="grid grid-cols-3 gap-2.5">
+                  {artifact.grid.kpis.map((kpi) => (
+                    <KpiTile key={kpi.column} kpi={kpi} />
+                  ))}
+                </section>
+              )}
+              <section aria-label="Column metadata" className="ghost-tile overflow-hidden">
+                <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.5fr)_auto] gap-x-3 border-b border-edge/60 px-3 py-1.5 text-xs uppercase tracking-[0.08em] text-ink-secondary">
+                  <span>column</span>
+                  <span>type</span>
+                  <span>classification</span>
+                  <span>omitted</span>
+                </div>
+                {artifact.grid.columns.map((column) => (
+                  <div
+                    key={column.name}
+                    className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.5fr)_auto] gap-x-3 border-b border-edge/40 px-3 py-1.5 text-xs last:border-b-0"
+                  >
+                    <span className="mono-value truncate">{column.name}</span>
+                    <span className="meta">{column.type}</span>
+                    <span className="meta">{column.classification}</span>
+                    <span className="meta">{column.omitted ? "yes" : "—"}</span>
+                  </div>
+                ))}
+              </section>
+            </div>
+          );
+        case "hidden":
+          return (
+            <div className="view-swap empty-state">
+              <p className="meta">The committed presentation withholds the grid — aggregates render in Insights.</p>
+            </div>
+          );
+      }
   }
 }
