@@ -1,6 +1,6 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
 import { createWorkerHandler, presetCsv, PRESET_TRIPLES, type BoundedRead, type DuckEngineRuntime } from "./worker-handler";
-import { decimalCellToNumber, isDecimalField } from "./decimal-cells";
+import { decodeEngineCell, duckDbType } from "./result-decode";
 import type { EngineColumn, EngineRequest, EngineResponse, WarmResult } from "./protocol";
 
 /**
@@ -99,18 +99,12 @@ async function createBrowserRuntime(): Promise<DuckEngineRuntime> {
         // closes the stream (ADR 0002: streamArrow → bounded cursor).
         schema = batch.schema.fields.map((field) => ({ name: field.name, type: duckDbType(field.type) }));
         const vectors = batch.schema.fields.map((field) => batch.getChild(field.name));
-        // Decimal results (HUGEINT/DECIMAL aggregates) read as raw words;
-        // decode to scaled numbers so rows, inserts, and summaries stay numbers.
-        const decimalScales = batch.schema.fields.map((field) =>
-          isDecimalField(field.type) ? field.type.scale : null,
-        );
         const batchLength = Math.min(batch.numRows, maxRows - rows.length);
         for (let rowIndex = 0; rowIndex < batchLength; rowIndex += 1) {
           const row: Record<string, unknown> = {};
           batch.schema.fields.forEach((field, columnIndex) => {
-            const scale = decimalScales[columnIndex] ?? null;
             const raw = (vectors[columnIndex] as { get(rowIndex: number): unknown }).get(rowIndex);
-            row[field.name] = scale === null ? raw : decimalCellToNumber(raw, scale);
+            row[field.name] = decodeEngineCell(raw, field.type);
           });
           rows.push(row);
         }
@@ -145,43 +139,6 @@ async function createBrowserRuntime(): Promise<DuckEngineRuntime> {
       await connection.query(`DROP TABLE IF EXISTS ${relationName}`);
     },
   };
-}
-
-/**
- * duckdb-wasm surfaces result types as Arrow type names ("Utf8", "Int64"),
- * while every DuckDB consumer of the schema — the artifact digest (§4.3),
- * the presentation inference, and this worker's own `CREATE TABLE` in
- * `materialize` — speaks DuckDB type names. The node runtime reports DuckDB
- * names natively; this map gives the browser runtime the same vocabulary.
- * Arrow decimals render as `Decimal[precision e scale]` (e.g. `Decimal[38e+2]`
- * for DECIMAL(38,2)) and must become parseable `DECIMAL(p,s)` DDL.
- */
-const ARROW_TO_DUCKDB_TYPES: Readonly<Record<string, string>> = {
-  Utf8: "VARCHAR",
-  LargeUtf8: "VARCHAR",
-  Bool: "BOOLEAN",
-  Int8: "TINYINT",
-  Int16: "SMALLINT",
-  Int32: "INTEGER",
-  Int64: "BIGINT",
-  Int128: "HUGEINT",
-  Uint8: "UTINYINT",
-  Uint16: "USMALLINT",
-  Uint32: "UINTEGER",
-  Uint64: "UBIGINT",
-  Float32: "FLOAT",
-  Float64: "DOUBLE",
-  DateDay: "DATE",
-  Timestamp: "TIMESTAMP",
-  TimeMicrosecond: "TIME",
-  Binary: "BLOB",
-};
-
-function duckDbType(fieldType: { toString(): string }): string {
-  const name = String(fieldType);
-  const decimal = /^Decimal\((\d+),\s*(\d+)\)$/.exec(name) ?? /^Decimal\[(\d+)e\+?(-?\d+)\]$/.exec(name);
-  if (decimal) return `DECIMAL(${decimal[1]},${decimal[2]})`;
-  return ARROW_TO_DUCKDB_TYPES[name] ?? name;
 }
 
 const workerSelf = self as unknown as WorkerSelf;
