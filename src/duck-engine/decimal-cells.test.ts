@@ -60,6 +60,14 @@ describe("isDecimalField", () => {
     expect(isDecimalField(new Decimal(38, 0))).toBe(true);
   });
 
+  it("recognizes decimals structurally when the build minifies the class name", () => {
+    // The prod bundle renames classes: the Impacted-MRR tile went missing
+    // because only the constructor name was checked. Structural shape wins.
+    expect(isDecimalField({ scale: 2, bitWidth: 128 })).toBe(true);
+    expect(isDecimalField({ scale: 4, precision: 38 })).toBe(true);
+    expect(isDecimalField({ scale: 2, constructor: { name: "Q7e" } })).toBe(false);
+  });
+
   it("rejects non-decimal fields and scale-less shapes", () => {
     expect(isDecimalField(new Int64())).toBe(false);
     expect(isDecimalField({ constructor: { name: "Decimal" } })).toBe(false);

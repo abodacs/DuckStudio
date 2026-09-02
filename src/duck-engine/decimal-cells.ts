@@ -33,9 +33,21 @@ export function decimalCellToNumber(value: unknown, scale: number): number | nul
   return null;
 }
 
-/** True when the arrow field's type is a Decimal (HUGEINT/DECIMAL results). */
+/**
+ * True when the arrow field's type is a Decimal (HUGEINT/DECIMAL results).
+ * Structural first: arrow decimals carry `scale` + `bitWidth`/`precision`
+ * regardless of minification — a prod build renames the class, so the
+ * constructor-name check alone misses real decimals (the Impacted-MRR
+ * regression) and survives only as the dev-build fallback.
+ */
 export function isDecimalField(fieldType: unknown): fieldType is { scale: number } {
-  const name = (fieldType as { constructor?: { name?: string } } | null | undefined)?.constructor?.name;
-  if (name === undefined || !name.includes("Decimal")) return false;
-  return typeof (fieldType as { scale?: unknown }).scale === "number";
+  const type = fieldType as {
+    scale?: unknown;
+    bitWidth?: unknown;
+    precision?: unknown;
+    constructor?: { name?: string };
+  } | null | undefined;
+  if (typeof type?.scale !== "number") return false;
+  if (typeof type.bitWidth === "number" || typeof type.precision === "number") return true;
+  return typeof type.constructor?.name === "string" && type.constructor.name.includes("Decimal");
 }
