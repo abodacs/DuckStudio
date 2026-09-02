@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { agentSurface, invokeTool, type EnvelopeSuccess } from "./agent-surface";
+import { NO_UPLOAD_BADGE } from "../src/revisioned-workspace/projection";
 
 // --- Opt-in smoke for the deployed origin (PRD slice 6: deployed-origin
 // verification). Runs only when the suite points at it:
@@ -22,7 +23,7 @@ test.describe("qa: deployed origin smoke", () => {
     await page.goto("/");
     expect(await page.evaluate(() => window.crossOriginIsolated)).toBe(true);
     await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
-    await expect(page.getByText("0 Bytes of Dataset Uploaded")).toBeVisible();
+    await expect(page.getByText(NO_UPLOAD_BADGE)).toBeVisible();
   });
 
   test("the served agent surface registers and answers a read on the deployed origin", async ({ page }) => {

@@ -1,13 +1,20 @@
 import { expect, test } from "@playwright/test";
-import { HEALTHCARE_PII_CANONICAL_SQL } from "../src/demo-presets/canonical-sql";
+import { agentSurface, invokeTool, waitForSurface, type AgentSurface, type SurfaceWindow } from "./agent-surface";
+import { HEALTHCARE_PII_CANONICAL_SQL, SAAS_CHURN_CANONICAL_SQL } from "../src/demo-presets/canonical-sql";
+import { NO_UPLOAD_BADGE } from "../src/revisioned-workspace/projection";
+import { EVIDENCE_LIMITATIONS, MONITORED_TRANSPORTS } from "../src/dataset-custody/schemas";
+import { INSIGHTS_EMPTY_STATE } from "../src/live-canvas/insights-view";
+import { GRID_EMPTY_STATE } from "../src/live-canvas/data-grid-view";
+import { LINEAGE_EMPTY_STATE } from "../src/live-canvas/sql-lineage-view";
+import { CUSTODY_EMPTY_STATE } from "../src/live-canvas/custody-view";
 
-// Pinned empty-state copy per tab (ticket 06 — copy is decided, not invented;
-// the Insights line was re-voiced by the 2026-09-02 layout/UX pass review).
+// Pinned empty-state copy per tab (ticket 06) — the lines the views render,
+// imported from them so the browser proof is the assertion, not the typing.
 const EMPTY_STATE_COPY: readonly (readonly [label: string, copy: string])[] = [
-  ["Insights", "No artifact — KPIs render only from a policy-approved artifact."],
-  ["Data Grid", "No artifact — the grid paints rows only from an approved artifact."],
-  ["SQL & Lineage", "No artifact — lineage appears with your first analysis."],
-  ["Custody", "No custody evidence yet — verification runs on artifacts."],
+  ["Insights", INSIGHTS_EMPTY_STATE],
+  ["Data Grid", GRID_EMPTY_STATE],
+  ["SQL & Lineage", LINEAGE_EMPTY_STATE],
+  ["Custody", CUSTODY_EMPTY_STATE],
 ];
 
 test.describe("walking skeleton @ rev 0", () => {
@@ -30,7 +37,7 @@ test.describe("walking skeleton @ rev 0", () => {
     // The seeded catalog's canonical spelling in the header (ticket 13) —
     // available to activate, never shown as active.
     await expect(page.getByText("saas_churn · public_synthetic", { exact: true })).toBeVisible();
-    await expect(page.getByText("0 Bytes of Dataset Uploaded")).toBeVisible();
+    await expect(page.getByText(NO_UPLOAD_BADGE)).toBeVisible();
     await expect(page.getByText("AGENT CONTROL & OPERATIONS")).toBeVisible();
     await expect(page.getByText("SELECTED ARTIFACT")).toBeVisible();
   });
@@ -115,37 +122,6 @@ test.describe("slice 2: engine warm + zero egress from first paint", () => {
 // tests drive exactly what a browser agent would drive, one test per
 // capability. ---
 
-/** The served tool surface the page exposes once boot reaches "register". */
-type AgentSurface = {
-  surface: "webmcp_native" | "simulator_only";
-  tools: string[];
-  invoke(name: string, input: unknown): Promise<unknown>;
-};
-
-type SurfaceWindow = { __duckstudioAgentSurface?: AgentSurface };
-
-async function agentSurface(page: import("@playwright/test").Page): Promise<AgentSurface> {
-  await page.goto("/");
-  await page.waitForFunction(() => (window as SurfaceWindow).__duckstudioAgentSurface !== undefined, undefined, {
-    timeout: 30_000,
-  });
-  return page.evaluate(() => (window as SurfaceWindow).__duckstudioAgentSurface as AgentSurface);
-}
-
-function invokeTool(page: import("@playwright/test").Page, name: string, input: unknown): Promise<unknown> {
-  return page.evaluate(
-    ({ name, input }) => {
-      const surface = (window as SurfaceWindow).__duckstudioAgentSurface;
-      if (!surface) throw new Error("the agent surface never registered");
-      return surface.invoke(name, input);
-    },
-    { name, input },
-  );
-}
-
-const CHURN_SQL =
-  "SELECT tickets, COUNT(*) AS accounts FROM saas_churn GROUP BY tickets ORDER BY tickets";
-
 test.describe("slice 4: agent control plane", () => {
   test("duckdb_get_context returns the compact summary an agent bootstraps from", async ({ page }) => {
     await agentSurface(page);
@@ -198,7 +174,7 @@ test.describe("slice 4: agent control plane", () => {
 
     const envelope = (await invokeTool(page, "duckdb_execute_sql_to_canvas", {
       source: { kind: "dataset", id: "saas_churn" },
-      sql: CHURN_SQL,
+      sql: SAAS_CHURN_CANONICAL_SQL,
       bindings: {},
       expectedRevision: 1,
       idempotencyKey: "e2e-sql-01",
@@ -233,7 +209,7 @@ test.describe("slice 4: agent control plane", () => {
     });
     await invokeTool(page, "duckdb_execute_sql_to_canvas", {
       source: { kind: "dataset", id: "saas_churn" },
-      sql: CHURN_SQL,
+      sql: SAAS_CHURN_CANONICAL_SQL,
       bindings: {},
       expectedRevision: 1,
       idempotencyKey: "e2e-verify-sql-01",
@@ -255,18 +231,12 @@ test.describe("slice 4: agent control plane", () => {
     expect(envelope.ok).toBe(true);
     expect(envelope.data.scope).toEqual({ kind: "artifact", id: "a_01" });
     expect(envelope.data.datasetBytesUploaded).toBe(0);
-    expect(envelope.data.monitoredTransports).toEqual([
-      "fetch",
-      "XMLHttpRequest",
-      "sendBeacon",
-      "WebSocket",
-      "WebTransport",
-    ]);
+    expect(envelope.data.monitoredTransports).toEqual([...MONITORED_TRANSPORTS]);
     expect(envelope.data.lineage).toEqual([
       { kind: "dataset", id: "saas_churn" },
       { kind: "artifact", id: "a_01" },
     ]);
-    expect(envelope.data.limitations).toHaveLength(2);
+    expect(envelope.data.limitations).toHaveLength(EVIDENCE_LIMITATIONS.length);
   });
 
   test("capability negotiation appends exactly one surface enum at boot", async ({ page }) => {
@@ -315,12 +285,10 @@ test.describe("slice 4: agent control plane", () => {
 async function activateAndRun(
   page: import("@playwright/test").Page,
   keys: { activate: string; run: string },
-  sql: string = CHURN_SQL,
+  sql: string = SAAS_CHURN_CANONICAL_SQL,
   datasetId: "saas_churn" | "healthcare_pii" = "saas_churn",
 ): Promise<{ artifactId: string }> {
-  await page.waitForFunction(() => (window as SurfaceWindow).__duckstudioAgentSurface !== undefined, undefined, {
-    timeout: 30_000,
-  });
+  await waitForSurface(page);
   const activated = (await invokeTool(page, "duckdb_activate_dataset", {
     datasetId,
     expectedRevision: 0,
@@ -365,7 +333,7 @@ test.describe("slice 5: evidence canvas", () => {
     await page.getByRole("tab", { name: "Custody" }).click();
     await expect(page.getByText(/scope artifact:a_01/)).toBeVisible();
     await expect(page.getByText("0 B", { exact: true })).toBeVisible();
-    await expect(page.getByText("Application shell traffic is outside dataset-upload accounting.")).toBeVisible();
+    await expect(page.getByText(EVIDENCE_LIMITATIONS[0])).toBeVisible();
   });
 
   test("the public grid paints bounded virtualized rows only after the artifact", async ({ page }) => {
@@ -427,7 +395,7 @@ test.describe("slice 5: evidence canvas", () => {
     // The custody story on a muted screen: handle + policy label + badge.
     await expect(page.getByText("a_01", { exact: true })).toBeVisible();
     await expect(page.getByText("sensitive_aggregate_only", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("0 Bytes of Dataset Uploaded")).toBeVisible();
+    await expect(page.getByText(NO_UPLOAD_BADGE)).toBeVisible();
   });
 
   test("artifact selection dispatches once and tab clicks never dispatch", async ({ page }) => {
@@ -465,24 +433,9 @@ const CHIP_LABEL = "Analyze churn against support tickets.";
 const ACTIVATE_CHURN = "Activate dataset saas_churn · public_synthetic policy";
 const ACTIVATE_HEALTH = "Activate dataset healthcare_pii · sensitive_aggregate_only policy";
 
-/**
- * Cold boots (wasm compile + both preset materializations) measured past 25s
- * in CI and far worse on loaded machines; every slice-6 gesture waits for the
- * boot to reach "register" before asserting, so slowness never reads as a
- * missing chip (the per-test timeout bounds the wait).
- */
-async function gotoBooted(page: import("@playwright/test").Page): Promise<void> {
-  await page.goto("/");
-  await page.waitForFunction(
-    () => (window as { __duckstudioAgentSurface?: unknown }).__duckstudioAgentSurface !== undefined,
-    undefined,
-    { timeout: 120_000 },
-  );
-}
-
 test.describe("slice 6: demo wiring and parity", () => {
   test("a preset card dispatches one activation; the header commits and the grid stays empty", async ({ page }) => {
-    await gotoBooted(page);
+    await agentSurface(page);
     // The capability chip names the served surface from first paint (§7.3).
     await expect(
       page.getByText("webmcp_native", { exact: true }).or(page.getByText("simulator_only · same workspace", { exact: true })),
@@ -492,7 +445,7 @@ test.describe("slice 6: demo wiring and parity", () => {
     await page.getByRole("button", { name: ACTIVATE_CHURN }).click();
     await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
     await expect(page.getByText("ACTIVE", { exact: true })).toBeVisible();
-    await expect(page.getByText("0 Bytes of Dataset Uploaded")).toBeVisible();
+    await expect(page.getByText(NO_UPLOAD_BADGE)).toBeVisible();
 
     // Acceptance 17: activation paints no rows — the honest empty state.
     await page.getByRole("tab", { name: "Data Grid" }).click();
@@ -501,7 +454,7 @@ test.describe("slice 6: demo wiring and parity", () => {
   });
 
   test("the canonical prompt chip runs the two-call playbook to one artifact with headline KPIs", async ({ page }) => {
-    await gotoBooted(page);
+    await agentSurface(page);
     await page.getByRole("button", { name: ACTIVATE_CHURN }).click();
     await expect(page.getByText("rev 1", { exact: true })).toBeVisible();
 
@@ -531,7 +484,7 @@ test.describe("slice 6: demo wiring and parity", () => {
   });
 
   test("a preset click while an operation runs earns the OPERATION_CONFLICT recovery card", async ({ page }) => {
-    await gotoBooted(page);
+    await agentSurface(page);
     await page.getByRole("button", { name: ACTIVATE_CHURN }).click();
     await expect(page.getByText("rev 1", { exact: true })).toBeVisible();
 
@@ -573,7 +526,7 @@ test.describe("slice 6: demo wiring and parity", () => {
     await page.addInitScript(() => {
       Object.defineProperty(document, "modelContext", { value: undefined, configurable: true });
     });
-    await gotoBooted(page);
+    await agentSurface(page);
     await expect(page.getByText("simulator_only · same workspace", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: ACTIVATE_CHURN }).click();
@@ -597,7 +550,7 @@ test.describe("slice 6: demo wiring and parity", () => {
       if (baseURL && request.url().startsWith(baseURL)) return;
       crossOrigin.push(request.url());
     });
-    await gotoBooted(page);
+    await agentSurface(page);
     await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
     expect(await page.evaluate(() => window.crossOriginIsolated)).toBe(true);
 

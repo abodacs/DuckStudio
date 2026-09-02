@@ -202,7 +202,7 @@ function pageMemoryOf(workspace: Workspace): PageMemory | undefined {
 }
 
 /** SECURITY.md: keep the badge copy exact. Upload accounting grows with Slice 2. */
-const NO_UPLOAD_BADGE = "0 Bytes of Dataset Uploaded";
+export const NO_UPLOAD_BADGE = "0 Bytes of Dataset Uploaded";
 
 let lastInput: Workspace | undefined;
 let lastOutput: WorkspaceViewModel | undefined;

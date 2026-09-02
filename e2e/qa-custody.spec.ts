@@ -2,24 +2,18 @@ import { expect, test } from "@playwright/test";
 import {
   agentSurface,
   HEALTHCARE_ACTIVATE,
-  HEALTHCARE_CANONICAL_SQL,
   invokeTool,
   type EnvelopeFailure,
   type EnvelopeSuccess,
 } from "./agent-surface";
+import { HEALTHCARE_PII_CANONICAL_SQL, SAAS_CHURN_CANONICAL_SQL } from "../src/demo-presets/canonical-sql";
+import { EVIDENCE_LIMITATIONS, MONITORED_TRANSPORTS } from "../src/dataset-custody/schemas";
 
 // --- QA spec: custody and safety denials, in the live page
 // (agent-system-design.md §15 scenarios 5, 6, 7, 12, 17). Every case here is
 // a denial or a disclosure the product promises: unsafe SQL never reaches the
 // worker, sensitive aggregates refuse small cohorts, raw rows never paint,
 // and the custody evidence stays honest about what it cannot prove. ---
-
-/** The pinned monitored transports (grilling 24). */
-const MONITORED_TRANSPORTS = ["fetch", "XMLHttpRequest", "sendBeacon", "WebSocket", "WebTransport"];
-const EVIDENCE_LIMITATIONS = [
-  "Application shell traffic is outside dataset-upload accounting.",
-  "Runtime interception is operational evidence, not a formal proof.",
-];
 
 test.describe("qa: sql isolation", () => {
   test("scenario 7: deny-listed statements are rejected before the worker, committing nothing", async ({
@@ -123,7 +117,7 @@ test.describe("qa: sensitive dataset custody", () => {
     await invokeTool(page, "duckdb_activate_dataset", HEALTHCARE_ACTIVATE);
     const analysis = (await invokeTool(page, "duckdb_execute_sql_to_canvas", {
       source: { kind: "dataset", id: "healthcare_pii" },
-      sql: HEALTHCARE_CANONICAL_SQL,
+      sql: HEALTHCARE_PII_CANONICAL_SQL,
       bindings: {},
       expectedRevision: 1,
       idempotencyKey: "qa-sensitive-analysis-01",
@@ -236,7 +230,7 @@ test.describe("qa: honest custody evidence", () => {
     });
     await invokeTool(page, "duckdb_execute_sql_to_canvas", {
       source: { kind: "dataset", id: "saas_churn" },
-      sql: "SELECT tickets, COUNT(*) AS accounts FROM saas_churn GROUP BY tickets ORDER BY tickets",
+      sql: SAAS_CHURN_CANONICAL_SQL,
       bindings: {},
       expectedRevision: 1,
       idempotencyKey: "qa-custody-analysis-01",
