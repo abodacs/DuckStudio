@@ -6,8 +6,9 @@ import type { EngineColumn, EngineRequest, EngineResponse, WarmResult } from "./
  * The browser engine worker (ADR 0002): owns the `AsyncDuckDB`, the
  * connection, and the in-memory preset tables. DuckDB-WASM is self-hosted
  * from `/duckdb/` (same-origin — COEP `require-corp` blocks third-party
- * responses; scripts/download-duckdb-wasm.sh pins the assets). The eh build
- * runs under the shipped COOP/COEP isolation; mvp is the fallback.
+ * responses; scripts/download-duckdb-wasm.sh pins the assets). No coi bundle
+ * is shipped, so `selectBundle` returns eh and execution stays
+ * single-threaded; mvp covers engines without wasm exceptions.
  *
  * The handler consumes custody decisions verbatim; this file adds no policy.
  */

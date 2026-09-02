@@ -16,9 +16,9 @@ TARGET_DIR="public/duckdb"
 PACKAGE="@duckdb/duckdb-wasm"
 VERSION="1.32.0"
 
-# The four runtime assets the engine loads (see duck-engine/worker.ts):
-# the mvp bundle is the non-isolated fallback, the eh bundle runs under the
-# shipped COOP/COEP isolation.
+# The four runtime assets the engine loads (see duck-engine/duckdb.worker.ts):
+# no coi/pthread bundle ships, so selectBundle returns eh and execution stays
+# single-threaded; mvp covers engines without wasm exceptions.
 EXPECTED_FILES=(
   "duckdb-mvp.wasm"
   "duckdb-eh.wasm"

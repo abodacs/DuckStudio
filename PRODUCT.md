@@ -8,7 +8,7 @@ Web.
 
 ## Stack
 
-Fresh Vite + React + TypeScript + Tailwind CSS scaffold. `@duckdb/duckdb-wasm` runs in a dedicated Web Worker; ECharts renders charts; the SQL view uses a highlighted textarea. The static build deploys to Cloudflare Pages with COOP/COEP headers. DuckDB-WASM, fonts, and chart assets are self-hosted because `Cross-Origin-Embedder-Policy: require-corp` makes third-party assets fragile and unnecessary.
+Fresh Vite + React + TypeScript + Tailwind CSS scaffold. `@duckdb/duckdb-wasm` runs in a dedicated Web Worker; charts render as hand-rolled SVG; the SQL view uses a highlighted textarea. The static build deploys to Cloudflare Pages with COOP/COEP headers. DuckDB-WASM and fonts are self-hosted because `Cross-Origin-Embedder-Policy: require-corp` makes third-party assets fragile and unnecessary.
 
 ## Users
 
