@@ -38,6 +38,14 @@ Two synthetic presets are generated in browser memory and activated by ID — `s
 
 Vite, React, TypeScript, Tailwind CSS, and `@tanstack/react-router`, with `@duckdb/duckdb-wasm` in a Web Worker, hand-rolled SVG charts in `src/live-canvas/`, and self-hosted fonts. Full stack and platform rationale: [`PRODUCT.md`](./PRODUCT.md).
 
+## Platform Boundaries
+
+- **Single-threaded by configuration** — only the self-hosted `eh` and `mvp` DuckDB-WASM bundles ship, no `coi`/pthread bundle, so `selectBundle` returns `eh` and queries run on one thread. The shipped COOP/COEP isolation exists for the document, not for DuckDB threading.
+- **WebAssembly memory ceiling** — the browser's wasm memory limit (4 GB, sometimes lower per browser) applies unmanaged; the effective query limit is the custody-clamped budget — a 5,000 ms execution deadline and a 10,000-row result cursor, enforced inside the worker.
+- **No remote reads** — the SQL inspector rejects external URLs/files, so there are no range-request reads of remote files; the only sources are the two registered presets (deny list: `docs/agent-system-design.md` §6).
+
+Engine lifecycle and the custody → engine seam: [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+
 ## Local Development
 
 Prerequisites, both defined and enforced:
