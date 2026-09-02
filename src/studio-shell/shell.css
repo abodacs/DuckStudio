@@ -42,6 +42,8 @@
   --color-edge-bright: rgb(255 255 255 / 16%);
   --color-accent: #00f2fe;
   --color-amber: #ffb347;
+  /* Slice 5 (grilling 53): failed/error accents get red — amber stays warnings-only. */
+  --color-red: #ff5c5c;
   --color-ink: #f4f7fa;
   --color-ink-secondary: #9aa4b2;
 
@@ -217,6 +219,126 @@ body {
 
 @utility badge-dot {
   @apply size-1.5 rounded-full bg-accent animate-pulse-dot;
+}
+
+/* Grilling 53.4: while an operation is queued/running the badge dot pulses
+   amber — one keyframe loop, painted from projectWorkspace().operations. */
+@keyframes badge-pulse-live {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.badge-dot-live {
+  background-color: var(--color-amber);
+  animation: badge-pulse-live 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge-dot-live {
+    animation: none;
+  }
+}
+
+/*
+ * Operation pills (grilling 53): status dot + exact tool name in mono.
+ * Amber + pulse while queued/running, grey when settled, red when failed.
+ */
+@utility chip-operation {
+  @apply inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs;
+}
+
+.chip-operation .op-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+}
+
+.chip-operation.op-queued,
+.chip-operation.op-running {
+  border-color: rgb(255 179 71 / 40%);
+  color: var(--color-amber);
+}
+
+.chip-operation.op-queued .op-dot,
+.chip-operation.op-running .op-dot {
+  background-color: var(--color-amber);
+  animation: badge-pulse-live 1.2s ease-in-out infinite;
+}
+
+.chip-operation.op-succeeded,
+.chip-operation.op-cancelled {
+  border-color: var(--color-edge);
+  color: var(--color-ink-secondary);
+}
+
+.chip-operation.op-succeeded .op-dot,
+.chip-operation.op-cancelled .op-dot {
+  background-color: var(--color-ink-secondary);
+}
+
+.chip-operation.op-failed {
+  border-color: rgb(255 92 92 / 45%);
+  color: var(--color-red);
+}
+
+.chip-operation.op-failed .op-dot {
+  background-color: var(--color-red);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip-operation .op-dot {
+    animation: none;
+  }
+}
+
+/* The expanded running/failed operation card; failed wires the red lamp. */
+@utility operation-card {
+  @apply mt-2 rounded-panel-inner border border-edge/60 bg-white/[0.03] px-3 py-2;
+}
+
+@utility operation-card-failed {
+  @apply border-red/40 bg-red/[0.04];
+}
+
+@utility chip-error {
+  @apply rounded-full border border-red/45 bg-red/[0.06] px-2 py-0.5 font-mono text-xs text-red;
+}
+
+/* Artifact cards (grilling 53): handle + source + the envelope's summary as
+   ≤3 KPI chips, rowCount, and the policy tag; selected wires the cyan lamp. */
+@utility artifact-card {
+  @apply card-core block w-full text-left state-shift press focus-ring;
+}
+
+@utility artifact-card-selected {
+  @apply border-accent/40 bg-accent/[0.05] shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_0_24px_-12px_rgb(0_242_254/0.35)];
+}
+
+.artifact-card-selected .mono-value:first-child {
+  color: var(--color-accent);
+}
+
+@utility chip-kpi {
+  @apply rounded-full border border-edge bg-white/[0.03] px-2 py-0.5 text-xs text-ink-secondary;
+}
+
+/* The suppression banner (grilling 51 item 2): amber warning, pinned copy. */
+@utility banner-suppressed {
+  @apply flex flex-col gap-1.5 rounded-panel-inner border border-amber/40 bg-amber/[0.05] px-3 py-2.5 text-xs text-ink;
+}
+
+@utility banner-suppressed-title {
+  @apply text-[13px] font-semibold text-amber;
+}
+
+/* Virtualized grid chrome: hairline header, machine cells. */
+@utility grid-header {
+  @apply sticky top-0 z-10 border-b border-edge bg-canvas/90 text-xs uppercase tracking-[0.08em] text-ink-secondary;
 }
 
 @utility chip-tool {

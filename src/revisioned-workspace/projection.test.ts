@@ -128,9 +128,10 @@ describe("the widened projection on an artifact-bearing workspace (Slice 5, gril
     if (!envelope.ok) throw new Error(`expected the churn analysis to commit: ${JSON.stringify(envelope.error)}`);
 
     const workspace = store.getSnapshot();
-    const summary = (envelope.data as { summary: { kpis: unknown[] } }).summary;
+    const summary = (envelope.data as { summary: { kpis: unknown[]; chart: unknown } }).summary;
     const vm = projectWorkspace(workspace);
     const card = vm.artifactCards[0];
+    if (!card) throw new Error("expected the committed artifact card");
     const view = projectArtifact(workspace, workspace.selectedArtifactId);
 
     // The envelope summary and the projection's artifact view are one object.

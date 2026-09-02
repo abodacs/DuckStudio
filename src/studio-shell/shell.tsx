@@ -1,9 +1,13 @@
-import { useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { flushSync } from "react-dom";
 import { healthcarePiiPreset, saasChurnPreset } from "../demo-presets/catalog";
 import { ToolNameSchema } from "../agent-control-plane/envelope";
+import type { OperationSummary } from "../revisioned-workspace/schemas";
 import { projectWorkspace } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
+import { cancelActiveOperation, selectArtifact } from "../live-canvas/human-commands";
+import { formatKpiValue } from "../live-canvas/kpi";
+import { consumeInitialView, resolvePostCommitView } from "../live-canvas/view-intent";
 import { CustodyView } from "../live-canvas/custody-view";
 import { DataGridView } from "../live-canvas/data-grid-view";
 import { InsightsView } from "../live-canvas/insights-view";
@@ -21,8 +25,43 @@ type ViewId = keyof typeof VIEWS;
 
 const VIEW_ORDER: readonly ViewId[] = ["insights", "grid", "sql_lineage", "custody"];
 
-/** The one tool the skeleton serves — the envelope's spelling, never a literal. */
-const GET_CONTEXT_TOOL = ToolNameSchema.enum.duckdb_get_context;
+/** Operation kind → the exact registered tool name (grilling 53). */
+const TOOL_FOR_KIND: Record<OperationSummary["kind"], string> = {
+  activate_dataset: ToolNameSchema.enum.duckdb_activate_dataset,
+  run_analysis: ToolNameSchema.enum.duckdb_execute_sql_to_canvas,
+};
+
+/** The static human message per error code (§9); never a stack trace. */
+const RECOVERY_MESSAGE: Record<string, string> = {
+  VALIDATION_ERROR: "The command's fields didn't match the schema; the agent corrects the named fields.",
+  STALE_REVISION: "The workspace moved since the command was prepared; the agent re-reads the delta and retries with the current revision.",
+  IDEMPOTENCY_CONFLICT: "That key was reused for a different command; a new key or an exact resend settles it.",
+  POLICY_DENIED: "The request would cross release policy — nothing was released.",
+  UNSAFE_SQL: "The statement violates execution policy; nothing ran.",
+  BUDGET_EXCEEDED: "The analysis crossed its budget; a narrower query fits.",
+  DATASET_UNAVAILABLE: "That dataset isn't active; activate a preset first.",
+  ARTIFACT_UNAVAILABLE: "That artifact doesn't exist or was evicted; the stream below lists what remains.",
+  OPERATION_CONFLICT: "Another operation is running; wait for it or cancel it.",
+  OPERATION_CANCELLED: "Cancelled at your request.",
+  UNSUPPORTED_CAPABILITY: "This browser lacks the capability; the simulator serves the tools.",
+  INTERNAL_ERROR: "The analysis failed inside the engine; read context and retry.",
+};
+
+/** Recovery guidance per code — the agent's legal next move (§9's recovery column). */
+const RECOVERY_MOVE: Record<string, string> = {
+  VALIDATION_ERROR: "Recovery: corrected fields, then resend.",
+  STALE_REVISION: "Recovery: re-read events from the expected revision, then retry with the current revision.",
+  IDEMPOTENCY_CONFLICT: "Recovery: new key, or resend the original command exactly.",
+  POLICY_DENIED: "Recovery: use the permitted presentation or safer SQL.",
+  UNSAFE_SQL: "Recovery: apply the blocked-construct details and rewrite the statement.",
+  BUDGET_EXCEEDED: "Recovery: narrow the query or request an allowed larger budget.",
+  DATASET_UNAVAILABLE: "Recovery: activate an available preset.",
+  ARTIFACT_UNAVAILABLE: "Recovery: read recent artifacts; recompute only if necessary.",
+  OPERATION_CONFLICT: "Recovery: wait for the running operation or cancel it.",
+  OPERATION_CANCELLED: "Recovery: reconfirm intent before retrying.",
+  UNSUPPORTED_CAPABILITY: "Recovery: use the simulator or follow the returned human action.",
+  INTERNAL_ERROR: "Recovery: read current context; no sensitive stack data is exposed.",
+};
 
 /**
  * Rev-0 preset-chip chrome (ticket 10). The chips keep their static cards
@@ -98,17 +137,51 @@ function switchView(setView: (next: ViewId) => void): (next: ViewId) => void {
   };
 }
 
+/** Measured runtime for a settled operation, read from its own timestamps. */
+function measuredRuntime(operation: OperationSummary): string | null {
+  if (operation.finishedAt === undefined) return null;
+  const ms = new Date(operation.finishedAt).getTime() - new Date(operation.startedAt).getTime();
+  return `${ms} ms`;
+}
+
 /**
  * Two-pane evidence chrome (PRD §7) rendered by the single projection owner
  * (ADR 0005 am3): the header and left-pane cards read `projectWorkspace`,
  * the right pane's views read `projectArtifact` — no second projection.
+ * Every card interaction is a named dispatch; tab clicks never dispatch.
  */
 export function WorkspaceShell() {
   const [activeView, setActiveView] = useState<ViewId>("insights");
   const vm = useWorkspace(projectWorkspace);
   const { View } = VIEWS[activeView];
   const tabRefs = useRef<Map<ViewId, HTMLButtonElement | null>>(new Map());
+  const appliedRuns = useRef<Set<string>>(new Set());
   const switchTo = switchView(setActiveView);
+
+  // The post-commit tab (grilling 52): the human adapter's captured
+  // `initialView` applies once per succeeded analysis, else §4.5 inference.
+  // Tab state stays canvas-local — this never dispatches.
+  useEffect(() => {
+    const latest = vm.operations[0];
+    if (
+      !latest ||
+      latest.kind !== "run_analysis" ||
+      latest.status !== "succeeded" ||
+      latest.artifactId === undefined ||
+      appliedRuns.current.has(latest.operationId)
+    ) {
+      return;
+    }
+    appliedRuns.current.add(latest.operationId);
+    const card = vm.artifactCards.find((entry) => entry.artifactId === latest.artifactId);
+    setActiveView(
+      resolvePostCommitView(consumeInitialView(), {
+        policy: card?.policy ?? "",
+        hasChart: card?.hasChart ?? false,
+        kpiCount: card?.kpis.length ?? 0,
+      }),
+    );
+  }, [vm.operations, vm.artifactCards]);
 
   const onTablistKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const current = VIEW_ORDER.indexOf(activeView);
@@ -134,6 +207,16 @@ export function WorkspaceShell() {
   const currentMove =
     vm.recentArtifacts.length > 0 ? 2 : vm.datasetState.kind === "active" ? 1 : 0;
 
+  // Grilling 53.4: the amber pulse is painted from the operation stream
+  // alone — `verifyCustody` and every read leave it untouched.
+  const operationsLive = vm.operations.some(
+    (operation) => operation.status === "queued" || operation.status === "running",
+  );
+  /** The newest running-or-failed operation auto-expands (grilling 53). */
+  const expandedOperation = vm.operations.find(
+    (operation) => operation.status === "running" || operation.status === "failed",
+  );
+
   return (
     <div className="relative flex h-dvh min-w-[960px] flex-col overflow-hidden">
       <div aria-hidden className="lamp-field" />
@@ -154,7 +237,7 @@ export function WorkspaceShell() {
             </span>
           </p>
           <span className="badge-zero-upload">
-            <span aria-hidden className="badge-dot" />
+            <span aria-hidden className={`badge-dot ${operationsLive ? "badge-dot-live" : ""}`} />
             {vm.badge}
           </span>
         </div>
@@ -214,6 +297,15 @@ export function WorkspaceShell() {
                 rev <span className="mono-value">{vm.revision}</span>
               </p>
               <p className="meta mt-1">dataset: {vm.datasetLine}</p>
+              {vm.datasetState.kind === "active" && (
+                <p className="meta mt-1">
+                  safe schema:{" "}
+                  <span className="mono-value">
+                    {vm.datasetState.safeSchemaCount} of {vm.datasetState.schemaCount}
+                  </span>{" "}
+                  columns
+                </p>
+              )}
               <h4 className="card-label mt-2.5">BUDGETS</h4>
               <dl className="meta mt-1 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3">
                 {Object.entries(vm.budgets).map(([knob, limit]) => (
@@ -225,36 +317,118 @@ export function WorkspaceShell() {
               </dl>
             </div>
           </div>
-          {/*
-            The one read, pinned idle (ticket 06): reads never take the
-            store's single-flight slot, so no workspace state backs this card
-            and nothing dispatches it until the agent channel lands — an
-            auto-dispatched proof-of-life read would flip the card with no
-            state change to show for it.
-          */}
           <div role="group" aria-label="Operations" className="card-operation rise mt-2" style={rise(220)}>
             <div className="card-operation-core">
-              <h3 className="card-label">OPERATION</h3>
-              <p className="meta mt-1.5 flex items-center gap-2">
-                <span className="chip-tool">{GET_CONTEXT_TOOL}</span>
-                <span>idle</span>
-              </p>
-              <p className="meta mt-1">
-                op <span className="mono-value">op_get_context</span>
-              </p>
+              <h3 className="card-label">OPERATIONS</h3>
+              {vm.operations.length === 0 ? (
+                <p className="meta mt-1.5">No operations yet — agent moves settle here.</p>
+              ) : (
+                <>
+                  <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Operation stream">
+                    {vm.operations.map((operation) => (
+                      <li key={operation.operationId} className={`chip-operation op-${operation.status}`}>
+                        <span aria-hidden className="op-dot" />
+                        <span className="font-mono">{TOOL_FOR_KIND[operation.kind]}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {expandedOperation && (
+                    <div className={`operation-card ${expandedOperation.status === "failed" ? "operation-card-failed" : ""}`}>
+                      <p className="meta flex items-center gap-2">
+                        <span className={`chip-operation op-${expandedOperation.status}`}>
+                          <span aria-hidden className="op-dot" />
+                          <span className="font-mono">{TOOL_FOR_KIND[expandedOperation.kind]}</span>
+                        </span>
+                        <span className="mono-value">{expandedOperation.status}</span>
+                        {measuredRuntime(expandedOperation) && (
+                          <span aria-hidden> · </span>
+                        )}
+                        {measuredRuntime(expandedOperation) && (
+                          <span className="mono-value">{measuredRuntime(expandedOperation)}</span>
+                        )}
+                      </p>
+                      <p className="meta mt-1">
+                        op <span className="mono-value">{expandedOperation.operationId}</span>
+                        {expandedOperation.sourceId && (
+                          <>
+                            <span aria-hidden> · </span>source <span className="mono-value">{expandedOperation.sourceId}</span>
+                          </>
+                        )}
+                        {expandedOperation.artifactId && (
+                          <>
+                            <span aria-hidden> · </span>artifact <span className="mono-value">{expandedOperation.artifactId}</span>
+                          </>
+                        )}
+                      </p>
+                      {expandedOperation.status === "failed" ? (
+                        <>
+                          <p className="mt-1.5 flex items-center gap-2">
+                            <span className="chip-error">{expandedOperation.errorCode}</span>
+                            <span className="meta">{RECOVERY_MESSAGE[expandedOperation.errorCode ?? ""] ?? ""}</span>
+                          </p>
+                          <p className="meta mt-1">{RECOVERY_MOVE[expandedOperation.errorCode ?? ""] ?? ""}</p>
+                        </>
+                      ) : (
+                        (expandedOperation.status === "running" || expandedOperation.status === "queued") && (
+                          <p className="mt-1.5">
+                            <button
+                              type="button"
+                              className="button-recovery"
+                              onClick={() => cancelActiveOperation(vm.revision)}
+                            >
+                              Cancel
+                            </button>
+                          </p>
+                        )
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
           <div role="group" aria-label="Artifact stream" className="card-panel rise mt-2" style={rise(280)}>
             <div className="card-core">
               <h3 className="card-label">ARTIFACTS</h3>
-              {vm.recentArtifacts.length === 0 ? (
+              {vm.artifactCards.length === 0 ? (
                 <p className="meta mt-1.5">No artifacts — operations settle here as immutable artifacts.</p>
               ) : (
-                <ul className="meta mt-1.5 space-y-1">
-                  {vm.recentArtifacts.map((artifact) => (
-                    <li key={artifact.artifactId} className="mono-value">
-                      {artifact.artifactId}
-                      {artifact.evicted ? <span className="meta"> · evicted</span> : null}
+                <ul className="mt-1.5 space-y-1.5">
+                  {vm.artifactCards.map((card) => (
+                    <li key={card.artifactId}>
+                      {card.evicted ? (
+                        // Grilling 32/51 item 4: eviction discloses; the
+                        // metadata remains, the rows do not.
+                        <p className="meta">
+                          <span className="mono-value">{card.artifactId}</span> released from retention — run the
+                          analysis again
+                        </p>
+                      ) : (
+                        <button
+                          type="button"
+                          className={`artifact-card ${card.selected ? "artifact-card-selected" : ""}`}
+                          aria-pressed={card.selected}
+                          onClick={() => selectArtifact(card.artifactId, vm.revision)}
+                        >
+                          <span className="mono-value block text-sm">{card.artifactId}</span>
+                          <span className="meta mt-0.5 block">
+                            source {card.sourceId} · {card.rowCount.toLocaleString("en-US")} rows ·{" "}
+                            {card.releaseStatus}
+                          </span>
+                          <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                            {card.kpis.map((kpi) => (
+                              <span key={kpi.column} className="chip-kpi">
+                                {kpi.label} <span className="mono-value">{formatKpiValue(kpi.value, kpi.format)}</span>
+                              </span>
+                            ))}
+                            <span
+                              className={card.policy === "sensitive_aggregate_only" ? "chip-policy-sensitive" : "chip-policy-public"}
+                            >
+                              {card.policy}
+                            </span>
+                          </span>
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
