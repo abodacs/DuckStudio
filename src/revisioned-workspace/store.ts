@@ -607,23 +607,24 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     }
     if (cancelRequested) return settleCancelled(operationId);
 
-    // cohort probe (kernel-authored SQL, executed as its own decision)
-    const minCohortCount =
-      source.policy === "sensitive_aggregate_only"
-        ? await probeCohortCount(source, input.sql, input.bindings, sourceRowCount)
-        : null;
-    if (cancelRequested) return settleCancelled(operationId);
-
-    // release confirm (custody) — the point of no return
-    const release = kernel.decideRelease({
+    // release confirm (custody) — the point of no return. One kernel entry
+    // owns the differencing guard and the decision (CONTEXT.md: the kernel's
+    // pieces are never invoked directly); the store only runs its probe.
+    const release = await kernel.confirmRelease({
       source,
-      sql: authorized.decision.positionalSql,
+      decision: authorized.decision,
+      sql: input.sql,
+      bindings: input.bindings,
       resultSchema: result.schema,
-      minCohortCount,
-      redactedBindingKeys: authorized.decision.redactedBindingKeys,
       materializedRows: result.metrics.materializedRows,
-      budget: authorized.decision.budget,
+      sourceRowCount,
+      executeProbe: async (probeDecision) => {
+        const read = await engine.execute(probeDecision);
+        const value = read.batches[0]?.values.min_cohort?.[0];
+        return value === undefined || value === null ? null : Number(value);
+      },
     });
+    if (cancelRequested) return settleCancelled(operationId);
     if (!release.ok) {
       await engine.dropRelation(identity.relationName).catch(() => undefined);
       return settleFailure(operationId, input.idempotencyKey, fingerprint, release.failure);
@@ -783,30 +784,6 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       cacheSet(key, fingerprint, envelope);
     }
     return envelope;
-  }
-
-  async function probeCohortCount(
-    source: GovernedSource,
-    sql: string,
-    bindings: RunAnalysisInput["bindings"],
-    sourceRowCount: number,
-  ): Promise<number | null> {
-    const plan = kernel.inspectStatement(sql, [source.relation]);
-    if (!plan.hasAggregate) return null;
-    if (plan.hasGrouping) {
-      if (plan.groupExpressions.length === 0) return null;
-      const probeSql = kernel.cohortProbeSql(source.relation, plan.groupExpressions, plan.whereExpression);
-      const probe = kernel.authorize({ source, sql: probeSql, bindings });
-      if (!probe.ok) return null;
-      try {
-        const read = await engine.execute(probe.decision);
-        return Number(read.batches[0]?.values.min_cohort?.[0] ?? -1);
-      } catch {
-        return null;
-      }
-    }
-    // A filtered global aggregate has no provable cohort — denied (differencing guard).
-    return plan.whereExpression === null ? sourceRowCount : null;
   }
 
   function classifyResultSchema(source: GovernedSource, schema: ExecutionResult["schema"]): ResultColumn[] {

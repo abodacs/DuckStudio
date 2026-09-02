@@ -14,9 +14,11 @@ import type { PresetMetadata } from "../../demo-presets/schemas";
  * materialized in DuckDB. Cohorts below `minimumCohortSize` are
  * `POLICY_DENIED` before any commit could exist.
  *
- * This composition is the slice's headless seam: authorize → execute the
- * decision verbatim → cohort probe (kernel-authored SQL, executed as its
- * own decision) → decideRelease. Slice 3's workspace adopts it.
+ * This composition is the slice's headless seam and the workspace's: the
+ * store drives the same `authorize → execute → confirmRelease` pipeline,
+ * handing the kernel a probe executor backed by its engine. Here the
+ * executor is the node runtime; the differencing guard itself lives only in
+ * the kernel.
  */
 
 let runtime: NodeDuckRuntime;
@@ -35,33 +37,6 @@ type AnalysisResult =
   | { readonly ok: true; readonly decision: AuthorizedDecision; readonly release: ReleaseDecision }
   | { readonly ok: false; readonly failure: CustodyFailure };
 
-/**
- * Cohort semantics (§5.1): grouped aggregates probe `MIN(count per group)`
- * with kernel-authored SQL that carries the statement's own WHERE filter and
- * named bindings; an unfiltered global aggregate's single cohort is the
- * whole relation (row count from the preset metadata); a filtered global
- * aggregate has no provable cohort and is denied — the one-day build does
- * not claim differencing protection.
- */
-async function cohortCountFor(
-  dataset: PresetMetadata,
-  sql: string,
-  relation: string,
-  bindings: Record<string, BindingValue>,
-): Promise<number | null> {
-  const plan = kernel.inspectStatement(sql, [relation]);
-  if (!plan.hasAggregate) return null;
-  if (plan.hasGrouping) {
-    if (plan.groupExpressions.length === 0) return null;
-    const probeSql = kernel.cohortProbeSql(relation, plan.groupExpressions, plan.whereExpression);
-    const probe = kernel.authorize({ source: governedSource(dataset), sql: probeSql, bindings });
-    if (!probe.ok) return null;
-    const read = await runtime.runBounded(probe.decision.positionalSql, probe.decision.positionalBindings, 1);
-    return Number(read.rows[0]?.min_cohort ?? -1);
-  }
-  return plan.whereExpression === null ? dataset.rowCount : null;
-}
-
 async function analyze(
   dataset: PresetMetadata,
   sql: string,
@@ -72,15 +47,19 @@ async function analyze(
   const decision = authorized.decision;
   const read = await runtime.runBounded(decision.positionalSql, decision.positionalBindings, decision.budget.resultRows);
   expect(read.executionMs).toBeLessThanOrEqual(decision.budget.executionMs);
-  const minCohortCount = await cohortCountFor(dataset, sql, decision.authorizedRelation, bindings);
-  const released = kernel.decideRelease({
+  const released = await kernel.confirmRelease({
     source: governedSource(dataset),
-    sql: decision.positionalSql,
+    decision,
+    sql,
+    bindings,
     resultSchema: read.schema,
-    minCohortCount,
-    redactedBindingKeys: decision.redactedBindingKeys,
     materializedRows: read.rows.length,
-    budget: decision.budget,
+    sourceRowCount: dataset.rowCount,
+    executeProbe: async (probeDecision) => {
+      const probe = await runtime.runBounded(probeDecision.positionalSql, probeDecision.positionalBindings, 1);
+      const value = probe.rows[0]?.min_cohort;
+      return value === undefined || value === null ? null : Number(value);
+    },
   });
   if (!released.ok) return { ok: false, failure: released.failure };
   return { ok: true, decision, release: released.release };

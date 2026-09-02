@@ -60,6 +60,24 @@ export type ReleaseResult =
   | { readonly ok: true; readonly release: ReleaseDecision }
   | { readonly ok: false; readonly failure: CustodyFailure };
 
+/** Runs the kernel's authorized cohort probe; returns min_cohort, null when the probe read nothing. */
+export type CohortProbeExecutor = (decision: AuthorizedDecision) => Promise<number | null>;
+
+export interface ConfirmReleaseInput {
+  readonly source: GovernedSource;
+  /** The authorized decision from {@link CustodyKernel.authorize}; its budget and redactions carry through. */
+  readonly decision: AuthorizedDecision;
+  /** The original statement, for the differencing guard's shape classification. */
+  readonly sql: string;
+  /** The named bindings, re-authorized for the probe statement. */
+  readonly bindings: Readonly<Record<string, BindingValue>>;
+  readonly resultSchema: readonly { readonly name: string; readonly type: string }[];
+  readonly materializedRows: number;
+  /** The governed relation's row count — an unfiltered global aggregate's cohort. */
+  readonly sourceRowCount: number;
+  readonly executeProbe: CohortProbeExecutor;
+}
+
 /** Statement shape the release pipeline and the cohort probe compose from. */
 export interface StatementPlan {
   readonly hasAggregate: boolean;
@@ -78,6 +96,16 @@ export interface CustodyKernel {
   /** Statement shape, from the same inspection authorize ran — the probe composer's input. */
   inspectStatement(sql: string, authorizedRelations: readonly string[]): StatementPlan;
   decideRelease(input: ReleaseInput): ReleaseResult;
+  /**
+   * §5.1 release confirm — the differencing guard and the release decision in
+   * one entry (CONTEXT.md: the kernel's pieces are never invoked directly).
+   * Callers authorize before the worker sees SQL, execute and materialize,
+   * then confirm here; the guard authors and authorizes the cohort probe
+   * itself and hands `executeProbe` the authorized probe to run. A probe that
+   * fails or reads nothing proves no cohort, and a sensitive aggregate
+   * without a provable cohort is denied.
+   */
+  confirmRelease(input: ConfirmReleaseInput): Promise<ReleaseResult>;
   /** Registers a payload derived from preset relations so transports can account for it. */
   noteDatasetPayload(payload: unknown): void;
   /** Byte count when the payload is a registered dataset payload, else 0. */
@@ -192,6 +220,38 @@ function inspectStatementShape(sql: string, authorizedRelations: readonly string
 }
 
 /**
+ * §5.1 differencing guard, one home: grouped aggregates probe
+ * `MIN(count per group)` with kernel-authored SQL re-authorized as its own
+ * decision; an unfiltered global aggregate's single cohort is the whole
+ * relation; a filtered global aggregate has no provable cohort — denied.
+ * A probe that cannot run (execution or authorization failure) proves no
+ * cohort and is denied the same way.
+ */
+async function probeCohortCount(
+  kernel: CustodyKernel,
+  source: GovernedSource,
+  sql: string,
+  bindings: Readonly<Record<string, BindingValue>>,
+  sourceRowCount: number,
+  executeProbe: CohortProbeExecutor,
+): Promise<number | null> {
+  const plan = kernel.inspectStatement(sql, [source.relation]);
+  if (!plan.hasAggregate) return null;
+  if (plan.hasGrouping) {
+    if (plan.groupExpressions.length === 0) return null;
+    const probeSql = kernel.cohortProbeSql(source.relation, plan.groupExpressions, plan.whereExpression);
+    const probe = kernel.authorize({ source, sql: probeSql, bindings });
+    if (!probe.ok) return null;
+    try {
+      return await executeProbe(probe.decision);
+    } catch {
+      return null;
+    }
+  }
+  return plan.whereExpression === null ? sourceRowCount : null;
+}
+
+/**
  * The governed view of a preset dataset: its relation is the datasetId the
  * worker materialized it under (grilling 23). Slice 3's artifact sources
  * build their GovernedSource from the committed artifact instead.
@@ -213,7 +273,7 @@ export function createCustodyKernel(now: () => string = () => new Date().toISOSt
   const datasetPayloads = new WeakSet<object>();
   const datasetPayloadStrings = new Set<string>();
 
-  return {
+  const api: CustodyKernel = {
     authorize(input) {
       const { source, sql, bindings, requestedBudget } = input;
       const inspection = inspectSql({
@@ -351,6 +411,24 @@ export function createCustodyKernel(now: () => string = () => new Date().toISOSt
       };
     },
 
+    async confirmRelease(input) {
+      const { source, decision, sql, bindings, resultSchema, materializedRows, sourceRowCount, executeProbe } = input;
+      // The differencing guard runs only where its verdict is release-relevant.
+      const minCohortCount =
+        source.policy === "sensitive_aggregate_only"
+          ? await probeCohortCount(api, source, sql, bindings, sourceRowCount, executeProbe)
+          : null;
+      return api.decideRelease({
+        source,
+        sql: decision.positionalSql,
+        resultSchema,
+        minCohortCount,
+        redactedBindingKeys: decision.redactedBindingKeys,
+        materializedRows,
+        budget: decision.budget,
+      });
+    },
+
     noteDatasetPayload(payload) {
       if (typeof payload === "string") {
         datasetPayloadStrings.add(payload);
@@ -397,6 +475,8 @@ export function createCustodyKernel(now: () => string = () => new Date().toISOSt
       });
     },
   };
+
+  return api;
 }
 
 /**
