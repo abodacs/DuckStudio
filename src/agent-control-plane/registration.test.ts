@@ -6,11 +6,11 @@ import {
   CompiledEnvelopeSuccess,
   EXECUTE_SQL_TO_CANVAS_TOOL_DESCRIPTION,
   GET_CONTEXT_TOOL_DESCRIPTION,
-  GetContextInputSchema,
   ActivateDatasetInputSchema,
   RunAnalysisInputSchema,
   VERIFY_ZERO_EGRESS_TOOL_DESCRIPTION,
-  VerifyCustodyInputSchema,
+  deriveGetContextInputJsonSchema,
+  deriveVerifyCustodyInputJsonSchema,
 } from "./envelope";
 import { CANONICAL_TOOL_NAMES, registerTools } from "./registration";
 import { invokeTool } from "./simulator";
@@ -27,10 +27,10 @@ afterEach(() => {
 });
 
 const DERIVED_SCHEMAS: Record<string, z.core.JSONSchema.BaseSchema> = {
-  duckdb_get_context: z.toJSONSchema(GetContextInputSchema, { io: "input" }),
+  duckdb_get_context: deriveGetContextInputJsonSchema(),
   duckdb_activate_dataset: z.toJSONSchema(ActivateDatasetInputSchema, { io: "input" }),
   duckdb_execute_sql_to_canvas: z.toJSONSchema(RunAnalysisInputSchema, { io: "input" }),
-  duckdb_verify_zero_egress: z.toJSONSchema(VerifyCustodyInputSchema, { io: "input" }),
+  duckdb_verify_zero_egress: deriveVerifyCustodyInputJsonSchema(),
 };
 
 const DESCRIPTIONS: Record<string, string> = {

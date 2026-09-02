@@ -554,7 +554,8 @@ Response data includes `datasetId`, safe `schemaDigest`, `rowCount`, `byteSizeEs
     "bindings": {
       "type": "object",
       "additionalProperties": { "type": ["string", "number", "boolean", "null"] },
-      "maxProperties": 40
+      "maxProperties": 40,
+      "default": {}
     },
     "presentation": {
       "type": "object",
@@ -610,12 +611,14 @@ Response data includes `datasetId`, safe `schemaDigest`, `rowCount`, `byteSizeEs
     "expectedRevision": { "type": "integer", "minimum": 0 },
     "idempotencyKey": { "type": "string", "minLength": 8, "maxLength": 80 }
   },
-  "required": ["source", "sql", "bindings", "expectedRevision", "idempotencyKey"],
+  "required": ["source", "sql", "expectedRevision", "idempotencyKey"],
   "additionalProperties": false
 }
 ```
 
 Runtime validation enforces this same contract; browser-visible schema is discoverability, not the trust boundary.
+
+`bindings` is optional with default `{}`: a statement with no named parameters omits it. Each `budget` axis is optional; an omitted axis falls back to the workspace default (§4.6), and a supplied axis is honored when stricter or clamped with `BUDGET_CLAMPED`.
 
 `initialView` is a request to the human evidence plane for which tab to open after commit. It is not stored on the artifact. If omitted, inference in §4.5 chooses the tab. `grid` as `initialView` is ignored when policy forbids a grid.
 
@@ -754,7 +757,7 @@ The four tools are audited against the 2026 `modern-web-guidance` WebMCP best pr
 - **One tool = one function.** Four tools, no overlap: `duckdb_get_context` reads workspace state, `duckdb_activate_dataset` and `duckdb_execute_sql_to_canvas` execute mutations, `duckdb_verify_zero_egress` reads evidence. Reads and mutations never collide on intent.
 - **Execution vs. initiation.** All four names use execution verbs (`get`, `activate`, `execute`, `verify`). There is no "start-process" tool; the human-only mutations (`selectArtifact`, `cancelActiveOperation`) are workspace commands, not WebMCP tools.
 - **Positive language, negative only for hard invariants.** Descriptions state what each tool does. "never returns raw rows" and "not a formal proof" are the two negative phrases kept, because they are non-negotiable safety invariants, not usage discouragement.
-- **Strict-in-code, loose-in-schema.** §8 already declares "browser-visible schema is discoverability, not the trust boundary." Runtime `.parse()` is the seam; field-level `details` give the model enough to self-correct (§9).
+- **Strict-in-code, advertised conditionals.** §8 already declares "browser-visible schema is discoverability, not the trust boundary." Runtime `.parse()` is the seam; field-level `details` give the model enough to self-correct (§9). The advertised §8.1/§8.4 schemas carry §8's `allOf`/`if`/`then` scoped-dependency conditionals verbatim, so a client validator rejects a scope missing its id before a wasted call, while the `.superRefine` refinement stays the enforcement seam. Code-side bounds §8 states as schema keywords (`maxProperties: 40`) are still not duplicated into the advertised copy.
 - **Specific types, natural-language choices.** `enum` is used for every choice the agent must pick from (`scope`, dataset IDs, formats, chart types, view tabs). No ambiguous numeric IDs.
 - **Raw user input.** `run_analysis` accepts `sql` and `bindings` as submitted; the agent is not asked to transform or compute.
 - **Graceful failure and recovery.** Every error code in §9 maps to an executable recovery action, matching the four failure modes (wrong state, invalid parameter, unexpected return, business-rule violation).
@@ -840,7 +843,7 @@ Unavailable human gestures appear in `nextActions` as `{ kind: "human_action", a
 ### Bootstrap and analyze
 
 1. Call `duckdb_get_context({ scope: "summary" })`.
-2. If the desired local dataset is active, call `duckdb_execute_sql_to_canvas` with its ID, returned revision, unique key, bounded SQL, and bindings. Omit `presentation` unless a specific view is required.
+2. If the desired local dataset is active, call `duckdb_execute_sql_to_canvas` with its ID, returned revision, unique key, bounded SQL, and bindings when the statement names parameters. Omit `presentation` unless a specific view is required.
 3. Use the returned artifact ID for explanation or refinement. Do not request rows.
 
 ### Activate then analyze

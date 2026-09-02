@@ -5,32 +5,32 @@ import {
   EXECUTE_SQL_TO_CANVAS_TOOL_DESCRIPTION,
   GET_CONTEXT_TOOL_DESCRIPTION,
   ActivateDatasetInputSchema,
-  GetContextInputSchema,
   RunAnalysisInputSchema,
   VERIFY_ZERO_EGRESS_TOOL_DESCRIPTION,
   VerifyCustodyInputSchema,
+  deriveGetContextInputJsonSchema,
+  deriveVerifyCustodyInputJsonSchema,
 } from "../envelope";
 
 /**
  * The JSON-Schema strictness contract (§8, ADR 0004 am1/am4; ticket 46):
- * `z.toJSONSchema` over the one schema module must reproduce the §8
- * canonical input schemas — a diff fails this test — with the §8.6 adopted
- * descriptions riding each parameter. Two divergences from the doc's human
- * copy are deliberate (§8.6 strict-in-code/loose-in-schema):
- *
- * 1. `allOf`/`if`/`then` conditionals are absent — the `.superRefine`
- *    refinement is the seam, the advertised schema stays flat;
- * 2. code-side refine bounds (≤40 bindings) are absent — runtime `.parse()`
- *    enforces them, discoverability does not duplicate every rule.
+ * the schema module's derivation must reproduce the §8 canonical input
+ * schemas — a diff fails this test — with the §8.6 adopted descriptions
+ * riding each parameter. The §8.1/§8.4 `allOf`/`if`/`then` scoped-dependency
+ * conditionals ride the advertised copy verbatim; the runtime `.superRefine`
+ * refinement stays the enforcement seam (§8.6). One divergence from the
+ * doc's human copy remains deliberate: code-side refine bounds (≤40
+ * bindings) are absent — runtime `.parse()` enforces them, discoverability
+ * does not duplicate every rule.
  */
 
 // Tool inputs are advertised to agents, so the derivation uses `io: "input"`:
 // optional-with-default fields stay optional instead of joining `required`.
 const DERIVED = {
-  duckdb_get_context: z.toJSONSchema(GetContextInputSchema, { io: "input" }),
+  duckdb_get_context: deriveGetContextInputJsonSchema(),
   duckdb_activate_dataset: z.toJSONSchema(ActivateDatasetInputSchema, { io: "input" }),
   duckdb_execute_sql_to_canvas: z.toJSONSchema(RunAnalysisInputSchema, { io: "input" }),
-  duckdb_verify_zero_egress: z.toJSONSchema(VerifyCustodyInputSchema, { io: "input" }),
+  duckdb_verify_zero_egress: deriveVerifyCustodyInputJsonSchema(),
 } as const;
 
 /** Tool descriptions, §8 verbatim — the ≤500-cap audit rides the same table. */
@@ -98,13 +98,21 @@ describe("duckdb_get_context JSON Schema strictness (§8.1)", () => {
       },
       required: ["scope"],
       additionalProperties: false,
+      allOf: [
+        {
+          if: { properties: { scope: { const: "schema" } }, required: ["scope"] },
+          // JSON Schema Draft 2020-12 conditional keyword, not a thenable.
+          // oxlint-disable-next-line unicorn/no-thenable
+          then: { required: ["datasetId"] },
+        },
+        {
+          if: { properties: { scope: { const: "artifact" } }, required: ["scope"] },
+          // JSON Schema Draft 2020-12 conditional keyword, not a thenable.
+          // oxlint-disable-next-line unicorn/no-thenable
+          then: { required: ["artifactId"] },
+        },
+      ],
     });
-  });
-
-  it("deliberately omits the §8.1 allOf/if/then copy — the refinement is the seam (§8.6)", () => {
-    expect(DERIVED.duckdb_get_context).not.toHaveProperty("allOf");
-    expect(DERIVED.duckdb_get_context).not.toHaveProperty("if");
-    expect(DERIVED.duckdb_get_context).not.toHaveProperty("then");
   });
 });
 
@@ -171,7 +179,8 @@ describe("duckdb_execute_sql_to_canvas JSON Schema strictness (§8.3)", () => {
           type: "object",
           propertyNames: { type: "string" },
           additionalProperties: { type: ["string", "number", "boolean", "null"] },
-          description: "Named parameter values supplied separately from the SQL; sensitive values are redacted downstream.",
+          default: {},
+          description: "Named parameter values supplied separately from the SQL; pass {} if none; sensitive values are redacted downstream.",
         },
         presentation: {
           type: "object",
@@ -276,9 +285,8 @@ describe("duckdb_execute_sql_to_canvas JSON Schema strictness (§8.3)", () => {
               description: "Maximum chart points.",
             },
           },
-          required: ["executionMs", "resultRows", "chartPoints"],
           additionalProperties: false,
-          description: "Stricter budgets are honored; requests above the workspace default are clamped and disclosed.",
+          description: "Stricter budgets are honored; omitted axes fall back to workspace defaults; above-default requests are clamped and disclosed.",
         },
         expectedRevision: {
           ...UNBOUNDED_INT,
@@ -291,7 +299,7 @@ describe("duckdb_execute_sql_to_canvas JSON Schema strictness (§8.3)", () => {
           description: "Unique key for this mutation; replaying it exactly returns the original envelope.",
         },
       },
-      required: ["source", "sql", "bindings", "expectedRevision", "idempotencyKey"],
+      required: ["source", "sql", "expectedRevision", "idempotencyKey"],
       additionalProperties: false,
       description:
         "Run one bounded read-only analysis and create, present, and select one immutable artifact atomically.",
@@ -331,12 +339,22 @@ describe("duckdb_verify_zero_egress JSON Schema strictness (§8.4)", () => {
       },
       required: ["scope"],
       additionalProperties: false,
+      allOf: [
+        {
+          if: { properties: { scope: { const: "operation" } }, required: ["scope"] },
+          // JSON Schema Draft 2020-12 conditional keyword, not a thenable.
+          // oxlint-disable-next-line unicorn/no-thenable
+          then: { required: ["operationId"] },
+        },
+        {
+          if: { properties: { scope: { const: "artifact" } }, required: ["scope"] },
+          // JSON Schema Draft 2020-12 conditional keyword, not a thenable.
+          // oxlint-disable-next-line unicorn/no-thenable
+          then: { required: ["artifactId"] },
+        },
+      ],
       description: "Read a scoped, timestamped custody evidence snapshot with its limitations.",
     });
-  });
-
-  it("deliberately omits the §8.4 allOf/if/then copy — the refinement is the seam (§8.6)", () => {
-    expect(DERIVED.duckdb_verify_zero_egress).not.toHaveProperty("allOf");
   });
 
   it("keeps the §8.6 negative safety phrase in the tool description", () => {
@@ -376,6 +394,26 @@ describe("§8 canonical example inputs parse (ticket 44)", () => {
         sinceRevision: 3,
       }),
     ).toBeTruthy();
+  });
+
+  it("defaults omitted bindings to {} and accepts a partial budget (§8.3)", () => {
+    expect(
+      RunAnalysisInputSchema.parse({
+        source: { kind: "dataset", id: "saas_churn" },
+        sql: "SELECT COUNT(*) AS accounts FROM saas_churn",
+        expectedRevision: 0,
+        idempotencyKey: "canonical-03",
+      }).bindings,
+    ).toEqual({});
+    expect(
+      RunAnalysisInputSchema.parse({
+        source: { kind: "dataset", id: "saas_churn" },
+        sql: "SELECT COUNT(*) AS accounts FROM saas_churn",
+        budget: { executionMs: 5000 },
+        expectedRevision: 0,
+        idempotencyKey: "canonical-04",
+      }).budget,
+    ).toEqual({ executionMs: 5000 });
   });
 });
 
