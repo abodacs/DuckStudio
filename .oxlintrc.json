@@ -5,7 +5,11 @@
         "src/revisioned-workspace/schemas.ts",
         "src/agent-control-plane/envelope.ts",
         "src/agent-control-plane/registration.ts",
-        "src/revisioned-workspace/projection.ts"
+        "src/revisioned-workspace/projection.ts",
+        "src/dataset-custody/schemas.ts",
+        "src/dataset-custody/sql-inspector.ts",
+        "src/dataset-custody/kernel.ts",
+        "src/dataset-custody/egress.ts"
       ],
       "rules": {
         "no-explicit-any": "error",

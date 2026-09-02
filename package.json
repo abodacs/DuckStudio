@@ -10,10 +10,11 @@
   "scripts": {
     "dev": "vite",
     "lint": "oxlint . --deny-warnings",
-    "lint:strict": "oxlint --deny-warnings src/revisioned-workspace/schemas.ts src/revisioned-workspace/envelope.ts src/agent-control-plane/envelope.ts src/agent-control-plane/registration.ts src/revisioned-workspace/projection.ts",
+    "lint:strict": "oxlint --deny-warnings src/revisioned-workspace/schemas.ts src/revisioned-workspace/envelope.ts src/agent-control-plane/envelope.ts src/agent-control-plane/registration.ts src/revisioned-workspace/projection.ts src/dataset-custody/schemas.ts src/dataset-custody/sql-inspector.ts src/dataset-custody/kernel.ts src/dataset-custody/egress.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "vite build",
+    "duckdb:download": "bash scripts/download-duckdb-wasm.sh",
+    "build": "bash -c '[ -f public/duckdb/duckdb-eh.wasm ] || { echo \"ERROR: public/duckdb/ runtime assets are missing — run: pnpm duckdb:download\" >&2; exit 1; }' && vite build",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "zod": "4.5.4"
   },
   "devDependencies": {
+    "@duckdb/duckdb-wasm": "1.32.0",
     "@duckdb/node-api": "1.5.5-r.4",
     "@playwright/test": "1.62.1",
     "@tailwindcss/vite": "4.3.3",

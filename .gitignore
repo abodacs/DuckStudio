@@ -31,3 +31,5 @@ test-results/
 
 # Zcode artifacts
 .zcode/
+# Self-hosted DuckDB-WASM runtime assets (downloaded by scripts/download-duckdb-wasm.sh)
+public/duckdb/

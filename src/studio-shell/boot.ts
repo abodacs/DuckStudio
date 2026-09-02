@@ -3,6 +3,9 @@ import { StrictMode, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { workspaceStore } from "../revisioned-workspace/store";
 import { nativeModelContextAvailable, registerTools } from "../agent-control-plane/registration";
+import { warmEngine } from "../duck-engine/worker";
+import { armEgressMonitoring } from "../dataset-custody/egress";
+import { custodyKernel } from "../dataset-custody/kernel";
 import type { WorkspaceRouter } from "./router";
 
 /** Mounted app handle returned by {@link start} (ADR 0001 am5). */
@@ -14,13 +17,25 @@ export interface App {
  * The ordered startup contract (ARCHITECTURE.md; ADR 0001 am6): `boot`
  * executes exactly these steps, in this order — the plan is the control
  * flow, so the body and the promise cannot drift. Slice 2 inserts `"warm"`
- * between `"gate"` and `"mount"` (ADR 0007). The workspace store is not a
- * step: it is the domain module's exported binding, which exists before any
- * step runs.
+ * between `"gate"` and `"mount"` (ADR 0007): the worker warms and egress
+ * monitoring arms before anything mounts, so no command can outrun a warm
+ * engine and zero dataset uploads are provable from first paint (ADR 0002
+ * am3, grilling 24). The workspace store is not a step: it is the domain
+ * module's exported binding, which exists before any step runs.
  */
-export const BOOT_PLAN = ["gate", "mount", "register"] as const;
+export const BOOT_PLAN = ["gate", "warm", "mount", "register"] as const;
 
 export type BootStep = (typeof BOOT_PLAN)[number];
+
+/**
+ * The warm step (Slice 2): egress interception arms first — synchronously,
+ * in the same slot — then the DuckDB worker warms (ADR 0007: warm on first
+ * paint, so first analysis pays no cold start).
+ */
+export async function warmDefault(): Promise<void> {
+  armEgressMonitoring(globalThis, custodyKernel);
+  await warmEngine();
+}
 
 /** Injectable seams so `start` can be driven headlessly (ADR 0001 am6). */
 export interface StartInjection {
@@ -28,6 +43,8 @@ export interface StartInjection {
   container?: Element;
   /** Defaults to the WebMCP secure-context gate read. */
   gate?: () => boolean;
+  /** Defaults to {@link warmDefault}; tests inject a no-op. */
+  warm?: () => Promise<void>;
 }
 
 /**
@@ -71,8 +88,7 @@ export function mountInto(container: Element, router: WorkspaceRouter): Root {
  * stays strictly after mount — the tool's `execute` closes over the store,
  * which the binding provides, and the agent cannot call a tool before the
  * shell can render its result. Registration is not in a React effect, so
- * StrictMode's double mount cannot double-fire it. The worker warm step is
- * absent, not stubbed; Slice 2 inserts `await warmWorker()` into the plan.
+ * StrictMode's double mount cannot double-fire it.
  */
 async function boot(inject: StartInjection): Promise<App> {
   const container = inject.container ?? findRootContainer(document);
@@ -83,6 +99,11 @@ async function boot(inject: StartInjection): Promise<App> {
     switch (step) {
       case "gate":
         nativeAvailable = (inject.gate ?? nativeModelContextAvailable)();
+        break;
+      // The worker warm slot (ADR 0002 am3 / ADR 0007): awaited before
+      // mount, so no command can ever outrun a warm engine.
+      case "warm":
+        await (inject.warm ?? warmDefault)();
         break;
       // The route table is the dynamic-import boundary (ADR 0007): the
       // router chunk must never block first paint.

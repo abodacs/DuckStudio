@@ -1,4 +1,4 @@
-import type { PresetMetadata } from "./schemas";
+import type { PresetColumn, PresetMetadata } from "./schemas";
 import { healthcarePiiPreset, saasChurnPreset } from "./catalog";
 import { generateSaasChurnRows, type SaasChurnRow } from "./saas-churn";
 import { generateHealthcarePiiRows, type HealthcarePiiRow } from "./healthcare-pii";
@@ -29,3 +29,13 @@ export const healthcarePii: PresetTriple<HealthcarePiiRow> = {
   generate: generateHealthcarePiiRows,
   sql: HEALTHCARE_PII_CANONICAL_SQL,
 };
+
+/**
+ * The materialized column list: the catalog schema minus direct identifiers
+ * — the custody omission rule (prd.md §6.2). Both the worker warm path and
+ * the preset contract test derive their columns from this, so a catalog
+ * edit cannot desynchronize materialization.
+ */
+export function materializedColumns(triple: Pick<PresetTriple, "metadata">): PresetColumn[] {
+  return triple.metadata.columns.filter((column) => column.classification !== "direct_identifier");
+}

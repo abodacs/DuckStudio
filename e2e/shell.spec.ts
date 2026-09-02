@@ -47,3 +47,49 @@ test.describe("walking skeleton @ rev 0", () => {
     await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).not.toBeVisible();
   });
 });
+
+test.describe("slice 2: engine warm + zero egress from first paint", () => {
+  test("the shell mounts only after the engine worker has warmed at boot", async ({ page }) => {
+    const engineWorker = page.waitForEvent("worker", {
+      predicate: (worker) => worker.url().includes("duckdb.worker"),
+      timeout: 30_000,
+    }).catch(() => null);
+    await page.goto("/");
+    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+    // The header renders after the warm step (BOOT_PLAN: gate → warm →
+    // mount), so a warmed engine worker must exist by now.
+    expect(await engineWorker).toBeTruthy();
+    await expect(
+      page
+        .workers()
+        .some((worker) => worker.url().includes("duckdb.worker")),
+      "the engine worker is alive after warm-up",
+    ).toBe(true);
+  });
+
+  test("the self-hosted DuckDB runtime is served same-origin", async ({ request }) => {
+    for (const asset of ["/duckdb/duckdb-eh.wasm", "/duckdb/duckdb-browser-eh.worker.js"]) {
+      const response = await request.get(asset);
+      expect(response.ok()).toBe(true);
+    }
+  });
+
+  test("every network request from first paint through warm-up is same-origin", async ({ page, baseURL }) => {
+    const crossOrigin: string[] = [];
+    page.on("request", (request) => {
+      if (baseURL && request.url().startsWith(baseURL)) return;
+      crossOrigin.push(request.url());
+    });
+    await page.goto("/");
+    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+    // The header renders only after the worker warm slot, so the engine has
+    // fully initialized (both presets materialized) with zero cross-origin
+    // requests observed from the page.
+    expect(
+      page
+        .workers()
+        .some((worker) => worker.url().includes("duckdb.worker")),
+    ).toBe(true);
+    expect(crossOrigin).toEqual([]);
+  });
+});
