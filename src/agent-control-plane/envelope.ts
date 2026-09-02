@@ -44,8 +44,8 @@ export const SchemaVersionSchema = z.literal("duckstudio.webmcp/v1");
 export const ToolNameSchema = z.enum([
   "duckdb_get_context",
   "duckdb_activate_dataset",
-  "duckdb_run_analysis",
-  "duckdb_verify_custody",
+  "duckdb_execute_sql_to_canvas",
+  "duckdb_verify_zero_egress",
 ]);
 
 export const WarningCodeSchema = z.enum([

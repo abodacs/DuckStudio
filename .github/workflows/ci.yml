@@ -114,3 +114,47 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  # Ticket 07's deliverable split reserves the CI deploy job + secrets for
+  # the ship-gate ticket: production deploys fire only from main, after both
+  # proof jobs are green, completing the install → lint → typecheck → test →
+  # build → deploy lifecycle. `--branch main` names the project's production
+  # branch explicitly; wrangler reads CLOUDFLARE_API_TOKEN and
+  # CLOUDFLARE_ACCOUNT_ID from the environment, and the pinned wrangler
+  # devDependency (4.127.1) rules out a floating `npx` at deploy time.
+  deploy:
+    name: Deploy (Cloudflare Pages)
+    needs: [quality, e2e]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Job-level group overrides the workflow's cancel-in-progress policy: a
+    # production deploy is never cancelled mid-flight by a follow-up push;
+    # concurrent main pushes queue instead.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Deploy dist to Cloudflare Pages
+        run: pnpm exec wrangler pages deploy dist --project-name duckstudio --branch main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

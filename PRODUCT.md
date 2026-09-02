@@ -48,12 +48,12 @@ WebMCP registers exactly these four tools. They are a subset of the revisioned-w
 |---|---|
 | `duckdb_get_context` | Read-only bootstrap or delta read of capabilities, revision, dataset policy, schema digest, budgets, operations, artifacts, and legal next actions. |
 | `duckdb_activate_dataset` | Activate a local preset with optimistic concurrency and idempotent retry. |
-| `duckdb_run_analysis` | Validate, execute, create an immutable artifact, infer or apply a safe presentation, and select that artifact in one atomic command. |
-| `duckdb_verify_custody` | Return scoped upload, release, interceptor, and lineage evidence with explicit limitations. |
+| `duckdb_execute_sql_to_canvas` | Validate, execute, create an immutable artifact, infer or apply a safe presentation, and select that artifact in one atomic command. |
+| `duckdb_verify_zero_egress` | Return scoped upload, release, interceptor, and lineage evidence with explicit limitations. |
 
 Human controls and the simulator also dispatch `selectArtifact` and `cancelActiveOperation` through the same workspace. Those commands are not WebMCP tools.
 
-The shortest normal path is `duckdb_get_context` → `duckdb_run_analysis`. Activation is needed only when the desired dataset is not active. Verification is called when custody evidence is requested. Presentation may be omitted; the workspace infers a safe spec.
+The shortest normal path is `duckdb_get_context` → `duckdb_execute_sql_to_canvas`. Activation is needed only when the desired dataset is not active. Verification is called when custody evidence is requested. Presentation may be omitted; the workspace infers a safe spec.
 
 Every response uses one discriminated envelope:
 
@@ -91,7 +91,7 @@ Mutations require `expectedRevision` and `idempotencyKey`. Context supports `sin
   - `healthcare_pii`: 100,000 rows with `diagnosis` and `mrn`; policy `sensitive_aggregate_only`.
 - The seeded SaaS analysis computes, rather than hardcodes, Churn Rate `14.2%`, Avg Tickets `4.8 / mo`, and Impacted MRR `$182,400`, with a visible increase above five tickets.
 - The healthcare preset visibly suppresses the raw grid and permits only policy-approved aggregates with cohorts of at least ten.
-- `duckdb_run_analysis` atomically creates the artifact, infers or applies KPI/chart/grid presentation, and selects that artifact. It returns a compact safe summary and handle, never result rows. The summary is the projected KPI/chart spec plus measured values, not a dataset-specific struct.
+- `duckdb_execute_sql_to_canvas` atomically creates the artifact, infers or applies KPI/chart/grid presentation, and selects that artifact. It returns a compact safe summary and handle, never result rows. The summary is the projected KPI/chart spec plus measured values, not a dataset-specific struct.
 - Egress monitoring covers `fetch`, `XMLHttpRequest`, `sendBeacon`, `WebSocket`, and `WebTransport`; evidence distinguishes dataset upload bytes from application traffic.
 - License: MIT.
 
