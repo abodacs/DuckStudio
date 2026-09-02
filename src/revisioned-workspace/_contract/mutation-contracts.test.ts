@@ -11,6 +11,7 @@ import { createWorkerHandler } from "../../duck-engine/worker-handler";
 import type { EngineResponse } from "../../duck-engine/protocol";
 import type { WorkspaceEngine } from "../../duck-engine/worker";
 import type { WorkspaceEvent } from "../schemas";
+import { projectArtifact } from "../projection";
 import { createWorkspaceStore } from "../store";
 import {
   activateSaasChurn,
@@ -253,6 +254,47 @@ describe("exact replay and key conflicts (grilling 33; §15.9)", () => {
     const cached = await store.dispatch(replayInput("select-100"));
     expect(cached.ok).toBe(false);
     if (!cached.ok) expect(cached.error.code).toBe("IDEMPOTENCY_CONFLICT");
+  });
+});
+
+describe("page memory is per-store state (grilling 51 item 3)", () => {
+  it("two stores in one process never collide: each projection reads its own captured rows", async () => {
+    const secondEngine = fakeEngine(() =>
+      Promise.resolve({
+        schema: [
+          { name: "tickets", type: "INTEGER" },
+          { name: "accounts", type: "BIGINT" },
+        ],
+        batches: [
+          {
+            columns: [
+              { name: "tickets", type: "INTEGER" },
+              { name: "accounts", type: "BIGINT" },
+            ],
+            rowCount: 2,
+            values: { tickets: [7, 11], accounts: [900, 30] },
+          },
+        ],
+        metrics: { executionMs: 12.5, materializedRows: 2, chartPoints: 2 },
+      }),
+    );
+    const first = storeWith(fakeEngine());
+    const second = storeWith(secondEngine);
+    await activateSaasChurn(first);
+    await activateSaasChurn(second);
+    await runChurn(first, "memory-first-01");
+    await runChurn(second, "memory-second-01");
+
+    // Both commits carry the same artifact id in their own workspace; a
+    // module-global row cache would let the second overwrite the first.
+    const firstView = projectArtifact(first.getSnapshot(), "a_01");
+    const secondView = projectArtifact(second.getSnapshot(), "a_01");
+    expect(firstView.kind).toBe("artifact");
+    expect(secondView.kind).toBe("artifact");
+    if (firstView.kind === "artifact" && secondView.kind === "artifact") {
+      expect(firstView.grid).toMatchObject({ kind: "rows", rows: [[3, 120], [9, 40]] });
+      expect(secondView.grid).toMatchObject({ kind: "rows", rows: [[7, 900], [11, 30]] });
+    }
   });
 });
 

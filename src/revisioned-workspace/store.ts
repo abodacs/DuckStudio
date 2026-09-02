@@ -2,8 +2,10 @@ import { z } from "zod";
 import { createArtifactGraph, type ArtifactGraph } from "../analysis-artifacts/graph";
 import type { ResultColumn } from "../analysis-artifacts/schemas";
 import { sha256Hex } from "../analysis-artifacts/sql-hash";
-import { healthcarePiiPreset, saasChurnPreset } from "../demo-presets/catalog";
+import { healthcarePiiPreset, saasChurnPreset, type PresetId } from "../demo-presets/catalog";
+import type { PresetMetadata } from "../demo-presets/schemas";
 import { custodyKernel, governedSource, type CustodyKernel } from "../dataset-custody/kernel";
+import { BUDGET_DEFAULTS } from "../dataset-custody/schemas";
 import type { CustodyFailure, GovernedSource } from "../dataset-custody/schemas";
 import type { EngineFailure, ExecutionResult } from "../duck-engine/protocol";
 import { workspaceEngine, type WorkspaceEngine } from "../duck-engine/worker";
@@ -13,12 +15,12 @@ import {
   resolvePresentation,
 } from "./presentation";
 import {
-  captureArtifactEvidence,
-  captureArtifactRows,
+  bindPageMemory,
+  createPageMemory,
   projectWorkspace,
-  releaseArtifactMemory,
   type GridCell,
   type GridRows,
+  type PageMemory,
 } from "./projection";
 import {
   ActivateDatasetInputSchema,
@@ -116,18 +118,16 @@ const BOOTSTRAP_CAPABILITIES: Capability[] = [
   "select_artifact",
 ];
 
-/** §4.6 budget defaults; the hard maxima are custody-kernel enforcement, not seeds. */
+/** §4.6 budget defaults — the agent-requestable axes seeded with the workspace-only axes. */
 const DEFAULT_BUDGETS: BudgetLimits = {
-  executionMs: 5000,
-  resultRows: 10000,
-  chartPoints: 2000,
+  ...BUDGET_DEFAULTS,
   toolSummaryBytes: 8192,
   retainedArtifacts: 20,
   contextItems: 20,
 };
 
 /** The checked-in presets (ARCHITECTURE.md): activation binds this catalog to the workspace. */
-const CATALOG: Record<"saas_churn" | "healthcare_pii", (typeof saasChurnPreset | typeof healthcarePiiPreset)> = {
+const CATALOG: Record<PresetId, PresetMetadata> = {
   saas_churn: saasChurnPreset,
   healthcare_pii: healthcarePiiPreset,
 };
@@ -162,7 +162,7 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value) ?? "null";
 }
 
-function createRev0Workspace(): Workspace {
+function createRev0Workspace(pageMemory: PageMemory): Workspace {
   const workspace: Workspace = {
     workspaceId: WORKSPACE_ID,
     revision: 0,
@@ -177,6 +177,7 @@ function createRev0Workspace(): Workspace {
     artifacts: [],
     evictedArtifactIds: [],
   };
+  bindPageMemory(workspace, pageMemory);
   // Frozen so accidental snapshot mutation fails loudly instead of leaking
   // into the next projection; the store replaces snapshots whole.
   Object.freeze(workspace.capabilities);
@@ -214,7 +215,8 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
   const now = ports.now ?? (() => new Date().toISOString());
 
   const listeners = new Set<() => void>();
-  let workspace = createRev0Workspace();
+  const pageMemory = createPageMemory();
+  let workspace = createRev0Workspace(pageMemory);
   const graph: ArtifactGraph = createArtifactGraph();
   const eventRing: WorkspaceEvent[] = [];
   const idempotencyCache = new Map<string, { fingerprint: string; envelope: Envelope }>();
@@ -247,6 +249,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
   }
 
   function replaceWorkspace(next: Workspace): void {
+    bindPageMemory(next, pageMemory);
     Object.freeze(next.capabilities);
     Object.freeze(next.budgets);
     Object.freeze(next.operations);
@@ -607,23 +610,24 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     }
     if (cancelRequested) return settleCancelled(operationId);
 
-    // cohort probe (kernel-authored SQL, executed as its own decision)
-    const minCohortCount =
-      source.policy === "sensitive_aggregate_only"
-        ? await probeCohortCount(source, input.sql, input.bindings, sourceRowCount)
-        : null;
-    if (cancelRequested) return settleCancelled(operationId);
-
-    // release confirm (custody) — the point of no return
-    const release = kernel.decideRelease({
+    // release confirm (custody) — the point of no return. One kernel entry
+    // owns the differencing guard and the decision (CONTEXT.md: the kernel's
+    // pieces are never invoked directly); the store only runs its probe.
+    const release = await kernel.confirmRelease({
       source,
-      sql: authorized.decision.positionalSql,
+      decision: authorized.decision,
+      sql: input.sql,
+      bindings: input.bindings,
       resultSchema: result.schema,
-      minCohortCount,
-      redactedBindingKeys: authorized.decision.redactedBindingKeys,
       materializedRows: result.metrics.materializedRows,
-      budget: authorized.decision.budget,
+      sourceRowCount,
+      executeProbe: async (probeDecision) => {
+        const read = await engine.execute(probeDecision);
+        const value = read.batches[0]?.values.min_cohort?.[0];
+        return value === undefined || value === null ? null : Number(value);
+      },
     });
+    if (cancelRequested) return settleCancelled(operationId);
     if (!release.ok) {
       await engine.dropRelation(identity.relationName).catch(() => undefined);
       return settleFailure(operationId, input.idempotencyKey, fingerprint, release.failure);
@@ -674,7 +678,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     // Page memory lands with the commit (grilling 51): the bounded row
     // cache and the §8.4 evidence snapshot the Custody view and the
     // suppression counters merge synchronously from the projection.
-    captureArtifactRows(
+    pageMemory.captureRows(
       artifactId,
       captureRows(
         result,
@@ -684,7 +688,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
         ),
       ),
     );
-    captureArtifactEvidence(artifactId, {
+    pageMemory.captureEvidence(artifactId, {
       ...kernel.evidence({ kind: "artifact", id: artifactId }, record.artifact.policy),
       lineage: [...record.artifact.lineage, { kind: "artifact", id: artifactId }],
     });
@@ -753,10 +757,11 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       try {
         await engine.dropRelation(relationName);
         graph.markEvicted(evictedId);
-        // The ring dropped the relation; its page memory goes with it. A
-        // failed drop leaves the artifact retained — the cache stays so the
-        // retry on a later commit (grilling 32) still finds its rows.
-        releaseArtifactMemory(evictedId);
+        // The ring dropped the relation; its page memory goes with it —
+        // released here, where the eviction is decided. A failed drop
+        // leaves the artifact retained — the cache stays so the retry on a
+        // later commit (grilling 32) still finds its rows.
+        pageMemory.release(evictedId);
       } catch {
         continue;
       }
@@ -783,30 +788,6 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       cacheSet(key, fingerprint, envelope);
     }
     return envelope;
-  }
-
-  async function probeCohortCount(
-    source: GovernedSource,
-    sql: string,
-    bindings: RunAnalysisInput["bindings"],
-    sourceRowCount: number,
-  ): Promise<number | null> {
-    const plan = kernel.inspectStatement(sql, [source.relation]);
-    if (!plan.hasAggregate) return null;
-    if (plan.hasGrouping) {
-      if (plan.groupExpressions.length === 0) return null;
-      const probeSql = kernel.cohortProbeSql(source.relation, plan.groupExpressions, plan.whereExpression);
-      const probe = kernel.authorize({ source, sql: probeSql, bindings });
-      if (!probe.ok) return null;
-      try {
-        const read = await engine.execute(probe.decision);
-        return Number(read.batches[0]?.values.min_cohort?.[0] ?? -1);
-      } catch {
-        return null;
-      }
-    }
-    // A filtered global aggregate has no provable cohort — denied (differencing guard).
-    return plan.whereExpression === null ? sourceRowCount : null;
   }
 
   function classifyResultSchema(source: GovernedSource, schema: ExecutionResult["schema"]): ResultColumn[] {
@@ -1034,6 +1015,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
         ...workspace,
         capabilities: [...workspace.capabilities, capability],
       };
+      bindPageMemory(next, pageMemory);
       Object.freeze(next.capabilities);
       workspace = Object.freeze(next);
       for (const listener of listeners) {

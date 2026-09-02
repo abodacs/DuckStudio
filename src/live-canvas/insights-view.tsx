@@ -10,6 +10,9 @@ import { KpiTile, UnavailableArtifact } from "./artifact-states";
  */
 const EvidenceChart = lazy(() => import("./chart"));
 
+/** The pinned empty-state line (ticket 06 — copy is decided, not invented). */
+export const INSIGHTS_EMPTY_STATE = "No artifact — KPIs render only from a policy-approved artifact.";
+
 /**
  * Insights evidence view (grilling 52): KPI cards from the measured
  * projection — values are what the analysis produced, never targets — and
@@ -46,7 +49,7 @@ export function InsightsView() {
             <circle cx="236" cy="14" r="2.5" fill="rgb(0 242 254 / 55%)" />
           </svg>
           <div className="rise" style={{ animationDelay: "220ms" }}>
-            <p className="meta">No artifact — KPIs render only from a policy-approved artifact.</p>
+            <p className="meta">{INSIGHTS_EMPTY_STATE}</p>
             <p className="meta mt-1">Run a governed query and its readouts land here.</p>
           </div>
         </div>

@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PRESET_TRIPLES, presetCsv, type BoundedRead, type DuckEngineRuntime } from "./worker-handler";
+import { decodeEngineCell } from "./result-decode";
 import type { WarmResult } from "./protocol";
 
 /**
@@ -59,11 +60,17 @@ export async function createNodeDuckRuntime(): Promise<NodeDuckRuntime> {
         prepared.bind(positionalBindings as Parameters<typeof prepared.bind>[0]);
         const reader = await prepared.runAndReadUntil(maxRows);
         await reader.readUntil(maxRows);
-        const rows = reader.getRowObjectsJson() as Record<string, unknown>[];
         const schema = reader.columnNames().map((name, index) => ({
           name,
           type: reader.columnType(index).toString(),
         }));
+        // Same decode boundary as the browser runtime: decimal knowledge
+        // lives in one place, so both adapters return identically shaped rows.
+        const rows = (reader.getRowObjectsJson() as Record<string, unknown>[]).map((row) =>
+          Object.fromEntries(
+            schema.map((column) => [column.name, decodeEngineCell(row[column.name], column.type)]),
+          ),
+        );
         return { schema, rows: rows.slice(0, maxRows), executionMs: performance.now() - started };
       } finally {
         prepared.destroySync();

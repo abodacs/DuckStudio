@@ -7,6 +7,9 @@ import { UnavailableArtifact } from "./artifact-states";
  * bindings, the hash, the source, the chain, the release decision, and the
  * measured metrics — all from the projection's lineage member.
  */
+/** The pinned empty-state line (ticket 06 — copy is decided, not invented). */
+export const LINEAGE_EMPTY_STATE = "No artifact — lineage appears with your first analysis.";
+
 export function SqlLineageView() {
   const artifact = useWorkspace((ws) => projectArtifact(ws, ws.selectedArtifactId));
   switch (artifact.kind) {
@@ -28,7 +31,7 @@ export function SqlLineageView() {
             </div>
           </div>
           <div className="rise" style={{ animationDelay: "220ms" }}>
-            <p className="meta">No artifact — lineage appears with your first analysis.</p>
+            <p className="meta">{LINEAGE_EMPTY_STATE}</p>
             <p className="meta mt-1">Every artifact carries its exact statement and chain.</p>
           </div>
         </div>

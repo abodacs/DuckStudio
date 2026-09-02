@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { SAAS_CHURN_CANONICAL_SQL } from "../src/demo-presets/canonical-sql";
 
 /**
  * Shared QA-suite driver for the page's served agent surface
@@ -13,7 +14,7 @@ export type AgentSurface = {
   invoke(name: string, input: unknown): Promise<unknown>;
 };
 
-type SurfaceWindow = { __duckstudioAgentSurface?: AgentSurface };
+export type SurfaceWindow = { __duckstudioAgentSurface?: AgentSurface };
 
 export type EnvelopeSuccess = {
   ok: true;
@@ -42,16 +43,23 @@ export type EnvelopeFailure = {
 
 export type Envelope = EnvelopeSuccess | EnvelopeFailure;
 
-/** Loads the shell and waits for boot to reach "register". */
-export async function agentSurface(page: Page): Promise<AgentSurface> {
-  await page.goto("/");
-  // Cold boots (wasm compile + preset materialization) measured past 25s on
-  // constrained machines; 120s absorbs the worst observed cold start (the
-  // per-test timeout bounds it) without masking a genuinely stuck boot.
+/**
+ * Waits for boot to reach "register" and returns the served surface. Cold
+ * boots (wasm compile + preset materialization) measured past 25s on
+ * constrained machines; 120s absorbs the worst observed cold start (the
+ * per-test timeout bounds it) without masking a genuinely stuck boot.
+ */
+export async function waitForSurface(page: Page): Promise<AgentSurface> {
   await page.waitForFunction(() => (window as SurfaceWindow).__duckstudioAgentSurface !== undefined, undefined, {
     timeout: 120_000,
   });
   return page.evaluate(() => (window as SurfaceWindow).__duckstudioAgentSurface as AgentSurface);
+}
+
+/** Loads the shell and waits for boot to reach "register". */
+export async function agentSurface(page: Page): Promise<AgentSurface> {
+  await page.goto("/");
+  return waitForSurface(page);
 }
 
 export async function invokeTool(page: Page, name: string, input: unknown): Promise<Envelope> {
@@ -89,21 +97,10 @@ export const CHURN_ACTIVATE = {
   idempotencyKey: "qa-activate-churn-01",
 } as const;
 
-export const CHURN_CANONICAL_SQL = `
-SELECT
-  tickets,
-  COUNT(*) AS accounts,
-  SUM(CASE WHEN churned THEN 1 ELSE 0 END) AS churned_accounts,
-  SUM(CASE WHEN churned THEN mrr ELSE 0 END) AS churned_mrr
-FROM saas_churn
-GROUP BY tickets
-ORDER BY tickets
-`;
-
 export function churnAnalysis(expectedRevision: number, idempotencyKey: string) {
   return {
     source: { kind: "dataset", id: "saas_churn" },
-    sql: CHURN_CANONICAL_SQL,
+    sql: SAAS_CHURN_CANONICAL_SQL,
     bindings: {},
     expectedRevision,
     idempotencyKey,
@@ -115,15 +112,3 @@ export const HEALTHCARE_ACTIVATE = {
   expectedRevision: 0,
   idempotencyKey: "qa-activate-health-01",
 } as const;
-
-export const HEALTHCARE_CANONICAL_SQL = `
-SELECT
-  diagnosis,
-  COUNT(*) AS patients,
-  ROUND(AVG(visit_count), 2) AS avg_visits,
-  ROUND(AVG(billed_amount), 2) AS avg_billed_amount
-FROM healthcare_pii
-GROUP BY diagnosis
-HAVING COUNT(*) >= 10
-ORDER BY patients DESC
-`;

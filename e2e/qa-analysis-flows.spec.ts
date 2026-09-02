@@ -5,6 +5,7 @@ import {
   CHURN_ACTIVATE,
   churnAnalysis,
   invokeTool,
+  waitForSurface,
   type EnvelopeFailure,
   type EnvelopeSuccess,
 } from "./agent-surface";
@@ -47,7 +48,14 @@ test.describe("qa: analysis lifecycle", () => {
     // Inference, not echo: KPIs ride every numeric result column in result
     // order, the chart scatters the first two — nothing we supplied.
     const kpiColumns = data.summary.kpis.map((kpi) => kpi.column);
-    expect(kpiColumns).toEqual(["tickets", "accounts", "churned_accounts", "churned_mrr"]);
+    expect(kpiColumns).toEqual([
+      "tickets",
+      "accounts",
+      "churned_accounts",
+      "churned_mrr",
+      "churn_rate_pct",
+      "churn_rate",
+    ]);
     expect(data.summary.chart).toMatchObject({ type: "scatter", x: "tickets", y: "accounts" });
     expect(data.summary.chart?.pointCount).toBeGreaterThan(0);
 
@@ -175,9 +183,7 @@ test.describe("qa: analysis lifecycle", () => {
     // A reload rebuilds the document from scratch; registration must land on
     // the same four tools with exactly one surface capability.
     await page.reload();
-    await page.waitForFunction(() => (window as { __duckstudioAgentSurface?: unknown }).__duckstudioAgentSurface !== undefined, undefined, {
-      timeout: 30_000,
-    });
+    await waitForSurface(page);
     const reloaded = (await page.evaluate(
       () => (window as { __duckstudioAgentSurface?: { tools: string[] } }).__duckstudioAgentSurface,
     )) as { tools: string[] };

@@ -98,6 +98,18 @@ describe("execute handshake (trivial bounded query, measured metrics)", () => {
       expect(response.result.metrics.materializedRows).toBeGreaterThan(10);
     }
   });
+
+  it("decodes decimal aggregates at the runtime boundary — the node shape matches the browser shape", async () => {
+    const response = await execute(
+      decision({ positionalSql: "SELECT SUM(billed_amount) AS total_billed FROM healthcare_pii" }),
+    );
+    if (!(response.kind === "execute" && response.ok)) throw new Error("expected execution success");
+    const { schema, batches } = response.result;
+    expect(schema).toEqual([{ name: "total_billed", type: "DECIMAL(38,2)" }]);
+    const value = batches[0]?.values.total_billed?.[0];
+    expect(typeof value).toBe("number");
+    expect(value).toBeGreaterThan(0);
+  });
 });
 
 describe("verbatim consumption (ARCHITECTURE.md: the engine re-derives nothing)", () => {

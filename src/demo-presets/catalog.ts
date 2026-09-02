@@ -59,3 +59,21 @@ export const healthcarePiiPreset: PresetMetadata = {
     { name: "billed_amount", type: "DECIMAL(10,2)", classification: "public" },
   ],
 };
+
+/**
+ * The preset ids — the one spelling, typed from this tuple; the activation
+ * schema, the store catalog, the human commands, and the shell cards all
+ * read it from here.
+ */
+export const PRESET_IDS = ["saas_churn", "healthcare_pii"] as const;
+
+export type PresetId = (typeof PRESET_IDS)[number];
+
+/** The preset chips in display order; ids are typed, so no surface casts. */
+export const PRESET_CARD_SOURCES: readonly {
+  readonly id: PresetId;
+  readonly preset: PresetMetadata;
+}[] = [
+  { id: "saas_churn", preset: saasChurnPreset },
+  { id: "healthcare_pii", preset: healthcarePiiPreset },
+];

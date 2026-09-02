@@ -8,8 +8,9 @@ import {
 import type { HealthcarePiiRow } from "../demo-presets/healthcare-pii";
 import type { SaasChurnRow } from "../demo-presets/saas-churn";
 import { toCsv } from "../demo-presets/csv";
-import type { EngineBatch, EngineRequest, EngineResponse, EngineColumn } from "./protocol";
+import type { EngineRequest, EngineResponse, EngineColumn } from "./protocol";
 import type { ExecutionResult, MaterializedRelation, WarmResult } from "./protocol";
+import { shapeResult } from "./result-decode";
 
 /**
  * The worker side of the engine protocol (ADR 0002; grilling 21/23). The
@@ -25,7 +26,7 @@ import type { ExecutionResult, MaterializedRelation, WarmResult } from "./protoc
  * `@duckdb/node-api` or fakes.
  */
 
-/** Raw bounded read from the underlying DuckDB, before response shaping. */
+/** Bounded read at the runtime seam: DuckDB type names, decoded JSON-safe cells. */
 export interface BoundedRead {
   readonly schema: readonly EngineColumn[];
   readonly rows: Readonly<Record<string, unknown>>[];
@@ -68,40 +69,6 @@ export function presetCsv(triple: Pick<PresetTriple, "metadata"> & { generate: (
       rows,
     ),
     columns: columns.map((column) => ({ name: column.name, type: column.type })),
-  };
-}
-
-/** Values crossing the worker boundary are JSON-safe: bigints and decimals become numbers/strings. */
-function normalizeCell(value: unknown): unknown {
-  if (typeof value === "bigint") return Number(value);
-  if (value !== null && typeof value === "object" && "toString" in value) {
-    // DuckDB decimal values surface as objects with exact string forms.
-    const text = String(value);
-    const numeric = Number(text);
-    return Number.isNaN(numeric) ? text : numeric;
-  }
-  return value;
-}
-
-/** Shapes a bounded read into the pinned `{schema, batches, metrics}` result with measured metrics. */
-export function shapeResult(read: BoundedRead, chartPointsBudget: number): ExecutionResult {
-  const values: Record<string, unknown[]> = {};
-  for (const column of read.schema) {
-    values[column.name] = read.rows.map((row) => normalizeCell(row[column.name] ?? null));
-  }
-  const batch: EngineBatch = {
-    columns: read.schema,
-    rowCount: read.rows.length,
-    values,
-  };
-  return {
-    schema: read.schema,
-    batches: [batch],
-    metrics: {
-      executionMs: read.executionMs,
-      materializedRows: read.rows.length,
-      chartPoints: Math.min(read.rows.length, chartPointsBudget),
-    },
   };
 }
 
