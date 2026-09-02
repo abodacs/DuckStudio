@@ -42,7 +42,7 @@ function presetMeta(preset: (typeof PRESETS)[number]): string {
 const TRANSPORTS = ["fetch", "XMLHttpRequest", "sendBeacon", "WebSocket", "WebTransport"] as const;
 
 const TAB_TRANSITION =
-  "transition-[background-color,border-color,color,transform] duration-150 ease-out motion-reduce:transition-none motion-reduce:transform-none";
+  "transition-[background-color,border-color,color,transform] duration-150 ease-out motion-reduce:transition-none motion-reduce:transform-none motion-reduce:active:scale-100";
 
 /**
  * Two-pane evidence chrome (PRD §7) rendered by the single projection owner
@@ -76,21 +76,21 @@ export function WorkspaceShell() {
   return (
     <div className="flex h-dvh min-w-[960px] flex-col">
       <header className="flex items-center gap-4 border-b border-edge bg-surface px-4 py-2">
-        <h1 className="text-lg font-semibold tracking-[-0.01em]">DuckStudio</h1>
-        <p aria-live="polite" className="text-sm text-ink-secondary">
+        <h1 className="shrink-0 text-lg font-semibold tracking-[-0.01em]">DuckStudio</h1>
+        <p aria-live="polite" className="whitespace-nowrap text-xs text-ink-secondary">
           <span className="font-mono text-ink">{vm.workspaceId}</span>
           <span aria-hidden> · </span>
           <span className="font-mono text-ink">rev {vm.revision}</span>
           <span aria-hidden> · </span>
           {vm.datasetLine}
         </p>
-        <p className="text-sm text-ink-secondary">
+        <p className="whitespace-nowrap text-xs text-ink-secondary">
           available preset{" "}
           <span className="font-mono text-ink">
             {saasChurnPreset.datasetId} · {saasChurnPreset.policy}
           </span>
         </p>
-        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-surface px-3 py-1 text-sm">
+        <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-accent/30 bg-surface px-3 py-1 text-sm">
           <span aria-hidden className="size-1.5 rounded-full bg-accent" />
           {vm.badge}
         </span>
@@ -139,7 +139,7 @@ export function WorkspaceShell() {
           <div role="group" aria-label="Artifact stream" className="mt-2 rounded-md border border-edge bg-surface px-3 py-2">
             <h3 className="text-xs font-medium tracking-wide text-ink-secondary">ARTIFACTS</h3>
             {vm.recentArtifacts.length === 0 ? (
-              <p className="mt-1 text-xs text-ink-secondary">No artifacts yet.</p>
+              <p className="mt-1 text-xs text-ink-secondary">No artifacts — operations settle here as immutable artifacts.</p>
             ) : (
               <ul className="mt-1 space-y-1 text-xs">
                 {vm.recentArtifacts.map((artifactId) => (
@@ -158,7 +158,7 @@ export function WorkspaceShell() {
                 type="button"
                 disabled
                 aria-describedby="preset-status"
-                className={`block w-full rounded-md border border-edge bg-surface px-3 py-2 text-left ${TAB_TRANSITION}`}
+                className={`block w-full rounded-md border border-edge bg-surface px-3 py-2 text-left focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent ${TAB_TRANSITION}`}
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="font-mono text-sm text-ink">{preset.datasetId}</span>
@@ -183,7 +183,7 @@ export function WorkspaceShell() {
             Agent channel: <span className="font-mono">simulator</span> ·{" "}
             <span className="font-mono">native WebMCP</span> — connecting.
           </p>
-          <div role="group" aria-label="Custody monitoring" className="mt-4">
+          <div role="group" aria-label="Custody monitoring" className="mt-4 rounded-md border border-edge bg-surface px-3 py-2">
             <h3 className="text-xs font-medium tracking-wide text-ink-secondary">CUSTODY</h3>
             <p className="mt-1 text-xs text-ink-secondary">
               Monitored transports:{" "}
@@ -196,7 +196,7 @@ export function WorkspaceShell() {
             </p>
           </div>
         </section>
-        <section aria-label="Selected artifact" className="p-4">
+        <section aria-label="Selected artifact" className="flex flex-col p-4">
           <h2 className="text-xs font-semibold tracking-wide text-ink-secondary">
             SELECTED ARTIFACT
           </h2>
@@ -233,9 +233,9 @@ export function WorkspaceShell() {
             role="tabpanel"
             id={`panel-${activeView}`}
             aria-labelledby={`tab-${activeView}`}
-            className="rounded-b-md border border-edge bg-surface p-4 text-sm"
+            className="flex min-h-0 flex-1 flex-col rounded-b-md border border-edge bg-surface p-4 text-sm"
           >
-            <View />
+            <View key={activeView} />
           </div>
         </section>
       </main>

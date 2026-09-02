@@ -38,6 +38,27 @@
   color-scheme: dark;
 }
 
+/*
+ * Evidence-view swap bridge: the tab panel's content remounts on tab switch
+ * (tabs are not workspace state), and this 150ms ease-out opacity shift keeps
+ * that swap from teleporting. Reduced motion drops it entirely.
+ */
+@keyframes view-swap {
+  from {
+    opacity: 0;
+  }
+}
+
+.view-swap {
+  animation: view-swap 150ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-swap {
+    animation: none;
+  }
+}
+
 body {
   background-color: var(--color-canvas);
   color: var(--color-ink);

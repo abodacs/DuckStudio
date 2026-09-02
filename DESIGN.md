@@ -164,7 +164,7 @@ Fonts are self-hosted because `Cross-Origin-Embedder-Policy: require-corp` makes
 A single-screen application frame: a full-viewport (`h-dvh`) column with a one-row instrument header above a fixed two-pane grid — 35% agent operations left, 65% selected artifact right. The floor is `min-width: 960px` with horizontal scroll below it; panes never stack or crush (a deliberate demo-day guardrail against projector and split-window failure).
 
 - **Header:** Panel Graphite strip, bottom hairline, 16px/8px padding. Title, then a `polite` live status line in Meta grey with mono values in Readout White separated by `·`, preset availability, and the badge pinned right (`margin-left: auto`).
-- **Panes:** 16px inner padding each side. The left pane stacks readout cards on an 8px rhythm; 12px before the context and dataset groups, 16px before the channel and custody footers.
+- **Panes:** 16px inner padding each side. The left pane stacks readout cards on an 8px rhythm; 12px before the context and dataset groups; 16px before the channel footer and the custody card. The right pane's tab panel fills the pane below the tab strip, so the selected artifact reads as one full-height readout screen.
 - **Card internals:** 12px horizontal / 8px vertical padding; 4px between a label and its content; 12px columns in the budget definition list; 4px in lists of artifacts.
 - **Type density:** working sizes are 12–14px; nothing larger than the 18px Title exists.
 

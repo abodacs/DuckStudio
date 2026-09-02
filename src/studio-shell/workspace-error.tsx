@@ -31,7 +31,7 @@ export function WorkspaceError({ error }: ErrorComponentProps) {
   return (
     <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-canvas p-6 text-center">
       <h1 className="text-lg font-semibold tracking-[-0.01em]">This view failed to render</h1>
-      <p className="max-w-prose text-sm text-ink-secondary">{message}</p>
+      <p className="max-w-prose text-xs text-ink-secondary">{message}</p>
       <p className="font-mono text-xs text-ink-secondary">{code}</p>
       <Link
         to="/"

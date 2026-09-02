@@ -7,8 +7,8 @@ export function InsightsView() {
   switch (artifact.kind) {
     case "no_artifact":
       return (
-        <p className="flex min-h-36 items-center justify-center text-center text-sm text-ink-secondary">
-          No artifact selected — run an analysis to see approved KPIs.
+        <p className="view-swap flex min-h-36 flex-1 items-center justify-center text-center text-xs text-ink-secondary">
+          No artifact — KPIs render only from a policy-approved artifact.
         </p>
       );
   }

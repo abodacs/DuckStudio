@@ -25,7 +25,7 @@ import { workspaceStore } from "../../revisioned-workspace/store";
  */
 describe("canvas projection selector contract (ADR 0003)", () => {
   const views = [
-    { name: "Insights", View: InsightsView, empty: "No artifact selected" },
+    { name: "Insights", View: InsightsView, empty: "No artifact" },
     { name: "Data Grid", View: DataGridView, empty: "No artifact" },
     { name: "SQL & Lineage", View: SqlLineageView, empty: "No artifact" },
     { name: "Custody", View: CustodyView, empty: "No custody evidence yet" },
