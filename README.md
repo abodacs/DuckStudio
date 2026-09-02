@@ -6,7 +6,7 @@ The core idea is **controlled release**. A browser agent can observe both tool p
 
 ## Status
 
-Slices 1–4 are implemented: the walking skeleton deploys from CI, dataset custody and the DuckDB-WASM engine run in a worker, the revisioned workspace creates immutable artifacts, and the agent control plane registers all four WebMCP tools, covered end to end. Slices 5–6 remain open — the evidence canvas views currently render pinned empty states, and preset button/prompt-chip wiring, production hardening, and the demo pack are still ahead. The slice tracker in [`docs/prd.md`](./docs/prd.md) §9 is canonical.
+Slices 1–5 are implemented: the walking skeleton deploys from CI, dataset custody and the DuckDB-WASM engine run in a worker, the revisioned workspace creates immutable artifacts, the agent control plane registers all four WebMCP tools, and the evidence canvas paints the four views — measured KPI tiles, the lazy chart, the virtualized grid with policy suppression, and captured custody evidence. Slice 6 is in progress: preset cards and the canonical-run chips dispatch the same domain commands as the agent, with production hardening and the demo pack still ahead. The slice tracker in [`docs/prd.md`](./docs/prd.md) §9 is canonical.
 
 - Shared language: [`CONTEXT.md`](./CONTEXT.md)
 - Product intent: [`PRODUCT.md`](./PRODUCT.md)

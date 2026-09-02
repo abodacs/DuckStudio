@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { projectArtifact } from "../revisioned-workspace/projection";
+import { projectArtifact, projectWorkspace } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
 import { KpiTile, UnavailableArtifact } from "./artifact-states";
 
@@ -17,6 +17,7 @@ const EvidenceChart = lazy(() => import("./chart"));
  */
 export function InsightsView() {
   const artifact = useWorkspace((ws) => projectArtifact(ws, ws.selectedArtifactId));
+  const datasetState = useWorkspace(projectWorkspace).datasetState;
   switch (artifact.kind) {
     case "no_artifact":
       return (
@@ -54,8 +55,27 @@ export function InsightsView() {
       return <UnavailableArtifact artifactId={artifact.artifactId} reason={artifact.reason} />;
     case "artifact": {
       const { insights } = artifact;
+      // The velocity line is measured, never a promised constant (prd.md §8):
+      // the artifact's own executionMs, and the source row count only when
+      // the source dataset is still the active one.
+      const source =
+        artifact.artifact.source.kind === "dataset" &&
+        datasetState.kind === "active" &&
+        datasetState.datasetId === artifact.artifact.source.id
+          ? datasetState
+          : null;
       return (
         <div className="view-swap flex h-full flex-col gap-4 overflow-y-auto p-3">
+          <p className="meta" data-velocity>
+            <span aria-hidden>⚡</span> measured{" "}
+            <span className="mono-value">{insights.metrics.executionMs.toFixed(1)} ms</span> in-worker
+            {source && (
+              <>
+                {" · scanned "}
+                <span className="mono-value">{source.rowCount.toLocaleString("en-US")}</span> rows
+              </>
+            )}
+          </p>
           {insights.kpis.length > 0 && (
             <div className="grid grid-cols-3 gap-2.5">
               {insights.kpis.map((kpi) => (

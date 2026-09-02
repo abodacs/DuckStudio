@@ -449,3 +449,67 @@ test.describe("slice 5: evidence canvas", () => {
     }
   });
 });
+
+// --- Slice 6: the judge path. The same domain commands are one click away:
+// preset cards, canonical-run chips, and the verify chip drive the identical
+// dispatch seam a browser agent drives — no typing, no terminal, no wait. ---
+
+test.describe("slice 6: judge-path 1-click journey", () => {
+  test("a preset card activates locally and the header commits the policy", async ({ page }) => {
+    await page.goto("/");
+    // The agent channel names the served surface — never a pending "connecting".
+    await expect(
+      page.getByText("Agent Simulator Ready (Full Parity)").or(page.getByText("WebMCP Native Connected")),
+    ).toBeVisible();
+    await page
+      .getByRole("group", { name: "Dataset presets" })
+      .getByRole("button", { name: /saas_churn/ })
+      .click();
+    await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
+    await expect(page.getByText("ACTIVE", { exact: true })).toBeVisible();
+    await expect(page.getByText("0 Bytes of Dataset Uploaded")).toBeVisible();
+  });
+
+  test("the churn chip runs one canonical artifact with headline KPIs and the scatter", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: /Run SaaS Churn Analysis/ }).click();
+
+    // One operation, one artifact — activation and analysis chained.
+    await expect(page.getByText("a_01", { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText("ws_local_01 · rev 2 · saas_churn · public_synthetic")).toBeVisible();
+
+    // Headline KPIs measured from the canonical SQL's first row.
+    await expect(page.getByText("Churn Rate", { exact: true })).toBeVisible();
+    await expect(page.getByText("14.2%", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("$182,400", { exact: true })).toBeVisible();
+
+    // The chart paints, and the runtime line is measured — never a promised
+    // fixed query time (prd.md §8).
+    await expect(page.getByRole("region", { name: "Chart" }).locator("canvas")).toBeVisible();
+    await expect(page.getByText(/measured/, { exact: false })).toBeVisible();
+  });
+
+  test("the healthcare chip runs the safe aggregate and the grid suppresses rows", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: /Run Healthcare Aggregate/ }).click();
+    await expect(page.getByText("a_01", { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText("ws_local_01 · rev 2 · healthcare_pii · sensitive_aggregate_only")).toBeVisible();
+
+    await page.getByRole("tab", { name: "Data Grid" }).click();
+    await expect(page.getByRole("alert")).toContainText("Data Grid — suppressed by policy");
+    await expect(page.getByRole("alert")).toContainText("mrn");
+    await expect(page.locator("[data-grid-row]")).toHaveCount(0);
+  });
+
+  test("the verify chip lands the canvas on Custody with zero-upload evidence", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: /Run SaaS Churn Analysis/ }).click();
+    await expect(page.getByText("a_01", { exact: true })).toBeVisible({ timeout: 60_000 });
+
+    await page.getByRole("button", { name: /Verify Zero Egress/ }).click();
+    await expect(page.getByRole("tab", { name: "Custody" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText(/scope artifact:a_01/)).toBeVisible();
+    await expect(page.getByText("0 B", { exact: true })).toBeVisible();
+    await expect(page.getByText("Runtime interception is operational evidence, not a formal proof.")).toBeVisible();
+  });
+});

@@ -107,6 +107,26 @@ describe("saas_churn canonical SQL (prd.md §6.1)", () => {
     expect(churnShare(9)).toBeGreaterThan(churnShare(5));
     expect(churnShare(5)).toBeGreaterThan(churnShare(2));
   });
+
+  it("repeats the pinned rollup on every row, so a first-row KPI read yields the headline values", { timeout: 30_000 }, async () => {
+    // The canonical statement's trailing window columns exist for §8.3's
+    // first-row KPI semantics: every row carries the same global rollup, and
+    // the per-bucket rate matches that bucket's own counts.
+    const instance = await DuckDBInstance.create(":memory:");
+    const connection = await instance.connect();
+    await loadPreset(saasChurn, connection);
+    const buckets = await queryRows(connection, saasChurn.sql);
+
+    for (const bucket of buckets) {
+      expect(Number(bucket.churn_rate)).toBe(SAAS_CHURN_PINNED.churnRatePct / 100);
+      expect(Number(bucket.avg_tickets)).toBe(SAAS_CHURN_PINNED.avgTickets);
+      expect(Number(bucket.impacted_mrr)).toBe(SAAS_CHURN_PINNED.impactedMrr);
+      expect(Number(bucket.churn_rate_pct)).toBeCloseTo(
+        (100 * Number(bucket.churned_accounts)) / Number(bucket.accounts),
+        1,
+      );
+    }
+  });
 });
 
 describe("healthcare_pii canonical SQL (prd.md §6.2)", () => {

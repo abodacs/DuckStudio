@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -10,6 +10,7 @@ import { InsightsView } from "../insights-view";
 import { WorkspaceShell } from "../../studio-shell/shell";
 import { workspaceStore } from "../../revisioned-workspace/store";
 import type { WorkspaceStore } from "../../revisioned-workspace/store";
+import { healthcarePii, saasChurn } from "../../demo-presets/triples";
 import type { AuthorizedDecision } from "../../dataset-custody/schemas";
 import type { ExecutionResult } from "../../duck-engine/protocol";
 import type { WorkspaceEngine } from "../../duck-engine/worker";
@@ -324,5 +325,148 @@ describe("tab and dispatch contracts (§7.2, §15.16)", () => {
     expect(screen.getByText("0 B")).toBeDefined();
     expect(screen.getAllByText("Application shell traffic is outside dataset-upload accounting.")).toHaveLength(1);
     expect(screen.getAllByText("Runtime interception is operational evidence, not a formal proof.")).toHaveLength(1);
+  });
+});
+
+describe("judge-path gestures (slice 6: preset activation, canonical-run chips, stepper)", () => {
+  /**
+   * The gestures dispatch through the human seam's real store singleton, so
+   * these tests pin the seam's behavior at that seam: `getSnapshot` reads the
+   * injected view's state and `dispatch` resolves the activation envelope,
+   * making the chain deterministic without polluting the singleton.
+   */
+  function sealSeam() {
+    const snapshot = vi
+      .spyOn(workspaceStore, "getSnapshot")
+      .mockReturnValue(current.getSnapshot() as ReturnType<typeof workspaceStore.getSnapshot>);
+    const dispatch = vi
+      .spyOn(workspaceStore, "dispatch")
+      .mockImplementation(() => Promise.resolve({ ok: true, revision: 1 } as never));
+    return { snapshot, dispatch };
+  }
+
+  const presetCard = (name: string | RegExp) =>
+    within(screen.getByRole("group", { name: "Dataset presets" })).getByRole("button", { name });
+
+  it("a preset-card click dispatches activateDataset once with a fresh key", () => {
+    render(<WorkspaceShell />);
+    const seam = sealSeam();
+    fireEvent.click(presetCard(/saas_churn/));
+    expect(seam.dispatch).toHaveBeenCalledTimes(1);
+    const command = seam.dispatch.mock.calls[0]?.[0];
+    expect(command?.kind).toBe("activateDataset");
+    if (command?.kind === "activateDataset") {
+      expect(command.input.datasetId).toBe("saas_churn");
+      expect(command.input.expectedRevision).toBe(current.getSnapshot().revision);
+      expect(command.input.idempotencyKey).not.toBe("");
+    }
+    seam.snapshot.mockRestore();
+    seam.dispatch.mockRestore();
+  });
+
+  it("the active preset card paints the ACTIVE chip and does not re-dispatch", async () => {
+    current = await churnWorkspace();
+    render(<WorkspaceShell />);
+    const seam = sealSeam();
+    const card = presetCard(/saas_churn/);
+    expect(card).toHaveProperty("disabled", true);
+    expect(screen.getByText("ACTIVE")).toBeDefined();
+    fireEvent.click(card);
+    expect(seam.dispatch).not.toHaveBeenCalled();
+    seam.snapshot.mockRestore();
+    seam.dispatch.mockRestore();
+  });
+
+  it("the churn chip activates then runs the canonical SQL with its matched presentation", async () => {
+    render(<WorkspaceShell />);
+    const seam = sealSeam();
+    fireEvent.click(screen.getByRole("button", { name: /Run SaaS Churn Analysis/ }));
+    await waitFor(() => expect(seam.dispatch).toHaveBeenCalledTimes(2));
+    const [activation, run] = seam.dispatch.mock.calls.map((call) => call[0]);
+    expect(activation?.kind).toBe("activateDataset");
+    expect(run?.kind).toBe("runAnalysis");
+    if (run?.kind === "runAnalysis") {
+      expect(run.input.source).toEqual({ kind: "dataset", id: "saas_churn" });
+      expect(run.input.sql).toBe(saasChurn.sql);
+      expect(run.input.expectedRevision).toBe(1);
+      expect(run.input.presentation?.kpis?.map((kpi: { label: string }) => kpi.label)).toEqual([
+        "Churn Rate",
+        "Avg Tickets",
+        "Impacted MRR",
+      ]);
+      expect(run.input.presentation?.chart?.threshold).toEqual({
+        column: "tickets",
+        value: 5,
+        label: "churn accelerates above 5 tickets",
+      });
+    }
+    seam.snapshot.mockRestore();
+    seam.dispatch.mockRestore();
+  });
+
+  it("the healthcare chip chains activation of the sensitive preset and its aggregate", async () => {
+    render(<WorkspaceShell />);
+    const seam = sealSeam();
+    fireEvent.click(screen.getByRole("button", { name: /Run Healthcare Aggregate/ }));
+    await waitFor(() => expect(seam.dispatch).toHaveBeenCalledTimes(2));
+    const [activation, run] = seam.dispatch.mock.calls.map((call) => call[0]);
+    expect(activation?.kind).toBe("activateDataset");
+    if (activation?.kind === "activateDataset") {
+      expect(activation.input.datasetId).toBe("healthcare_pii");
+    }
+    expect(run?.kind).toBe("runAnalysis");
+    if (run?.kind === "runAnalysis") {
+      expect(run.input.source).toEqual({ kind: "dataset", id: "healthcare_pii" });
+      expect(run.input.sql).toBe(healthcarePii.sql);
+    }
+    seam.snapshot.mockRestore();
+    seam.dispatch.mockRestore();
+  });
+
+  it("a successful verify chip read lands the canvas on the Custody tab", async () => {
+    current = await churnWorkspace();
+    render(<WorkspaceShell />);
+    const seam = sealSeam();
+    fireEvent.click(screen.getByRole("button", { name: /Verify Zero Egress/ }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Custody" }).getAttribute("aria-selected")).toBe("true");
+    });
+    expect(seam.dispatch.mock.calls[0]?.[0]?.kind).toBe("verifyCustody");
+    seam.snapshot.mockRestore();
+    seam.dispatch.mockRestore();
+  });
+
+  it("the verify chip is inert before any artifact exists", () => {
+    render(<WorkspaceShell />);
+    const seam = sealSeam();
+    fireEvent.click(screen.getByRole("button", { name: /Verify Zero Egress/ }));
+    expect(seam.dispatch).not.toHaveBeenCalled();
+    seam.snapshot.mockRestore();
+    seam.dispatch.mockRestore();
+  });
+
+  it("the first-run moves are gestures: activate dispatches, ask chains, read needs evidence", async () => {
+    render(<WorkspaceShell />);
+    const seam = sealSeam();
+
+    fireEvent.click(screen.getByRole("button", { name: /Activate a dataset/ }));
+    expect(seam.dispatch.mock.calls[0]?.[0]?.kind).toBe("activateDataset");
+
+    // The ask move chains activation exactly like the churn chip.
+    fireEvent.click(screen.getByRole("button", { name: /Ask the agent/ }));
+    await waitFor(() => expect(seam.dispatch).toHaveBeenCalledTimes(3));
+
+    // Read needs evidence; with none committed it is disabled and inert.
+    fireEvent.click(screen.getByRole("button", { name: /Read the evidence/ }));
+    expect(seam.dispatch).toHaveBeenCalledTimes(3);
+
+    seam.snapshot.mockRestore();
+    seam.dispatch.mockRestore();
+  });
+
+  it("the agent channel names the served surface from the projection, never 'connecting'", () => {
+    render(<WorkspaceShell />);
+    expect(screen.getByText("Agent Simulator Ready (Full Parity)")).toBeDefined();
+    expect(screen.queryByText(/connecting/)).toBeNull();
   });
 });

@@ -157,6 +157,37 @@ export function resolvePresentation(input: PresentationInput): PresentationOutco
       const failure = check("chart", input.supplied.chart[axis]);
       if (failure) return { ok: false, validation: failure };
     }
+    // A threshold renders only on the scatter's value x axis; anywhere else
+    // it is an explicit refusal, never a strip (grilling 34's deny over strip).
+    const threshold = input.supplied.chart.threshold;
+    if (threshold) {
+      const thresholdIssue = (field: string, unknown: string, message: string): ValidationFailure => ({
+        code: "VALIDATION_ERROR",
+        message,
+        retryable: false,
+        details: { field, unknown },
+      });
+      if (input.supplied.chart.type !== "scatter") {
+        return {
+          ok: false,
+          validation: thresholdIssue(
+            "presentation.chart.threshold",
+            input.supplied.chart.type,
+            "A chart threshold renders only on a scatter's value x axis.",
+          ),
+        };
+      }
+      if (threshold.column !== input.supplied.chart.x) {
+        return {
+          ok: false,
+          validation: thresholdIssue(
+            "presentation.chart.threshold",
+            threshold.column,
+            `The chart threshold reads "${threshold.column}", which is not the chart's x column.`,
+          ),
+        };
+      }
+    }
   }
   if (input.supplied.grid?.visible && input.policy !== "public_synthetic") {
     blockedFields.push("grid");

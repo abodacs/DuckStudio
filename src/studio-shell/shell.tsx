@@ -5,7 +5,7 @@ import { ToolNameSchema } from "../agent-control-plane/envelope";
 import type { OperationSummary } from "../revisioned-workspace/schemas";
 import { projectWorkspace } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
-import { cancelActiveOperation, selectArtifact } from "../live-canvas/human-commands";
+import { cancelActiveOperation, selectArtifact, activatePreset, runPresetAnalysis, verifyEvidence, type RunnablePresetId } from "../live-canvas/human-commands";
 import { formatKpiValue } from "../live-canvas/kpi";
 import { consumeInitialView, resolvePostCommitView } from "../live-canvas/view-intent";
 import { CustodyView } from "../live-canvas/custody-view";
@@ -84,8 +84,9 @@ const TRANSPORTS = ["fetch", "XMLHttpRequest", "sendBeacon", "WebSocket", "WebTr
 /**
  * The first-run path (PRD §7.3 first paint): three moves to the aha —
  * governed evidence on glass while the badge still reads zero upload. Each
- * move names real UI; the current move derives from workspace state, never
- * from a tour counter.
+ * move names real UI and is itself a gesture: a click dispatches the same
+ * domain commands through the human seam (slice 6); the current move and the
+ * done checks derive from workspace state, never from a tour counter.
  */
 const FIRST_RUN_MOVES = [
   {
@@ -110,6 +111,15 @@ function ArrowGlyph() {
   return (
     <svg viewBox="0 0 12 12" fill="none" aria-hidden className="size-3">
       <path d="M3.5 8.5 8.5 3.5M8.5 3.5H4.5M8.5 3.5v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Hairline check for completed first-run moves — 1.5px strokes. */
+function CheckGlyph() {
+  return (
+    <svg viewBox="0 0 12 12" fill="none" aria-hidden className="size-3">
+      <path d="M2.5 6.5 5 9l4.5-5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -157,6 +167,8 @@ export function WorkspaceShell() {
   const tabRefs = useRef<Map<ViewId, HTMLButtonElement | null>>(new Map());
   const appliedRuns = useRef<Set<string>>(new Set());
   const switchTo = switchView(setActiveView);
+  /** The chip/step gesture in flight — button affordance only, never workspace state. */
+  const [pending, setPending] = useState<"chip-churn" | "chip-healthcare" | "chip-verify" | null>(null);
 
   // The post-commit tab (grilling 52): the human adapter's captured
   // `initialView` applies once per succeeded analysis, else §4.5 inference.
@@ -218,6 +230,49 @@ export function WorkspaceShell() {
   );
   const runtime = expandedOperation ? measuredRuntime(expandedOperation) : null;
 
+  /**
+   * The judge-path gestures (slice 6): one in-flight gesture at a time, and
+   * quiet while the operation slot is occupied — a second mutation would
+   * only earn OPERATION_CONFLICT. The verify chip lands on the Custody tab
+   * when its read succeeds; a canvas-local switch, never a mutation.
+   */
+  const busy = pending !== null || operationsLive;
+  const activeDatasetId = vm.datasetState.kind === "active" ? vm.datasetState.datasetId : null;
+  const hasArtifacts = vm.recentArtifacts.length > 0;
+  const nativeSurface = vm.capabilities.includes("webmcp_native");
+
+  const runChip = (chip: "chip-churn" | "chip-healthcare", presetId: "saas_churn" | "healthcare_pii") => {
+    setPending(chip);
+    runPresetAnalysis(presetId, vm.revision)
+      .catch(() => undefined)
+      .finally(() => setPending(null));
+  };
+  const runVerifyChip = () => {
+    setPending("chip-verify");
+    verifyEvidence()
+      .then((ok) => {
+        if (ok) switchTo("custody");
+      })
+      .catch(() => undefined)
+      .finally(() => setPending(null));
+  };
+
+  /** Each first-run move is itself the gesture it names (slice 6). */
+  const runMove = (move: (typeof FIRST_RUN_MOVES)[number]["id"]) => {
+    if (move === "activate") {
+      if (activeDatasetId === null) activatePreset("saas_churn", vm.revision);
+      return;
+    }
+    if (move === "ask") {
+      setPending("chip-churn");
+      runPresetAnalysis("saas_churn", vm.revision)
+        .catch(() => undefined)
+        .finally(() => setPending(null));
+      return;
+    }
+    switchTo("insights");
+  };
+
   return (
     <div className="relative flex h-dvh min-w-[960px] flex-col overflow-hidden">
       <div aria-hidden className="lamp-field" />
@@ -259,34 +314,88 @@ export function WorkspaceShell() {
           >
             <div className="card-core">
               <h3 className="card-label">FIRST ANALYSIS</h3>
-              <ol className="mt-2.5 space-y-3">
+              <ol className="mt-2.5 space-y-1.5">
                 {FIRST_RUN_MOVES.map((move, index) => {
                   const isCurrent = index === currentMove;
+                  const isDone = index < currentMove;
+                  // Each move enables only when its gesture is legal right
+                  // now: activate needs rev 0, ask chains activation itself,
+                  // read needs evidence to land on.
+                  const enabled =
+                    !busy &&
+                    (move.id === "activate"
+                      ? activeDatasetId === null
+                      : move.id === "ask" || hasArtifacts);
                   return (
-                    <li key={move.id} className="flex items-start gap-3">
-                      <span
-                        aria-hidden
-                        className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border font-display text-xs ${
-                          isCurrent
-                            ? "border-accent/40 bg-accent/[0.07] text-accent"
-                            : "border-edge bg-white/[0.03] text-ink-secondary"
+                    <li key={move.id}>
+                      <button
+                        type="button"
+                        disabled={!enabled}
+                        onClick={() => runMove(move.id)}
+                        className={`flex w-full items-start gap-3 rounded-panel-inner border px-1.5 py-1.5 text-left state-shift press focus-ring ${
+                          enabled
+                            ? "border-transparent hover:border-edge hover:bg-white/[0.03]"
+                            : "cursor-default"
                         }`}
                       >
-                        {index + 1}
-                      </span>
-                      <span className="min-w-0">
                         <span
-                          className={`block text-[13px] leading-5 ${isCurrent ? "text-ink" : "text-ink-secondary"}`}
+                          aria-hidden
+                          className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border font-display text-xs ${
+                            isDone
+                              ? "border-accent/40 bg-accent/[0.07] text-accent"
+                              : isCurrent
+                                ? "border-accent/40 bg-accent/[0.07] text-accent"
+                                : "border-edge bg-white/[0.03] text-ink-secondary"
+                          }`}
                         >
-                          {move.label}
+                          {isDone ? <CheckGlyph /> : index + 1}
                         </span>
-                        <span className="meta mt-0.5 block">{move.detail}</span>
-                      </span>
-                      {isCurrent && <span className="sr-only">(current move)</span>}
+                        <span className="min-w-0">
+                          <span
+                            className={`block text-[13px] leading-5 ${isCurrent || isDone ? "text-ink" : "text-ink-secondary"}`}
+                          >
+                            {move.label}
+                          </span>
+                          <span className="meta mt-0.5 block">{move.detail}</span>
+                        </span>
+                        {isCurrent && <span className="sr-only">(current move)</span>}
+                      </button>
                     </li>
                   );
                 })}
               </ol>
+            </div>
+          </div>
+          <div role="group" aria-label="Canonical runs" className="card-panel rise mt-2" style={rise(130)}>
+            <div className="card-core">
+              <h3 className="card-label">CANONICAL RUNS</h3>
+              <div className="mt-2 flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  className="button-run"
+                  disabled={busy}
+                  onClick={() => runChip("chip-churn", "saas_churn")}
+                >
+                  <span aria-hidden>⚡</span> Run SaaS Churn Analysis
+                </button>
+                <button
+                  type="button"
+                  className="button-run"
+                  disabled={busy}
+                  onClick={() => runChip("chip-healthcare", "healthcare_pii")}
+                >
+                  <span aria-hidden>🔒</span> Run Healthcare Aggregate
+                </button>
+                <button
+                  type="button"
+                  className="button-run"
+                  disabled={busy || !hasArtifacts}
+                  onClick={runVerifyChip}
+                >
+                  <span aria-hidden>🛡️</span> Verify Zero Egress
+                </button>
+              </div>
+              <p className="meta mt-1.5">One click each — the same commands, budgets, and custody as the agent.</p>
             </div>
           </div>
           <div role="group" aria-label="Workspace context" className="card-panel rise mt-2" style={rise(160)}>
@@ -439,42 +548,56 @@ export function WorkspaceShell() {
           <div role="group" aria-label="Dataset presets" className="rise mt-3 space-y-2" style={rise(340)}>
             <h3 className="card-label">DATASETS</h3>
             <p id="preset-status" className="meta">
-              Dataset activation is coming online.
+              Click a preset to activate it — in this tab's memory only; rows never leave the browser.
             </p>
-            {PRESETS.map((preset) => (
-              <button
-                key={preset.datasetId}
-                type="button"
-                disabled
-                aria-describedby="preset-status"
-                className="preset-card opacity-75"
-              >
-                <span className="card-core flex items-center justify-between gap-3">
-                  <span className="min-w-0">
-                    <span className="mono-value block text-sm">{preset.datasetId}</span>
-                    <span className="meta mt-1 block">{presetMeta(preset)}</span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-2">
-                    <span
-                      className={
-                        preset.policy === "sensitive_aggregate_only"
-                          ? "chip-policy-sensitive"
-                          : "chip-policy-public"
-                      }
-                    >
-                      {preset.policy}
+            {PRESETS.map((preset) => {
+              const isActive = activeDatasetId === preset.datasetId;
+              return (
+                <button
+                  key={preset.datasetId}
+                  type="button"
+                  disabled={isActive || busy}
+                  aria-pressed={isActive}
+                  aria-describedby="preset-status"
+                  onClick={() => activatePreset(preset.datasetId as RunnablePresetId, vm.revision)}
+                  className={isActive ? "preset-card preset-card-active" : "preset-card"}
+                >
+                  <span className="card-core flex items-center justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="mono-value block text-sm">{preset.datasetId}</span>
+                      <span className="meta mt-1 block">{presetMeta(preset)}</span>
                     </span>
-                    <span aria-hidden className="preset-arrow opacity-60">
-                      <ArrowGlyph />
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span
+                        className={
+                          preset.policy === "sensitive_aggregate_only"
+                            ? "chip-policy-sensitive"
+                            : "chip-policy-public"
+                        }
+                      >
+                        {preset.policy}
+                      </span>
+                      {isActive ? (
+                        <span className="chip-active">ACTIVE</span>
+                      ) : (
+                        <span aria-hidden className="preset-arrow opacity-60">
+                          <ArrowGlyph />
+                        </span>
+                      )}
                     </span>
                   </span>
-                </span>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
-          <p className="meta rise mt-3" style={rise(400)}>
-            Agent channel: <span className="mono-value">simulator</span> ·{" "}
-            <span className="mono-value">native WebMCP</span> — connecting.
+          <p className="meta rise mt-3 flex items-center gap-2" style={rise(400)}>
+            <span aria-hidden className={`agent-dot ${nativeSurface ? "agent-dot-native" : "agent-dot-simulator"}`} />
+            Agent channel:{" "}
+            {nativeSurface ? (
+              <span className="mono-value">WebMCP Native Connected</span>
+            ) : (
+              <span className="mono-value">Agent Simulator Ready (Full Parity)</span>
+            )}
           </p>
           <div role="group" aria-label="Custody monitoring" className="card-panel rise mt-2" style={rise(440)}>
             <div className="card-core">

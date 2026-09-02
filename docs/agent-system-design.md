@@ -229,6 +229,11 @@ type PresentationSpec = {
     y: string
     title?: string
     maxPoints?: number
+    threshold?: {
+      column: string
+      value: number
+      label?: string
+    }
   }
   grid?: { visible: boolean; maxRows?: number }
 }
@@ -258,7 +263,7 @@ Artifacts are immutable. A refinement creates a new artifact whose lineage lists
 
 `bindings` on the artifact and in every projection are the redacted form. Raw binding values never leave the custody kernel: not in envelopes, cards, canvas, errors, logs, or telemetry.
 
-`presentation` is the committed KPI, chart, and grid spec. It does not include an active view tab. Tab state lives only in the human evidence plane.
+`presentation` is the committed KPI, chart, and grid spec. It does not include an active view tab. Tab state lives only in the human evidence plane. A supplied `chart.threshold` (`column` must name the chart's `x`, scatter only) commits a styling emphasis zone above the value on the canvas; it is presentation styling, never a release rule, and an illegal threshold is refused under the same deny-over-strip rules.
 
 ```mermaid
 flowchart LR
@@ -580,7 +585,17 @@ Response data includes `datasetId`, safe `schemaDigest`, `rowCount`, `byteSizeEs
             "x": { "type": "string", "minLength": 1, "maxLength": 80 },
             "y": { "type": "string", "minLength": 1, "maxLength": 80 },
             "title": { "type": "string", "maxLength": 120 },
-            "maxPoints": { "type": "integer", "minimum": 10, "maximum": 5000 }
+            "maxPoints": { "type": "integer", "minimum": 10, "maximum": 5000 },
+            "threshold": {
+              "type": "object",
+              "properties": {
+                "column": { "type": "string", "minLength": 1, "maxLength": 80 },
+                "value": { "type": "number" },
+                "label": { "type": "string", "maxLength": 80 }
+              },
+              "required": ["column", "value"],
+              "additionalProperties": false
+            }
           },
           "required": ["type", "x", "y"],
           "additionalProperties": false
