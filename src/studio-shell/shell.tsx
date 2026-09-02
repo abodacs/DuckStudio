@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { flushSync } from "react-dom";
-import { healthcarePiiPreset, saasChurnPreset } from "../demo-presets/catalog";
+import { PRESET_CARD_SOURCES, saasChurnPreset, type PresetId } from "../demo-presets/catalog";
 import { ToolNameSchema } from "../agent-control-plane/envelope";
-import type { OperationSummary } from "../revisioned-workspace/schemas";
+import type { ErrorCode, OperationSummary } from "../revisioned-workspace/schemas";
+import { ERROR_RECOVERY_MESSAGE, ERROR_RECOVERY_MOVE } from "../revisioned-workspace/schemas";
+import { MONITORED_TRANSPORTS } from "../dataset-custody/schemas";
 import { projectWorkspace } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
-import { cancelActiveOperation, selectArtifact, activatePreset, runCanonicalChurnAnalysis, type RunnablePresetId } from "../live-canvas/human-commands";
+import { cancelActiveOperation, selectArtifact, activatePreset, runCanonicalChurnAnalysis } from "../live-canvas/human-commands";
 import { formatKpiValue } from "../live-canvas/kpi";
 import { consumeInitialView, resolvePostCommitView } from "../live-canvas/view-intent";
 import { CustodyView } from "../live-canvas/custody-view";
@@ -31,55 +33,18 @@ const TOOL_FOR_KIND: Record<OperationSummary["kind"], string> = {
   run_analysis: ToolNameSchema.enum.duckdb_execute_sql_to_canvas,
 };
 
-/** The static human message per error code (§9); never a stack trace. */
-const RECOVERY_MESSAGE: Record<string, string> = {
-  VALIDATION_ERROR: "The command's fields didn't match the schema; the agent corrects the named fields.",
-  STALE_REVISION: "The workspace moved since the command was prepared; the agent re-reads the delta and retries with the current revision.",
-  IDEMPOTENCY_CONFLICT: "That key was reused for a different command; a new key or an exact resend settles it.",
-  POLICY_DENIED: "The request would cross release policy — nothing was released.",
-  UNSAFE_SQL: "The statement violates execution policy; nothing ran.",
-  BUDGET_EXCEEDED: "The analysis crossed its budget; a narrower query fits.",
-  DATASET_UNAVAILABLE: "That dataset isn't active; activate a preset first.",
-  ARTIFACT_UNAVAILABLE: "That artifact doesn't exist or was evicted; the stream below lists what remains.",
-  OPERATION_CONFLICT: "Another operation is running; wait for it or cancel it.",
-  OPERATION_CANCELLED: "Cancelled at your request.",
-  UNSUPPORTED_CAPABILITY: "This browser lacks the capability; the simulator serves the tools.",
-  INTERNAL_ERROR: "The analysis failed inside the engine; read context and retry.",
-};
-
-/** Recovery guidance per code — the agent's legal next move (§9's recovery column). */
-const RECOVERY_MOVE: Record<string, string> = {
-  VALIDATION_ERROR: "Recovery: corrected fields, then resend.",
-  STALE_REVISION: "Recovery: re-read events from the expected revision, then retry with the current revision.",
-  IDEMPOTENCY_CONFLICT: "Recovery: new key, or resend the original command exactly.",
-  POLICY_DENIED: "Recovery: use the permitted presentation or safer SQL.",
-  UNSAFE_SQL: "Recovery: apply the blocked-construct details and rewrite the statement.",
-  BUDGET_EXCEEDED: "Recovery: narrow the query or request an allowed larger budget.",
-  DATASET_UNAVAILABLE: "Recovery: activate an available preset.",
-  ARTIFACT_UNAVAILABLE: "Recovery: read recent artifacts; recompute only if necessary.",
-  OPERATION_CONFLICT: "Recovery: wait for the running operation or cancel it.",
-  OPERATION_CANCELLED: "Recovery: reconfirm intent before retrying.",
-  UNSUPPORTED_CAPABILITY: "Recovery: use the simulator or follow the returned human action.",
-  INTERNAL_ERROR: "Recovery: read current context; no sensitive stack data is exposed.",
-};
-
 /**
  * Rev-0 preset-chip chrome (ticket 10). The chips keep their static cards
  * until activation exists (Slice 2); every chip field reads the seeded
  * catalog, so ids and policies have one spelling.
  */
-const PRESETS = [saasChurnPreset, healthcarePiiPreset];
+const PRESETS = PRESET_CARD_SOURCES;
 
 /** Chip display line, composed from the catalog's own size facts. */
-function presetMeta(preset: (typeof PRESETS)[number]): string {
+function presetMeta(entry: (typeof PRESETS)[number]): string {
+  const { preset } = entry;
   return `${Math.round(preset.rowCount / 1000)}k rows · ~${(preset.byteSizeEstimate / 1_000_000).toFixed(1)} MB`;
 }
-
-/**
- * Canonical monitored-transport list from the custody evidence contract
- * (docs/agent-system-design.md, duckdb_verify_zero_egress response).
- */
-const TRANSPORTS = ["fetch", "XMLHttpRequest", "sendBeacon", "WebSocket", "WebTransport"] as const;
 
 /**
  * The first-run path (PRD §7.3 first paint): three moves to the aha —
@@ -163,7 +128,7 @@ export function WorkspaceShell() {
    * rejected command, so the card renders while the operation it conflicted
    * with is live and disappears when the stream settles.
    */
-  const [dispatchFailure, setDispatchFailure] = useState<{ code: string } | null>(null);
+  const [dispatchFailure, setDispatchFailure] = useState<{ code: ErrorCode } | null>(null);
 
   // The post-commit tab (grilling 52): the human adapter's captured
   // `initialView` applies once per succeeded analysis, else §4.5 inference.
@@ -235,7 +200,7 @@ export function WorkspaceShell() {
   const nativeSurface = vm.capabilities.includes("webmcp_native");
 
   /** One dispatch per click; the envelope's verdict echoes in the canvas. */
-  const activate = (datasetId: RunnablePresetId) => {
+  const activate = (datasetId: PresetId) => {
     const pending = activatePreset(datasetId, vm.revision);
     void pending.then((verdict) => {
       setDispatchFailure(verdict.ok ? null : { code: verdict.code });
@@ -416,9 +381,9 @@ export function WorkspaceShell() {
                         <>
                           <p className="mt-1.5 flex items-center gap-2">
                             <span className="chip-error">{expandedOperation.errorCode}</span>
-                            <span className="meta">{RECOVERY_MESSAGE[expandedOperation.errorCode ?? ""] ?? ""}</span>
+                            <span className="meta">{expandedOperation.errorCode ? ERROR_RECOVERY_MESSAGE[expandedOperation.errorCode] : ""}</span>
                           </p>
-                          <p className="meta mt-1">{RECOVERY_MOVE[expandedOperation.errorCode ?? ""] ?? ""}</p>
+                          <p className="meta mt-1">{expandedOperation.errorCode ? ERROR_RECOVERY_MOVE[expandedOperation.errorCode] : ""}</p>
                         </>
                       ) : (
                         (expandedOperation.status === "running" || expandedOperation.status === "queued") && (
@@ -442,9 +407,9 @@ export function WorkspaceShell() {
                     <div className="operation-card operation-card-failed">
                       <p className="mt-1.5 flex items-center gap-2">
                         <span className="chip-error">{dispatchFailure.code}</span>
-                        <span className="meta">{RECOVERY_MESSAGE[dispatchFailure.code] ?? ""}</span>
+                        <span className="meta">{ERROR_RECOVERY_MESSAGE[dispatchFailure.code]}</span>
                       </p>
-                      <p className="meta mt-1">{RECOVERY_MOVE[dispatchFailure.code] ?? ""}</p>
+                      <p className="meta mt-1">{ERROR_RECOVERY_MOVE[dispatchFailure.code]}</p>
                     </div>
                   )}
                 </>
@@ -504,31 +469,31 @@ export function WorkspaceShell() {
             <p id="preset-status" className="meta">
               Click a preset to activate it — in this tab's memory only; rows never leave the browser.
             </p>
-            {PRESETS.map((preset) => {
-              const isActive = activeDatasetId === preset.datasetId;
+            {PRESETS.map((entry) => {
+              const isActive = activeDatasetId === entry.preset.datasetId;
               return (
                 <button
-                  key={preset.datasetId}
+                  key={entry.id}
                   type="button"
-                  aria-label={`Activate dataset ${preset.datasetId} · ${preset.policy} policy`}
+                  aria-label={`Activate dataset ${entry.preset.datasetId} · ${entry.preset.policy} policy`}
                   aria-describedby="preset-status"
-                  onClick={() => activate(preset.datasetId as RunnablePresetId)}
+                  onClick={() => activate(entry.id)}
                   className={isActive ? "preset-card preset-card-active" : "preset-card"}
                 >
                   <span className="card-core flex items-center justify-between gap-3">
                     <span className="min-w-0">
-                      <span className="mono-value block text-sm">{preset.datasetId}</span>
-                      <span className="meta mt-1 block">{presetMeta(preset)}</span>
+                      <span className="mono-value block text-sm">{entry.preset.datasetId}</span>
+                      <span className="meta mt-1 block">{presetMeta(entry)}</span>
                     </span>
                     <span className="flex shrink-0 items-center gap-2">
                       <span
                         className={
-                          preset.policy === "sensitive_aggregate_only"
+                          entry.preset.policy === "sensitive_aggregate_only"
                             ? "chip-policy-sensitive"
                             : "chip-policy-public"
                         }
                       >
-                        {preset.policy}
+                        {entry.preset.policy}
                       </span>
                       {isActive ? (
                         <span className="chip-active">ACTIVE</span>
@@ -548,7 +513,7 @@ export function WorkspaceShell() {
               <h3 className="card-label">CUSTODY</h3>
               <p className="meta mt-1.5">
                 Monitored transports:{" "}
-                {TRANSPORTS.map((transport, index) => (
+                {MONITORED_TRANSPORTS.map((transport, index) => (
                   <span key={transport}>
                     {index > 0 && <span aria-hidden> · </span>}
                     <span className="mono-value">{transport}</span>

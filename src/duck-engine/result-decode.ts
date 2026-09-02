@@ -1,6 +1,6 @@
 import type { EngineBatch, ExecutionResult } from "./protocol";
 import type { BoundedRead } from "./worker-handler";
-import { decimalCellToNumber, decimalWordsToNumber, isDecimalField } from "./decimal-cells";
+import { decimalCellToNumber, isDecimalField } from "./decimal-cells";
 
 /**
  * The one result-decode boundary behind the `DuckEngineRuntime` seam: every

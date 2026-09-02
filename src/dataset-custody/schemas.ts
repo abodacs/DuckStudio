@@ -45,18 +45,8 @@ export const ClampedBudgetSchema = z.strictObject({
 
 export type ClampedBudget = z.infer<typeof ClampedBudgetSchema>;
 
-/** §4.6 defaults and hard maxima (agent-requestable axes only). */
-export const BUDGET_DEFAULTS: ClampedBudget = {
-  executionMs: 5_000,
-  resultRows: 10_000,
-  chartPoints: 2_000,
-} as const;
-
-export const BUDGET_HARD_MAX: ClampedBudget = {
-  executionMs: 15_000,
-  resultRows: 50_000,
-  chartPoints: 5_000,
-} as const;
+/** §4.6 defaults and hard maxima — defined in the `budget-limits` leaf so the envelope schemas can pin them without a cycle. */
+export { BUDGET_DEFAULTS, BUDGET_HARD_MAX } from "./budget-limits";
 
 /** The single authorized-execution decision (grilling 22) — engine input, verbatim. */
 export interface AuthorizedDecision {

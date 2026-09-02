@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PolicySchema } from "../demo-presets/schemas";
+import { BUDGET_HARD_MAX } from "../dataset-custody/budget-limits";
 
 /**
  * Artifact-graph schemas (§4.3, §8.3; ADR 0004 am4 places artifact and
@@ -47,7 +48,7 @@ export const PresentationSpecSchema = z.strictObject({
         .number()
         .int()
         .min(10)
-        .max(5000)
+        .max(BUDGET_HARD_MAX.chartPoints)
         .describe("Requested point ceiling; values above the measured budget clamp with a warning.")
         .optional(),
       threshold: z

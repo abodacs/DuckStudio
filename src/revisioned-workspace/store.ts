@@ -2,8 +2,10 @@ import { z } from "zod";
 import { createArtifactGraph, type ArtifactGraph } from "../analysis-artifacts/graph";
 import type { ResultColumn } from "../analysis-artifacts/schemas";
 import { sha256Hex } from "../analysis-artifacts/sql-hash";
-import { healthcarePiiPreset, saasChurnPreset } from "../demo-presets/catalog";
+import { healthcarePiiPreset, saasChurnPreset, type PresetId } from "../demo-presets/catalog";
+import type { PresetMetadata } from "../demo-presets/schemas";
 import { custodyKernel, governedSource, type CustodyKernel } from "../dataset-custody/kernel";
+import { BUDGET_DEFAULTS } from "../dataset-custody/schemas";
 import type { CustodyFailure, GovernedSource } from "../dataset-custody/schemas";
 import type { EngineFailure, ExecutionResult } from "../duck-engine/protocol";
 import { workspaceEngine, type WorkspaceEngine } from "../duck-engine/worker";
@@ -116,18 +118,16 @@ const BOOTSTRAP_CAPABILITIES: Capability[] = [
   "select_artifact",
 ];
 
-/** §4.6 budget defaults; the hard maxima are custody-kernel enforcement, not seeds. */
+/** §4.6 budget defaults — the agent-requestable axes seeded with the workspace-only axes. */
 const DEFAULT_BUDGETS: BudgetLimits = {
-  executionMs: 5000,
-  resultRows: 10000,
-  chartPoints: 2000,
+  ...BUDGET_DEFAULTS,
   toolSummaryBytes: 8192,
   retainedArtifacts: 20,
   contextItems: 20,
 };
 
 /** The checked-in presets (ARCHITECTURE.md): activation binds this catalog to the workspace. */
-const CATALOG: Record<"saas_churn" | "healthcare_pii", (typeof saasChurnPreset | typeof healthcarePiiPreset)> = {
+const CATALOG: Record<PresetId, PresetMetadata> = {
   saas_churn: saasChurnPreset,
   healthcare_pii: healthcarePiiPreset,
 };

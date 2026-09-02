@@ -1,4 +1,6 @@
 import { workspaceStore } from "../revisioned-workspace/store";
+import type { ErrorCode } from "../revisioned-workspace/schemas";
+import { type PresetId } from "../demo-presets/catalog";
 import { SAAS_CHURN_CANONICAL_SQL } from "../demo-presets/canonical-sql";
 import { SAAS_CHURN_ANALYSIS_PRESENTATION } from "../demo-presets/presentations";
 import { captureRunIntent } from "./view-intent";
@@ -13,8 +15,9 @@ import { captureRunIntent } from "./view-intent";
  * Slice 6 adds the judge-path gestures (ticket 63, grilling 61's resolution):
  * preset cards and the one canonical prompt chip dispatch the same domain
  * commands a WebMCP agent dispatches — the chip scripts the exact §12
- * playbook, `duckdb_get_context` → `duckdb_run_analysis`, pill-for-pill with
- * tape beats 3–4. Nothing here is a shortcut or a private path.
+ * playbook, `duckdb_get_context` → `duckdb_execute_sql_to_canvas`,
+ * pill-for-pill with tape beats 3–4. Nothing here is a shortcut or a private
+ * path.
  */
 
 export function selectArtifact(artifactId: string, expectedRevision: number): void {
@@ -31,9 +34,6 @@ export function cancelActiveOperation(expectedRevision: number): void {
   });
 }
 
-/** The preset ids a card may activate — the catalog's one spelling. */
-export type RunnablePresetId = "saas_churn" | "healthcare_pii";
-
 /**
  * A preset card gesture (grilling 61): one `activateDataset` command with
  * the store's current `expectedRevision` and a fresh key — always enabled,
@@ -43,9 +43,9 @@ export type RunnablePresetId = "saas_churn" | "healthcare_pii";
  * dispatch's recovery card — never a private path, never a second dispatch.
  */
 export function activatePreset(
-  datasetId: RunnablePresetId,
+  datasetId: PresetId,
   expectedRevision: number,
-): Promise<{ ok: true } | { ok: false; code: string }> {
+): Promise<{ ok: true } | { ok: false; code: ErrorCode }> {
   return workspaceStore
     .dispatch({
       kind: "activateDataset",

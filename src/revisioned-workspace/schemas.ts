@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { PolicySchema, type Policy } from "../demo-presets/schemas";
+import { BUDGET_HARD_MAX } from "../dataset-custody/budget-limits";
+import { PRESET_IDS } from "../demo-presets/catalog";
 import {
   AnalysisArtifactSchema,
   AnalysisRecordSchema,
@@ -61,6 +63,42 @@ export const ErrorCodeSchema = z.enum([
 ]);
 
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
+
+/**
+ * §9's static human copy per code, keyed by the taxonomy itself so a code
+ * can never lack its recovery row (grilling 61: "the envelope teaches").
+ * Owned beside the codes; the studio shell renders it verbatim.
+ */
+export const ERROR_RECOVERY_MESSAGE: Record<ErrorCode, string> = {
+  VALIDATION_ERROR: "The command's fields didn't match the schema; the agent corrects the named fields.",
+  STALE_REVISION: "The workspace moved since the command was prepared; the agent re-reads the delta and retries with the current revision.",
+  IDEMPOTENCY_CONFLICT: "That key was reused for a different command; a new key or an exact resend settles it.",
+  POLICY_DENIED: "The request would cross release policy — nothing was released.",
+  UNSAFE_SQL: "The statement violates execution policy; nothing ran.",
+  BUDGET_EXCEEDED: "The analysis crossed its budget; a narrower query fits.",
+  DATASET_UNAVAILABLE: "That dataset isn't active; activate a preset first.",
+  ARTIFACT_UNAVAILABLE: "That artifact doesn't exist or was evicted; the stream below lists what remains.",
+  OPERATION_CONFLICT: "Another operation is running; wait for it or cancel it.",
+  OPERATION_CANCELLED: "Cancelled at your request.",
+  UNSUPPORTED_CAPABILITY: "This browser lacks the capability; the simulator serves the tools.",
+  INTERNAL_ERROR: "The analysis failed inside the engine; read context and retry.",
+};
+
+/** Recovery guidance per code — the agent's legal next move (§9's recovery column). */
+export const ERROR_RECOVERY_MOVE: Record<ErrorCode, string> = {
+  VALIDATION_ERROR: "Recovery: corrected fields, then resend.",
+  STALE_REVISION: "Recovery: re-read events from the expected revision, then retry with the current revision.",
+  IDEMPOTENCY_CONFLICT: "Recovery: new key, or resend the original command exactly.",
+  POLICY_DENIED: "Recovery: use the permitted presentation or safer SQL.",
+  UNSAFE_SQL: "Recovery: apply the blocked-construct details and rewrite the statement.",
+  BUDGET_EXCEEDED: "Recovery: narrow the query or request an allowed larger budget.",
+  DATASET_UNAVAILABLE: "Recovery: activate an available preset.",
+  ARTIFACT_UNAVAILABLE: "Recovery: read recent artifacts; recompute only if necessary.",
+  OPERATION_CONFLICT: "Recovery: wait for the running operation or cancel it.",
+  OPERATION_CANCELLED: "Recovery: reconfirm intent before retrying.",
+  UNSUPPORTED_CAPABILITY: "Recovery: use the simulator or follow the returned human action.",
+  INTERNAL_ERROR: "Recovery: read current context; no sensitive stack data is exposed.",
+};
 
 /** §4.1 capability negotiation: enums, not prose. */
 export const CapabilitySchema = z.enum([
@@ -281,7 +319,7 @@ export type GetContextEventsData = z.infer<typeof GetContextEventsDataSchema>;
 export const ActivateDatasetInputSchema = z
   .strictObject({
     datasetId: z
-      .enum(["saas_churn", "healthcare_pii"])
+      .enum(PRESET_IDS)
       .describe("The preset to activate in this tab; it must already be materialized locally."),
     expectedRevision: z
       .number()
@@ -332,9 +370,9 @@ export const RunAnalysisInputSchema = z
     presentation: RunPresentationInputSchema.optional(),
     budget: z
       .strictObject({
-        executionMs: z.number().int().min(100).max(15000).describe("Execution deadline in milliseconds.").optional(),
-        resultRows: z.number().int().min(1).max(50000).describe("Maximum materialized rows.").optional(),
-        chartPoints: z.number().int().min(10).max(5000).describe("Maximum chart points.").optional(),
+        executionMs: z.number().int().min(100).max(BUDGET_HARD_MAX.executionMs).describe("Execution deadline in milliseconds.").optional(),
+        resultRows: z.number().int().min(1).max(BUDGET_HARD_MAX.resultRows).describe("Maximum materialized rows.").optional(),
+        chartPoints: z.number().int().min(10).max(BUDGET_HARD_MAX.chartPoints).describe("Maximum chart points.").optional(),
       })
       .describe("Stricter budgets are honored; omitted axes fall back to workspace defaults; above-default requests are clamped and disclosed.")
       .optional(),
