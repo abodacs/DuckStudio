@@ -41,13 +41,13 @@ export function DataGridView() {
       switch (artifact.grid.kind) {
         case "rows":
           return (
-            <div className="view-swap flex min-h-0 flex-1 flex-col p-3">
+            <div className="view-swap flex h-full min-h-0 flex-1 flex-col p-3">
               <VirtualGrid grid={artifact.grid} totalRows={artifact.artifact.rowCount} />
             </div>
           );
         case "suppressed":
           return (
-            <div className="view-swap flex flex-col gap-4 p-3">
+            <div className="view-swap flex h-full flex-col gap-4 overflow-y-auto p-3">
               <div role="alert" className="banner-suppressed">
                 <p className="banner-suppressed-title">Data Grid — suppressed by policy</p>
                 <p>

@@ -38,7 +38,7 @@ export function SqlLineageView() {
     case "artifact": {
       const { lineage } = artifact;
       return (
-        <div className="view-swap flex flex-col gap-3 p-3">
+        <div className="view-swap flex h-full flex-col gap-3 overflow-y-auto p-3">
           <p className="meta">
             <span className="mono-value">{artifact.artifact.artifactId}</span> ·{" "}
             <span className="mono-value">{artifact.artifact.relationName}</span>

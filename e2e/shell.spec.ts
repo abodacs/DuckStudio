@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { HEALTHCARE_PII_CANONICAL_SQL } from "../src/demo-presets/canonical-sql";
 
 // Pinned empty-state copy per tab (ticket 06 — copy is decided, not invented;
 // the Insights line was re-voiced by the 2026-09-02 layout/UX pass review).
@@ -303,5 +304,148 @@ test.describe("slice 4: agent control plane", () => {
     ]);
     expect(surface.tools).not.toContain("selectArtifact");
     expect(surface.tools).not.toContain("cancelActiveOperation");
+  });
+});
+
+// --- Slice 5: the evidence canvas (build tickets 55/56). The same served
+// tool surface commits real analyses; the two-pane chrome must paint the
+// committed projection and nothing else — one test per user-visible
+// behavior, with the custody story legible on a muted screen. ---
+
+async function activateAndRun(
+  page: import("@playwright/test").Page,
+  keys: { activate: string; run: string },
+  sql: string = CHURN_SQL,
+  datasetId: "saas_churn" | "healthcare_pii" = "saas_churn",
+): Promise<{ artifactId: string }> {
+  await page.waitForFunction(() => (window as SurfaceWindow).__duckstudioAgentSurface !== undefined, undefined, {
+    timeout: 30_000,
+  });
+  const activated = (await invokeTool(page, "duckdb_activate_dataset", {
+    datasetId,
+    expectedRevision: 0,
+    idempotencyKey: keys.activate,
+  })) as { ok: boolean };
+  expect(activated.ok).toBe(true);
+  const envelope = (await invokeTool(page, "duckdb_execute_sql_to_canvas", {
+    source: { kind: "dataset", id: datasetId },
+    sql,
+    bindings: {},
+    expectedRevision: 1,
+    idempotencyKey: keys.run,
+  })) as {
+    ok: boolean;
+    data: { artifact: { artifactId: string } };
+    error?: { code: string; message: string };
+  };
+  expect(envelope.ok, `analysis failed: ${JSON.stringify(envelope.error ?? null)}`).toBe(true);
+  return envelope.data.artifact;
+}
+
+test.describe("slice 5: evidence canvas", () => {
+  test("the committed artifact paints Insights, SQL & Lineage, and Custody", async ({ page }) => {
+    await page.goto("/");
+    await activateAndRun(page, { activate: "e2e-canvas-activate-01", run: "e2e-canvas-run-01" });
+
+    // The left pane carries the same commit: artifact card with source and policy.
+    await expect(page.getByRole("button", { name: /a_01/ })).toBeVisible();
+    await expect(page.getByText("source saas_churn", { exact: false })).toBeVisible();
+
+    // Insights: measured KPI cards + the lazy chart's canvas.
+    await expect(page.getByRole("tabpanel").getByText("accounts", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("region", { name: "Chart" }).locator("canvas")).toBeVisible();
+
+    // SQL & Lineage: exact statement, hash, chain, release decision.
+    await page.getByRole("tab", { name: "SQL & Lineage" }).click();
+    await expect(page.getByText(/GROUP BY tickets/)).toBeVisible();
+    await expect(page.getByText(/dataset:saas_churn → artifact:a_01/)).toBeVisible();
+    await expect(page.getByRole("tabpanel").getByText("allowed", { exact: true })).toBeVisible();
+
+    // Custody: the captured §8.4 snapshot with its limitations.
+    await page.getByRole("tab", { name: "Custody" }).click();
+    await expect(page.getByText(/scope artifact:a_01/)).toBeVisible();
+    await expect(page.getByText("0 B", { exact: true })).toBeVisible();
+    await expect(page.getByText("Application shell traffic is outside dataset-upload accounting.")).toBeVisible();
+  });
+
+  test("the public grid paints bounded virtualized rows only after the artifact", async ({ page }) => {
+    await page.goto("/");
+    await activateAndRun(page, { activate: "e2e-grid-activate-01", run: "e2e-grid-run-01" });
+    await page.getByRole("tab", { name: "Data Grid" }).click();
+
+    // Acceptance 17 in reverse: rows exist — but only from the artifact.
+    await expect(page.locator("[data-grid-row]").first()).toBeVisible();
+
+    // The virtualization bar: DOM rows ≤ viewport rows + 2×overscan.
+    const viewport = page.locator("[data-grid-viewport]");
+    const box = await viewport.boundingBox();
+    expect(box).not.toBeNull();
+    const bound = Math.ceil(box!.height / 32) + 2 * 8;
+    const painted = await page.locator("[data-grid-row]").count();
+    expect(painted).toBeLessThanOrEqual(bound);
+
+    // Transform-only scroll: a real deep wheel jump repaints the window,
+    // still bounded.
+    const center = await viewport.boundingBox();
+    await page.mouse.move(center!.x + center!.width / 2, center!.y + center!.height / 2);
+    await page.mouse.wheel(0, 32 * 5000);
+    await expect.poll(async () => page.locator("[data-grid-row]").count()).toBeLessThanOrEqual(bound);
+    await expect
+      .poll(async () => page.locator("[data-grid-window]").evaluate((element) => element.style.transform))
+      .toContain("translateY(159");
+  });
+
+  test("the healthcare grid refuses to paint rows — the mute test", async ({ page }) => {
+    await page.goto("/");
+    await activateAndRun(
+      page,
+      { activate: "e2e-mute-activate-01", run: "e2e-mute-run-01" },
+      HEALTHCARE_PII_CANONICAL_SQL,
+      "healthcare_pii",
+    );
+    await page.getByRole("tab", { name: "Data Grid" }).click();
+
+    // The pinned suppression banner, with the identifier line and counters
+    // rendered from the projection's release/custody data.
+    await expect(page.getByRole("alert")).toContainText("Data Grid — suppressed by policy");
+    await expect(page.getByRole("alert")).toContainText("mrn");
+    await expect(page.getByText("Uploaded to network:", { exact: false })).toBeVisible();
+    await expect(page.getByText("0 B", { exact: true })).toBeVisible();
+    await expect(page.getByText("Raw values released:", { exact: false })).toBeVisible();
+
+    // Zero raw records anywhere in the shared DOM; the released aggregates
+    // and column metadata render instead.
+    await expect(page.locator("[data-grid-row]")).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Released aggregates" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Column metadata" })).toBeVisible();
+
+    // The custody story on a muted screen: handle + policy label + badge.
+    await expect(page.getByText("a_01", { exact: true })).toBeVisible();
+    await expect(page.getByText("sensitive_aggregate_only", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("0 Bytes of Dataset Uploaded")).toBeVisible();
+  });
+
+  test("artifact selection dispatches once and tab clicks never dispatch", async ({ page }) => {
+    await page.goto("/");
+    const { artifactId } = await activateAndRun(page, {
+      activate: "e2e-select-activate-01",
+      run: "e2e-select-run-01",
+    });
+    expect(artifactId).toBe("a_01");
+    const revision = page.getByText("rev 2", { exact: true });
+
+    // Tabs are canvas-local: four clicks, zero dispatches, revision unmoved.
+    for (const label of ["Data Grid", "SQL & Lineage", "Custody", "Insights"]) {
+      await page.getByRole("tab", { name: label }).click();
+      await expect(revision).toBeVisible();
+    }
+
+    // One card click = one selectArtifact dispatch: rev 2 → rev 3, exactly.
+    await page.getByRole("button", { name: /a_01/ }).click();
+    await expect(page.getByText("rev 3", { exact: true })).toBeVisible();
+    for (const label of ["Data Grid", "Custody"]) {
+      await page.getByRole("tab", { name: label }).click();
+      await expect(page.getByText("rev 3", { exact: true })).toBeVisible();
+    }
   });
 });

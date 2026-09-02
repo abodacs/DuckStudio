@@ -56,7 +56,7 @@ export function InsightsView() {
     case "artifact": {
       const { insights } = artifact;
       return (
-        <div className="view-swap flex flex-col gap-4 p-3">
+        <div className="view-swap flex h-full flex-col gap-4 overflow-y-auto p-3">
           {insights.kpis.length > 0 && (
             <div className="grid grid-cols-3 gap-2.5">
               {insights.kpis.map((kpi) => (

@@ -529,8 +529,8 @@ export function WorkspaceShell() {
             className="panel-evidence rise min-h-0 flex-1 overflow-hidden"
             style={rise(260)}
           >
-            <div id="evidence-panel" className="h-full overflow-y-auto p-1 text-sm">
-              <div className="panel-evidence-core flex min-h-full flex-col">
+            <div id="evidence-panel" className="h-full overflow-hidden p-1 text-sm">
+              <div className="panel-evidence-core flex h-full min-h-0 flex-col">
                 <View key={activeView} />
               </div>
             </div>

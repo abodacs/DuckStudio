@@ -73,7 +73,7 @@ async function createBrowserRuntime(): Promise<DuckEngineRuntime> {
       for await (const batch of stream) {
         // Bounded cursor: stop at the resultRows budget; the for-await break
         // closes the stream (ADR 0002: streamArrow → bounded cursor).
-        schema = batch.schema.fields.map((field) => ({ name: field.name, type: String(field.type) }));
+        schema = batch.schema.fields.map((field) => ({ name: field.name, type: duckDbType(field.type) }));
         const vectors = batch.schema.fields.map((field) => batch.getChild(field.name));
         const batchLength = Math.min(batch.numRows, maxRows - rows.length);
         for (let rowIndex = 0; rowIndex < batchLength; rowIndex += 1) {
@@ -114,6 +114,41 @@ async function createBrowserRuntime(): Promise<DuckEngineRuntime> {
       await connection.query(`DROP TABLE IF EXISTS ${relationName}`);
     },
   };
+}
+
+/**
+ * duckdb-wasm surfaces result types as Arrow type names ("Utf8", "Int64"),
+ * while every DuckDB consumer of the schema — the artifact digest (§4.3),
+ * the presentation inference, and this worker's own `CREATE TABLE` in
+ * `materialize` — speaks DuckDB type names. The node runtime reports DuckDB
+ * names natively; this map gives the browser runtime the same vocabulary.
+ */
+const ARROW_TO_DUCKDB_TYPES: Readonly<Record<string, string>> = {
+  Utf8: "VARCHAR",
+  LargeUtf8: "VARCHAR",
+  Bool: "BOOLEAN",
+  Int8: "TINYINT",
+  Int16: "SMALLINT",
+  Int32: "INTEGER",
+  Int64: "BIGINT",
+  Int128: "HUGEINT",
+  Uint8: "UTINYINT",
+  Uint16: "USMALLINT",
+  Uint32: "UINTEGER",
+  Uint64: "UBIGINT",
+  Float32: "FLOAT",
+  Float64: "DOUBLE",
+  DateDay: "DATE",
+  Timestamp: "TIMESTAMP",
+  TimeMicrosecond: "TIME",
+  Binary: "BLOB",
+};
+
+function duckDbType(fieldType: { toString(): string }): string {
+  const name = String(fieldType);
+  const decimal = /^Decimal\((\d+),\s*(\d+)\)$/.exec(name);
+  if (decimal) return `DECIMAL(${decimal[1]},${decimal[2]})`;
+  return ARROW_TO_DUCKDB_TYPES[name] ?? name;
 }
 
 const workerSelf = self as unknown as WorkerSelf;

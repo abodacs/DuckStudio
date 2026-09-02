@@ -29,7 +29,7 @@ export function CustodyView() {
       return <UnavailableArtifact artifactId={artifact.artifactId} reason={artifact.reason} />;
     case "artifact":
       return artifact.custody ? (
-        <div className="view-swap flex flex-col gap-3 p-3">
+        <div className="view-swap flex h-full flex-col gap-3 overflow-y-auto p-3">
           <p className="meta">
             scope <span className="mono-value">{artifact.custody.scope.kind}:{artifact.custody.scope.id}</span> ·
             observed <span className="mono-value">{artifact.custody.observedAt}</span>
