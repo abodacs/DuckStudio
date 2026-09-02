@@ -150,29 +150,55 @@ export type ArtifactView =
     };
 
 // --- Page memory (grilling 51 item 3): the bounded row cache and the
-// custody snapshot, both captured by the store at commit and merged into the
-// projection synchronously — never a render-time engine fetch, never a
-// second state store. The §4.3 artifact schema stays verbatim; this cache is
-// page memory keyed by artifact id and evicted with the retainedArtifacts
-// ring (the store calls `releaseArtifactMemory`). ---
+// custody snapshot, captured by the owning store at commit and merged into
+// the projection synchronously — never a render-time engine fetch, never a
+// second state store. The §4.3 artifact schema stays verbatim; the cache is
+// per-store state the store binds onto its own snapshots before freezing,
+// so two stores in one process can never collide, and the store releases
+// memory exactly where it decides eviction (the retainedArtifacts ring). ---
 
-const rowCache = new Map<string, GridRows>();
-const custodyCache = new Map<string, EvidenceSnapshot>();
-
-/** Store-only writer: binds a committed artifact's bounded rows (page memory). */
-export function captureArtifactRows(artifactId: string, rows: GridRows): void {
-  rowCache.set(artifactId, rows);
+export interface PageMemory {
+  /** Store-only writer: binds a committed artifact's bounded rows (page memory). */
+  captureRows(artifactId: string, rows: GridRows): void;
+  /** Store-only writer: binds a committed artifact's §8.4 evidence snapshot. */
+  captureEvidence(artifactId: string, evidence: EvidenceSnapshot): void;
+  /** Store-only eviction: the retainedArtifacts ring dropped this relation. */
+  release(artifactId: string): void;
+  /** Projection read: the artifact's captured rows, if still resident. */
+  rowsOf(artifactId: string): GridRows | undefined;
+  /** Projection read: the artifact's captured §8.4 evidence, if still resident. */
+  evidenceOf(artifactId: string): EvidenceSnapshot | undefined;
 }
 
-/** Store-only writer: binds a committed artifact's §8.4 evidence snapshot. */
-export function captureArtifactEvidence(artifactId: string, evidence: EvidenceSnapshot): void {
-  custodyCache.set(artifactId, evidence);
+export function createPageMemory(): PageMemory {
+  const rows = new Map<string, GridRows>();
+  const custody = new Map<string, EvidenceSnapshot>();
+  return {
+    captureRows(artifactId, captured) {
+      rows.set(artifactId, captured);
+    },
+    captureEvidence(artifactId, snapshot) {
+      custody.set(artifactId, snapshot);
+    },
+    release(artifactId) {
+      rows.delete(artifactId);
+      custody.delete(artifactId);
+    },
+    rowsOf: (artifactId) => rows.get(artifactId),
+    evidenceOf: (artifactId) => custody.get(artifactId),
+  };
 }
 
-/** Store-only eviction: the retainedArtifacts ring dropped this relation. */
-export function releaseArtifactMemory(artifactId: string): void {
-  rowCache.delete(artifactId);
-  custodyCache.delete(artifactId);
+const pageMemoryBySnapshot = new WeakMap<Workspace, PageMemory>();
+
+/** Registers the store's page memory for a snapshot; the projection reads it back by identity. */
+export function bindPageMemory<W extends Workspace>(workspace: W, memory: PageMemory): W {
+  pageMemoryBySnapshot.set(workspace, memory);
+  return workspace;
+}
+
+function pageMemoryOf(workspace: Workspace): PageMemory | undefined {
+  return pageMemoryBySnapshot.get(workspace);
 }
 
 /** SECURITY.md: keep the badge copy exact. Upload accounting grows with Slice 2. */
@@ -257,9 +283,9 @@ let lastArtifactInput: Workspace | undefined;
 let lastArtifactId: string | null | undefined;
 let lastArtifactOutput: ArtifactView | undefined;
 
-function projectGrid(record: AnalysisRecordShape, artifactId: string): GridData {
+function projectGrid(record: AnalysisRecordShape, artifactId: string, memory: PageMemory | undefined): GridData {
   if (record.artifact.policy === "sensitive_aggregate_only") {
-    const evidence = custodyCache.get(artifactId);
+    const evidence = memory?.evidenceOf(artifactId);
     return {
       kind: "suppressed",
       policy: record.artifact.policy,
@@ -274,7 +300,7 @@ function projectGrid(record: AnalysisRecordShape, artifactId: string): GridData 
   if (record.artifact.presentation.grid?.visible === false) {
     return { kind: "hidden" };
   }
-  const rows = rowCache.get(artifactId) ?? [];
+  const rows = memory?.rowsOf(artifactId) ?? [];
   return {
     kind: "rows",
     rows,
@@ -336,13 +362,14 @@ export function projectArtifact(workspace: Workspace, artifactId: string | null)
     } else if (workspace.evictedArtifactIds.includes(artifactId)) {
       output = { kind: "unavailable", artifactId, reason: "relation_evicted" };
     } else {
-      const rows = rowCache.get(artifactId) ?? [];
+      const memory = pageMemoryOf(workspace);
+      const rows = memory?.rowsOf(artifactId) ?? [];
       output = {
         kind: "artifact",
         artifact: record.artifact,
         summary: record.summary,
         insights: projectInsights(record, rows),
-        grid: projectGrid(record, artifactId),
+        grid: projectGrid(record, artifactId, memory),
         lineage: {
           sql: record.artifact.sql,
           bindings: record.artifact.bindings,
@@ -352,7 +379,7 @@ export function projectArtifact(workspace: Workspace, artifactId: string | null)
           release: record.artifact.release,
           metrics: record.artifact.metrics,
         },
-        custody: custodyCache.get(artifactId) ?? null,
+        custody: memory?.evidenceOf(artifactId) ?? null,
       };
     }
   }

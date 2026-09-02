@@ -13,12 +13,12 @@ import {
   resolvePresentation,
 } from "./presentation";
 import {
-  captureArtifactEvidence,
-  captureArtifactRows,
+  bindPageMemory,
+  createPageMemory,
   projectWorkspace,
-  releaseArtifactMemory,
   type GridCell,
   type GridRows,
+  type PageMemory,
 } from "./projection";
 import {
   ActivateDatasetInputSchema,
@@ -162,7 +162,7 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value) ?? "null";
 }
 
-function createRev0Workspace(): Workspace {
+function createRev0Workspace(pageMemory: PageMemory): Workspace {
   const workspace: Workspace = {
     workspaceId: WORKSPACE_ID,
     revision: 0,
@@ -177,6 +177,7 @@ function createRev0Workspace(): Workspace {
     artifacts: [],
     evictedArtifactIds: [],
   };
+  bindPageMemory(workspace, pageMemory);
   // Frozen so accidental snapshot mutation fails loudly instead of leaking
   // into the next projection; the store replaces snapshots whole.
   Object.freeze(workspace.capabilities);
@@ -214,7 +215,8 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
   const now = ports.now ?? (() => new Date().toISOString());
 
   const listeners = new Set<() => void>();
-  let workspace = createRev0Workspace();
+  const pageMemory = createPageMemory();
+  let workspace = createRev0Workspace(pageMemory);
   const graph: ArtifactGraph = createArtifactGraph();
   const eventRing: WorkspaceEvent[] = [];
   const idempotencyCache = new Map<string, { fingerprint: string; envelope: Envelope }>();
@@ -247,6 +249,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
   }
 
   function replaceWorkspace(next: Workspace): void {
+    bindPageMemory(next, pageMemory);
     Object.freeze(next.capabilities);
     Object.freeze(next.budgets);
     Object.freeze(next.operations);
@@ -675,7 +678,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     // Page memory lands with the commit (grilling 51): the bounded row
     // cache and the §8.4 evidence snapshot the Custody view and the
     // suppression counters merge synchronously from the projection.
-    captureArtifactRows(
+    pageMemory.captureRows(
       artifactId,
       captureRows(
         result,
@@ -685,7 +688,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
         ),
       ),
     );
-    captureArtifactEvidence(artifactId, {
+    pageMemory.captureEvidence(artifactId, {
       ...kernel.evidence({ kind: "artifact", id: artifactId }, record.artifact.policy),
       lineage: [...record.artifact.lineage, { kind: "artifact", id: artifactId }],
     });
@@ -754,10 +757,11 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       try {
         await engine.dropRelation(relationName);
         graph.markEvicted(evictedId);
-        // The ring dropped the relation; its page memory goes with it. A
-        // failed drop leaves the artifact retained — the cache stays so the
-        // retry on a later commit (grilling 32) still finds its rows.
-        releaseArtifactMemory(evictedId);
+        // The ring dropped the relation; its page memory goes with it —
+        // released here, where the eviction is decided. A failed drop
+        // leaves the artifact retained — the cache stays so the retry on a
+        // later commit (grilling 32) still finds its rows.
+        pageMemory.release(evictedId);
       } catch {
         continue;
       }
@@ -1011,6 +1015,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
         ...workspace,
         capabilities: [...workspace.capabilities, capability],
       };
+      bindPageMemory(next, pageMemory);
       Object.freeze(next.capabilities);
       workspace = Object.freeze(next);
       for (const listener of listeners) {
