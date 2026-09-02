@@ -52,6 +52,8 @@ Schema ownership follows the same rule. Each module owns its schemas (`revisione
 
 The custody → engine seam is one object. `dataset-custody/` returns a single authorized-execution decision — authorized relation, prepared positional SQL, clamped budget, redaction keys — and `duck-engine/` consumes it verbatim, owning only cancellation and respawn-on-cancel (ADR 0002). The engine never re-derives relation, SQL, budget, or redaction; each custody rule is written and tested once, and engine tests run against fake decision objects with no worker.
 
+Platform boundaries (ADR 0002): only the self-hosted `eh` and `mvp` DuckDB-WASM bundles ship — no `coi`/pthread bundle — so `selectBundle` returns `eh` and engine execution is single-threaded by configuration; the shipped COOP/COEP isolation is for the document, not for DuckDB threading. The browser's wasm memory ceiling applies unmanaged; the custody-clamped budget (`executionMs` 5,000 default, `resultRows` 10,000 default) is the effective query limit. Remote files and URLs are rejected at the custody seam, so the engine only ever sees registered preset relations.
+
 ## One Command Path
 
 Human controls, prompt chips, Agent Simulator, and WebMCP adapters must dispatch the same domain commands through the revisioned workspace.
