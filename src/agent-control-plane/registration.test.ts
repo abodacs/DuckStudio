@@ -1,11 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
+  ACTIVATE_DATASET_TOOL_DESCRIPTION,
+  CompiledEnvelopeFailure,
   CompiledEnvelopeSuccess,
+  EXECUTE_SQL_TO_CANVAS_TOOL_DESCRIPTION,
   GET_CONTEXT_TOOL_DESCRIPTION,
   GetContextInputSchema,
+  ActivateDatasetInputSchema,
+  RunAnalysisInputSchema,
+  VERIFY_ZERO_EGRESS_TOOL_DESCRIPTION,
+  VerifyCustodyInputSchema,
 } from "./envelope";
-import { registerTools } from "./registration";
+import { CANONICAL_TOOL_NAMES, registerTools } from "./registration";
 import { invokeTool } from "./simulator";
 import { createWorkspaceStore } from "../revisioned-workspace/store";
 /**
@@ -19,8 +26,29 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("registerTools native path (ticket 14)", () => {
-  it("registers exactly once with the derived definition, appends webmcp_native, and leaves the simulator unbound", async () => {
+const DERIVED_SCHEMAS: Record<string, z.core.JSONSchema.BaseSchema> = {
+  duckdb_get_context: z.toJSONSchema(GetContextInputSchema, { io: "input" }),
+  duckdb_activate_dataset: z.toJSONSchema(ActivateDatasetInputSchema, { io: "input" }),
+  duckdb_execute_sql_to_canvas: z.toJSONSchema(RunAnalysisInputSchema, { io: "input" }),
+  duckdb_verify_zero_egress: z.toJSONSchema(VerifyCustodyInputSchema, { io: "input" }),
+};
+
+const DESCRIPTIONS: Record<string, string> = {
+  duckdb_get_context: GET_CONTEXT_TOOL_DESCRIPTION,
+  duckdb_activate_dataset: ACTIVATE_DATASET_TOOL_DESCRIPTION,
+  duckdb_execute_sql_to_canvas: EXECUTE_SQL_TO_CANVAS_TOOL_DESCRIPTION,
+  duckdb_verify_zero_egress: VERIFY_ZERO_EGRESS_TOOL_DESCRIPTION,
+};
+
+const READ_ONLY: Record<string, boolean> = {
+  duckdb_get_context: true,
+  duckdb_activate_dataset: false,
+  duckdb_execute_sql_to_canvas: false,
+  duckdb_verify_zero_egress: true,
+};
+
+describe("registerTools native path (ticket 14/45)", () => {
+  it("registers exactly the four canonical tools with derived definitions, appends webmcp_native once, and leaves the simulator unbound", async () => {
     const registerTool = vi.fn();
     vi.stubGlobal("isSecureContext", true);
     vi.stubGlobal("document", { modelContext: { registerTool } });
@@ -28,30 +56,58 @@ describe("registerTools native path (ticket 14)", () => {
     const store = createWorkspaceStore();
     await registerTools(store);
 
-    expect(registerTool).toHaveBeenCalledTimes(1);
-    const call = registerTool.mock.calls.at(0);
-    expect(call).toBeDefined();
-    if (!call) return;
-    const [def, options] = call;
-    expect(def.name).toBe("duckdb_get_context");
-    expect(def.description).toBe(GET_CONTEXT_TOOL_DESCRIPTION);
-    expect(def.inputSchema).toEqual(z.toJSONSchema(GetContextInputSchema, { io: "input" }));
-    expect(def.annotations).toEqual({ readOnlyHint: true });
-    expect(options).toEqual({ signal: expect.any(AbortSignal) });
+    expect(registerTool).toHaveBeenCalledTimes(4);
+    const registeredNames = registerTool.mock.calls.map((call) => call[0].name);
+    expect(registeredNames).toEqual(CANONICAL_TOOL_NAMES);
+    // Human-only workspace commands are never registration candidates (§8.5).
+    expect(registeredNames).not.toContain("selectArtifact");
+    expect(registeredNames).not.toContain("cancelActiveOperation");
 
-    expect(store.getSnapshot().capabilities).toContain("webmcp_native");
+    for (const call of registerTool.mock.calls) {
+      const [def, options] = call;
+      expect(def.description).toBe(DESCRIPTIONS[def.name]);
+      expect(def.inputSchema).toEqual(DERIVED_SCHEMAS[def.name]);
+      expect(def.annotations).toEqual({ readOnlyHint: READ_ONLY[def.name] });
+      expect(options).toEqual({ signal: expect.any(AbortSignal) });
+    }
 
-    // The registered definition is live: it answers through the same store.
-    const envelope = await def.execute({ scope: "summary" });
-    expect(envelope.ok).toBe(true);
-    CompiledEnvelopeSuccess.parse(envelope);
+    const capabilities = store.getSnapshot().capabilities;
+    expect(capabilities).toContain("webmcp_native");
+    expect(capabilities).not.toContain("simulator_only");
+
+    // Every registered definition is live: each answers through the same
+    // store — the engine-backed analysis answers with a §9 failure envelope
+    // here (no warmed worker in the headless env), never a throw.
+    for (const call of registerTool.mock.calls) {
+      const [def] = call;
+      const input =
+        def.name === "duckdb_activate_dataset"
+          ? { datasetId: "saas_churn", expectedRevision: 0, idempotencyKey: "native-activate-01" }
+          : def.name === "duckdb_execute_sql_to_canvas"
+            ? {
+                source: { kind: "dataset", id: "saas_churn" },
+                sql: "SELECT COUNT(*) AS n FROM saas_churn",
+                bindings: {},
+                expectedRevision: 1,
+                idempotencyKey: "native-analysis-01",
+              }
+            : def.name === "duckdb_verify_zero_egress"
+              ? { scope: "workspace" }
+              : { scope: "summary" };
+      const envelope = await def.execute(input);
+      if (envelope.ok) {
+        CompiledEnvelopeSuccess.parse(envelope);
+      } else {
+        CompiledEnvelopeFailure.parse(envelope);
+      }
+    }
 
     // Exactly one surface — the simulator never took over.
     expect(() => invokeTool("duckdb_get_context", { scope: "summary" })).toThrow();
   });
 });
 
-describe("registerTools simulator fallback (ticket 14)", () => {
+describe("registerTools simulator fallback (ticket 14/45)", () => {
   it("absent API: the simulator serves and simulator_only is appended", async () => {
     const store = createWorkspaceStore();
 

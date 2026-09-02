@@ -197,6 +197,18 @@ export type GetContextInput = z.infer<typeof GetContextInputSchema>;
 export const GET_CONTEXT_TOOL_DESCRIPTION =
   "Read the smallest sufficient workspace context or revision delta before acting. Has no side effects and never returns raw rows.";
 
+/** §8.2 verbatim. */
+export const ACTIVATE_DATASET_TOOL_DESCRIPTION =
+  "Activate one dataset already local to this tab. Changes workspace state atomically; use the current revision and an idempotency key.";
+
+/** §8.3 verbatim; the negative phrase is a hard safety invariant (§8.6). */
+export const EXECUTE_SQL_TO_CANVAS_TOOL_DESCRIPTION =
+  "Run one bounded read-only analysis against a dataset or prior artifact, create an immutable result artifact, infer or apply a safe presentation, and select that artifact atomically. Returns only a safe summary and handles, never result rows.";
+
+/** §8.4 verbatim; the negative phrase is a hard safety invariant (§8.6). */
+export const VERIFY_ZERO_EGRESS_TOOL_DESCRIPTION =
+  "Read a scoped, timestamped evidence snapshot for dataset uploads, sensitive releases, monitored transports, and operation lineage. Operational evidence only; not a formal proof.";
+
 /**
  * §8.1 compact bootstrap `data`. Budgets carry the full six-key §4.6 shape —
  * the doc example's 3-key fork is not encoded. `activeOperation` joins in
@@ -294,7 +306,9 @@ export const RunPresentationInputSchema = PresentationSpecSchema.extend({
     .enum(["insights", "grid", "sql_lineage", "custody"])
     .describe("Human-evidence-plane hint for which tab to open after commit; never stored on the artifact.")
     .optional(),
-});
+}).describe(
+  "KPI, chart, and grid spec to commit; gaps are inferred policy-aware and a supplied element that crosses policy denies.",
+);
 
 /** §8.3 `duckdb_execute_sql_to_canvas`. */
 export const RunAnalysisInputSchema = z

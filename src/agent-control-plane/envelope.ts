@@ -40,6 +40,7 @@ export {
 export {
   ActivateDatasetDataSchema,
   ActivateDatasetInputSchema,
+  ACTIVATE_DATASET_TOOL_DESCRIPTION,
   BudgetLimitsSchema,
   CapabilitySchema,
   CancelActiveOperationDataSchema,
@@ -50,6 +51,7 @@ export {
   CompiledRunAnalysisInput,
   CompiledSelectArtifactInput,
   CompiledVerifyCustodyInput,
+  EXECUTE_SQL_TO_CANVAS_TOOL_DESCRIPTION,
   GET_CONTEXT_TOOL_DESCRIPTION,
   GetContextArtifactDataSchema,
   GetContextEventsDataSchema,
@@ -63,6 +65,7 @@ export {
   RunAnalysisInputSchema,
   SelectArtifactDataSchema,
   SelectArtifactInputSchema,
+  VERIFY_ZERO_EGRESS_TOOL_DESCRIPTION,
   VerifyCustodyInputSchema,
   WorkspaceEventSchema,
   WorkspaceSchema,

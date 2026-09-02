@@ -33,7 +33,10 @@ import {
   type WorkspaceEvent,
 } from "./schemas";
 import {
+  contextDelta,
   failureEnvelope,
+  forwardAction,
+  recoveryActions,
   successEnvelope,
   validationFailure,
   type Envelope,
@@ -305,7 +308,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
    * Terminal failure of an accepted operation: the operation records
    * `failed`, the `analysis_failed` lifecycle event fires, and the slot
    * releases — but nothing commits (grilling 31): revision, artifacts, and
-   * selection are untouched.
+   * selection are untouched. The §9 recovery table names the next actions.
    */
   function failOperation(operationId: string, failure: CustodyFailure): Envelope {
     finishOperation(operationId, "failed", failure.code);
@@ -313,7 +316,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       { revision: workspace.revision, at: now(), kind: "analysis_failed", operationId, errorCode: failure.code },
     ]);
     releaseSlot();
-    return failureEnvelope(workspace, failure, []);
+    return failureEnvelope(workspace, failure, recoveryActions(failure, workspace));
   }
 
   /**
@@ -324,16 +327,13 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
   function settleCancelled(operationId: string): Envelope {
     cancelRequested = false;
     releaseSlot();
-    return failureEnvelope(
-      workspace,
-      {
-        code: "OPERATION_CANCELLED",
-        message: "The operation was cancelled at the human's request; reconfirm intent before retrying.",
-        retryable: true,
-        details: { operationId },
-      },
-      [],
-    );
+    const error: EnvelopeFailure["error"] = {
+      code: "OPERATION_CANCELLED",
+      message: "The operation was cancelled at the human's request; reconfirm intent before retrying.",
+      retryable: true,
+      details: { operationId },
+    };
+    return failureEnvelope(workspace, error, recoveryActions(error, workspace));
   }
 
   /** The mutation check order (grilling 31/33): schema → cache → staleness → single-flight. */
@@ -362,41 +362,25 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       );
     }
     if (input.expectedRevision !== workspace.revision) {
-      return Promise.resolve(
-        failureEnvelope(
-          workspace,
-          {
-            code: "STALE_REVISION",
-            message: `Expected revision ${input.expectedRevision}; current revision is ${workspace.revision}.`,
-            retryable: true,
-            details: { expectedRevision: input.expectedRevision, currentRevision: workspace.revision },
-          },
-          [
-            {
-              kind: "tool",
-              tool: "duckdb_get_context",
-              input: { scope: "summary", sinceRevision: input.expectedRevision },
-            },
-          ],
-        ),
-      );
+      const error: EnvelopeFailure["error"] = {
+        code: "STALE_REVISION",
+        message: `Expected revision ${input.expectedRevision}; current revision is ${workspace.revision}.`,
+        retryable: true,
+        details: { expectedRevision: input.expectedRevision, currentRevision: workspace.revision },
+      };
+      return Promise.resolve(failureEnvelope(workspace, error, recoveryActions(error, workspace)));
     }
     // Single-flight (§9): one mutating operation at a time. Reads,
     // `selectArtifact` (not an operation), and cancel (it targets the
     // running operation) never take or collide with the slot.
     if (activeOperation && (kind === "activateDataset" || kind === "runAnalysis")) {
-      return Promise.resolve(
-        failureEnvelope(
-          workspace,
-          {
-            code: "OPERATION_CONFLICT",
-            message: `Operation ${activeOperation.operationId} (${activeOperation.kind}) is running; wait for it or cancel it.`,
-            retryable: true,
-            details: { runningOperationId: activeOperation.operationId, runningKind: activeOperation.kind },
-          },
-          [{ kind: "tool", tool: "duckdb_get_context", input: { scope: "events" } }],
-        ),
-      );
+      const error: EnvelopeFailure["error"] = {
+        code: "OPERATION_CONFLICT",
+        message: `Operation ${activeOperation.operationId} (${activeOperation.kind}) is running; wait for it or cancel it.`,
+        retryable: true,
+        details: { runningOperationId: activeOperation.operationId, runningKind: activeOperation.kind },
+      };
+      return Promise.resolve(failureEnvelope(workspace, error, recoveryActions(error, workspace)));
     }
 
     // Deterministic validation failures inside the phases below are cached
@@ -419,6 +403,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
    * awaits. Re-activating the active dataset is a uniform commit (grilling 31).
    */
   function runActivate(input: ActivateDatasetInput, fingerprint: string): Promise<Envelope> {
+    const before = projectWorkspace(workspace);
     const operationId = acceptOperation("activate_dataset", input.datasetId);
     const catalog = CATALOG[input.datasetId];
     const revision = workspace.revision + 1;
@@ -436,14 +421,21 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     });
     appendEvents([{ revision, at: now(), kind: "dataset_activated", operationId, datasetId: catalog.datasetId }]);
     releaseSlot();
-    const envelope = successEnvelope(workspace, {
-      datasetId: catalog.datasetId,
-      schemaDigest: catalog.schemaDigest,
-      rowCount: catalog.rowCount,
-      byteSizeEstimate: catalog.byteSizeEstimate,
-      policy: catalog.policy,
-      minimumCohortSize: catalog.minimumCohortSize,
-    });
+    const envelope = successEnvelope(
+      workspace,
+      {
+        datasetId: catalog.datasetId,
+        schemaDigest: catalog.schemaDigest,
+        rowCount: catalog.rowCount,
+        byteSizeEstimate: catalog.byteSizeEstimate,
+        policy: catalog.policy,
+        minimumCohortSize: catalog.minimumCohortSize,
+      },
+      {
+        contextDelta: contextDelta(before, projectWorkspace(workspace)),
+        nextActions: forwardAction("activateDataset", workspace, catalog.datasetId),
+      },
+    );
     cacheSet(input.idempotencyKey, fingerprint, envelope);
     return Promise.resolve(envelope);
   }
@@ -452,25 +444,23 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
   function runSelectArtifact(input: SelectArtifactInput, fingerprint: string): Promise<Envelope> {
     const availability = graph.availability(input.artifactId);
     if (availability !== "available") {
-      const failure: Envelope = failureEnvelope(
-        workspace,
-        {
-          code: "ARTIFACT_UNAVAILABLE",
-          message:
-            availability === "relation_evicted"
-              ? "The artifact's materialized relation was evicted by retention; its metadata remains."
-              : "No artifact with that id exists.",
-          retryable: true,
-          details:
-            availability === "relation_evicted"
-              ? { artifactId: input.artifactId, reason: "relation_evicted" }
-              : { artifactId: input.artifactId },
-        },
-        [{ kind: "tool", tool: "duckdb_get_context", input: { scope: "summary" } }],
-      );
+      const error: EnvelopeFailure["error"] = {
+        code: "ARTIFACT_UNAVAILABLE",
+        message:
+          availability === "relation_evicted"
+            ? "The artifact's materialized relation was evicted by retention; its metadata remains."
+            : "No artifact with that id exists.",
+        retryable: true,
+        details:
+          availability === "relation_evicted"
+            ? { artifactId: input.artifactId, reason: "relation_evicted" }
+            : { artifactId: input.artifactId },
+      };
+      const failure: Envelope = failureEnvelope(workspace, error, recoveryActions(error, workspace));
       cacheSet(input.idempotencyKey, fingerprint, failure);
       return Promise.resolve(failure);
     }
+    const before = projectWorkspace(workspace);
     const revision = workspace.revision + 1;
     replaceWorkspace({
       ...workspace,
@@ -479,7 +469,9 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       recentArtifactIds: [input.artifactId, ...workspace.recentArtifactIds.filter((id) => id !== input.artifactId)],
     });
     appendEvents([{ revision, at: now(), kind: "artifact_selected", artifactId: input.artifactId }]);
-    const envelope = successEnvelope(workspace, { artifactId: input.artifactId });
+    const envelope = successEnvelope(workspace, { artifactId: input.artifactId }, {
+      contextDelta: contextDelta(before, projectWorkspace(workspace)),
+    });
     cacheSet(input.idempotencyKey, fingerprint, envelope);
     return Promise.resolve(envelope);
   }
@@ -488,21 +480,19 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
   function runCancel(input: CancelActiveOperationInput, fingerprint: string): Promise<Envelope> {
     const running = activeOperation;
     if (!running || (input.operationId !== undefined && input.operationId !== running.operationId)) {
-      const failure: Envelope = failureEnvelope(
-        workspace,
-        {
-          code: "VALIDATION_ERROR",
-          message: input.operationId
-            ? `Operation ${input.operationId} is not the running operation.`
-            : "No operation is running to cancel.",
-          retryable: false,
-          details: { operationId: input.operationId ?? running?.operationId ?? null },
-        },
-        [],
-      );
+      const error: EnvelopeFailure["error"] = {
+        code: "VALIDATION_ERROR",
+        message: input.operationId
+          ? `Operation ${input.operationId} is not the running operation.`
+          : "No operation is running to cancel.",
+        retryable: false,
+        details: { operationId: input.operationId ?? running?.operationId ?? null },
+      };
+      const failure: Envelope = failureEnvelope(workspace, error, recoveryActions(error, workspace));
       cacheSet(input.idempotencyKey, fingerprint, failure);
       return Promise.resolve(failure);
     }
+    const before = projectWorkspace(workspace);
     cancelRequested = true;
     engine.respawn();
     const revision = workspace.revision + 1;
@@ -516,7 +506,9 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       ),
     });
     appendEvents([{ revision, at: now(), kind: "operation_cancelled", operationId: running.operationId }]);
-    const envelope = successEnvelope(workspace, { operationId: running.operationId });
+    const envelope = successEnvelope(workspace, { operationId: running.operationId }, {
+      contextDelta: contextDelta(before, projectWorkspace(workspace)),
+    });
     cacheSet(input.idempotencyKey, fingerprint, envelope);
     return Promise.resolve(envelope);
   }
@@ -654,6 +646,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     const summary = measureSummary(presentation.spec, result, downsample.emitted);
 
     // ---- POINT OF NO RETURN: one synchronous in-memory commit, zero awaits ----
+    const before = projectWorkspace(workspace);
     const record = graph.append({
       source: input.source,
       sourceRevision: workspace.revision,
@@ -702,21 +695,28 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       });
     }
     const envelope = {
-      ...successEnvelope(workspace, {
-        operationId,
-        artifact: {
-          artifactId: record.artifact.artifactId,
-          relationName: record.artifact.relationName,
-          source: record.artifact.source,
-          rowCount: record.artifact.rowCount,
-          schema: record.artifact.schema,
-          lineage: record.artifact.lineage,
-          release: record.artifact.release,
+      ...successEnvelope(
+        workspace,
+        {
+          operationId,
+          artifact: {
+            artifactId: record.artifact.artifactId,
+            relationName: record.artifact.relationName,
+            source: record.artifact.source,
+            rowCount: record.artifact.rowCount,
+            schema: record.artifact.schema,
+            lineage: record.artifact.lineage,
+            release: record.artifact.release,
+          },
+          summary: record.summary,
+          metrics,
         },
-        summary: record.summary,
-        metrics,
-      }),
-      warnings,
+        {
+          warnings,
+          contextDelta: contextDelta(before, projectWorkspace(workspace)),
+          nextActions: forwardAction("runAnalysis", workspace, artifactId),
+        },
+      ),
     };
     cacheSet(input.idempotencyKey, fingerprint, envelope);
 
@@ -836,16 +836,13 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       case "schema": {
         const dataset = current.activeDatasetId === input.datasetId ? current.activeDataset : null;
         if (!dataset) {
-          return failureEnvelope(
-            current,
-            {
-              code: "DATASET_UNAVAILABLE",
-              message: `Dataset ${input.datasetId} is not active; activate it to read its safe column schema.`,
-              retryable: true,
-              details: { activeDatasetId: current.activeDatasetId },
-            },
-            [{ kind: "human_action", action: "select_local_file" }],
-          );
+          const error: EnvelopeFailure["error"] = {
+            code: "DATASET_UNAVAILABLE",
+            message: `Dataset ${input.datasetId} is not active; activate it to read its safe column schema.`,
+            retryable: true,
+            details: { datasetId: input.datasetId as string, activeDatasetId: current.activeDatasetId },
+          };
+          return failureEnvelope(current, error, recoveryActions(error, current));
         }
         return successEnvelope(current, {
           datasetId: dataset.datasetId,
@@ -861,22 +858,19 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
         const availability = graph.availability(artifactId);
         const record = graph.find(artifactId);
         if (availability !== "available" || !record) {
-          return failureEnvelope(
-            current,
-            {
-              code: "ARTIFACT_UNAVAILABLE",
-              message:
-                availability === "relation_evicted"
-                  ? "The artifact's materialized relation was evicted by retention; its metadata remains in the graph."
-                  : "No artifact with that id exists; artifacts arrive with the first analysis.",
-              retryable: true,
-              details:
-                availability === "relation_evicted"
-                  ? { artifactId, reason: "relation_evicted" }
-                  : { artifactId },
-            },
-            [{ kind: "tool", tool: "duckdb_get_context", input: { scope: "summary" } }],
-          );
+          const error: EnvelopeFailure["error"] = {
+            code: "ARTIFACT_UNAVAILABLE",
+            message:
+              availability === "relation_evicted"
+                ? "The artifact's materialized relation was evicted by retention; its metadata remains in the graph."
+                : "No artifact with that id exists; artifacts arrive with the first analysis.",
+            retryable: true,
+            details:
+              availability === "relation_evicted"
+                ? { artifactId, reason: "relation_evicted" }
+                : { artifactId },
+          };
+          return failureEnvelope(current, error, recoveryActions(error, current));
         }
         return successEnvelope(current, { artifact: record.artifact, summary: record.summary });
       }
@@ -914,16 +908,13 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     if (input.scope === "operation") {
       const operation = current.operations.find((entry) => entry.operationId === input.operationId);
       if (!operation) {
-        return failureEnvelope(
-          current,
-          {
-            code: "VALIDATION_ERROR",
-            message: `No operation ${input.operationId} exists in this tab session.`,
-            retryable: false,
-            details: { operationId: input.operationId as string },
-          },
-          [],
-        );
+        const error: EnvelopeFailure["error"] = {
+          code: "VALIDATION_ERROR",
+          message: `No operation ${input.operationId} exists in this tab session.`,
+          retryable: false,
+          details: { operationId: input.operationId as string },
+        };
+        return failureEnvelope(current, error, recoveryActions(error, current));
       }
       const record = operation.artifactId ? graph.find(operation.artifactId) : undefined;
       const evidence = kernel.evidence(
@@ -940,16 +931,13 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     const artifactId = input.artifactId as string;
     const record = graph.find(artifactId);
     if (!record) {
-      return failureEnvelope(
-        current,
-        {
-          code: "ARTIFACT_UNAVAILABLE",
-          message: "No artifact with that id exists; artifacts arrive with the first analysis.",
-          retryable: true,
-          details: { artifactId },
-        },
-        [{ kind: "tool", tool: "duckdb_get_context", input: { scope: "summary" } }],
-      );
+      const error: EnvelopeFailure["error"] = {
+        code: "ARTIFACT_UNAVAILABLE",
+        message: "No artifact with that id exists; artifacts arrive with the first analysis.",
+        retryable: true,
+        details: { artifactId },
+      };
+      return failureEnvelope(current, error, recoveryActions(error, current));
     }
     // Evicted artifacts keep their metadata disclosed — evidence survives
     // the relation-only eviction (grilling 32).

@@ -43,8 +43,10 @@ describe("stale mutation (§15.8: stale-state safety)", () => {
     expect(parsed.error.code).toBe("STALE_REVISION");
     expect(parsed.error.retryable).toBe(true);
     expect(parsed.error.details).toEqual({ expectedRevision: 0, currentRevision: 1 });
+    // Grilling 42: the recovery is one events delta read from the revision
+    // the caller prepared against (§9's "read delta from expected revision").
     expect(parsed.nextActions).toEqual([
-      { kind: "tool", tool: "duckdb_get_context", input: { scope: "summary", sinceRevision: 0 } },
+      { kind: "tool", tool: "duckdb_get_context", input: { scope: "events", sinceRevision: 0 } },
     ]);
     // Zero trace: no operation accepted, no state change of any kind.
     expect(store.getSnapshot()).toBe(before);

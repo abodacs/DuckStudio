@@ -22,9 +22,17 @@ describe("envelope re-exports (ADR 0004 am4/am5)", () => {
   it("re-exports the whole domain envelope vocabulary import-equal — no forks, no omissions", () => {
     // The adapter surface is a pure re-export of revisioned-workspace/envelope:
     // every vocabulary binding appears here as the very same object. The only
-    // deliberate absences are the envelope builders — response assembly is
-    // domain-internal (the store builds; adapters consume).
-    const domainInternal = new Set(["successEnvelope", "failureEnvelope", "validationFailure"]);
+    // deliberate absences are the envelope builders and the emission policy —
+    // response assembly is domain-internal (the store builds; adapters
+    // consume).
+    const domainInternal = new Set([
+      "successEnvelope",
+      "failureEnvelope",
+      "validationFailure",
+      "recoveryActions",
+      "forwardAction",
+      "contextDelta",
+    ]);
     for (const [name, binding] of Object.entries(domainEnvelope)) {
       if (domainInternal.has(name)) {
         expect(name in envelope).toBe(false);

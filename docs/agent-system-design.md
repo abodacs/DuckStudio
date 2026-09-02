@@ -457,7 +457,7 @@ Failure:
     {
       "kind": "tool",
       "tool": "duckdb_get_context",
-      "input": { "scope": "summary", "sinceRevision": 3 }
+      "input": { "scope": "events", "sinceRevision": 3 }
     }
   ]
 }

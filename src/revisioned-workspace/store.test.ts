@@ -100,8 +100,15 @@ describe("getContext scope table at rev 0 (ticket 04)", () => {
     const parsed = CompiledEnvelopeFailure.parse(envelope);
     expect(parsed.error.code).toBe("DATASET_UNAVAILABLE");
     expect(parsed.error.retryable).toBe(true);
-    expect(parsed.error.details).toEqual({ activeDatasetId: null });
+    expect(parsed.error.details).toEqual({ datasetId: "saas_churn", activeDatasetId: null });
+    // Grilling 42's emission table: the activate-preset action plus the
+    // named human gesture, exactly as the §9 row lists them.
     expect(parsed.nextActions).toEqual([
+      {
+        kind: "tool",
+        tool: "duckdb_activate_dataset",
+        input: { datasetId: "saas_churn", expectedRevision: 0, idempotencyKey: "recover-activate-r0" },
+      },
       { kind: "human_action", action: "select_local_file" },
     ]);
   });

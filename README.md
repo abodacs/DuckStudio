@@ -40,12 +40,12 @@ flowchart TB
 
 ## WebMCP Tools
 
-| Tool | Purpose |
-|---|---|
-| `duckdb_get_context` | Bootstrap or delta-read the actionable workspace state. |
-| `duckdb_activate_dataset` | Activate an already local preset with revision and idempotency control. |
+| Tool                           | Purpose                                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------------ |
+| `duckdb_get_context`           | Bootstrap or delta-read the actionable workspace state.                                    |
+| `duckdb_activate_dataset`      | Activate an already local preset with revision and idempotency control.                    |
 | `duckdb_execute_sql_to_canvas` | Run one bounded read-only analysis, create an artifact, infer presentation, and select it. |
-| `duckdb_verify_zero_egress` | Read scoped upload, release, transport, policy, and lineage evidence. |
+| `duckdb_verify_zero_egress`    | Read scoped upload, release, transport, policy, and lineage evidence.                      |
 
 All tools use one schema module plus runtime validation and one discriminated response envelope. Mutations require `expectedRevision` and `idempotencyKey`; reads support bounded detail and revision deltas. Human and simulator adapters also dispatch `selectArtifact` and `cancelActiveOperation`.
 
@@ -72,10 +72,10 @@ The agent should use IDs and revisions returned by tools. It should not infer ac
 
 ## Safe-Release Policies
 
-| Policy | Tool rows | Shared grid | Aggregates |
-|---|---:|---:|---|
-| `public_synthetic` | Never | Bounded rows allowed | Allowed |
-| `sensitive_aggregate_only` | Never | Suppressed | Allowed only when every cohort has at least 10 records |
+| Policy                     | Tool rows |          Shared grid | Aggregates                                             |
+| -------------------------- | --------: | -------------------: | ------------------------------------------------------ |
+| `public_synthetic`         |     Never | Bounded rows allowed | Allowed                                                |
+| `sensitive_aggregate_only` |     Never |           Suppressed | Allowed only when every cohort has at least 10 records |
 
 Direct-identifier values are never released. Sensitive bindings are redacted in projected lineage. The one-day build enforces explicit preset policies, SQL restrictions, minimum cohorts, and DOM suppression; it does not claim differential privacy, formal non-interference, SOC 2, or regulatory certification.
 
@@ -158,6 +158,14 @@ UI, state, tests, and registrations remain colocated by use case. There are no t
 DuckStudio accepts one bounded read-only `SELECT` or `WITH` statement with separate bindings. It rejects mutations, DDL, transactions, multiple statements, external URLs/files, extension loading, attach/copy/export/install/load operations, and unauthorized relations before worker execution. The full deny list is `docs/agent-system-design.md` §6.
 
 The system is designed to minimize accidental release and ambiguous control in the documented environment. Browser compromise, malicious extensions, side channels, screenshots taken outside the product boundary, and formal privacy guarantees are out of scope.
+
+## Resources
+
+- [WebMCP proposal and specification](https://github.com/webmachinelearning/webmcp)
+- [Chrome WebMCP imperative API](https://developer.chrome.com/docs/ai/webmcp/imperative-api)
+- [Chrome WebMCP declarative API](https://developer.chrome.com/docs/ai/webmcp/declarative-api)
+- [React on Cloudflare Workers](https://developers.cloudflare.com/workers/framework-guides/web-apps/react/)
+  
 
 ## License
 

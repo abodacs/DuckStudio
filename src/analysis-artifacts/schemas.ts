@@ -22,32 +22,43 @@ export const LineageEntrySchema = z.discriminatedUnion("kind", [
 
 export type LineageEntry = z.infer<typeof LineageEntrySchema>;
 
-/** §4.3 PresentationSpec — the committed KPI/chart/grid spec, never a view tab. */
+/** §4.3 PresentationSpec — the committed KPI/chart/grid spec, never a view tab. Field descriptions are §8.6 contract copy (≤150 chars). */
 export const PresentationSpecSchema = z.strictObject({
   kpis: z
     .array(
       z.strictObject({
-        label: z.string().min(1).max(60),
-        column: z.string().min(1).max(80),
-        format: z.enum(["percent", "decimal", "currency_usd", "integer"]),
+        label: z.string().min(1).max(60).describe("Human-readable KPI heading, 1-60 characters."),
+        column: z.string().min(1).max(80).describe("Result column the KPI reads its value from."),
+        format: z
+          .enum(["percent", "decimal", "currency_usd", "integer"])
+          .describe("How the UI renders the KPI value; the raw number never rounds in transit."),
       }),
     )
     .max(6)
+    .describe("Up to six KPIs; committed verbatim or inferred policy-aware when omitted.")
     .optional(),
   chart: z
     .strictObject({
-      type: z.enum(["bar", "line", "scatter"]),
-      x: z.string().min(1).max(80),
-      y: z.string().min(1).max(80),
-      title: z.string().max(120).optional(),
-      maxPoints: z.number().int().min(10).max(5000).optional(),
+      type: z.enum(["bar", "line", "scatter"]).describe("Chart family; scatter is inferred for two numeric columns."),
+      x: z.string().min(1).max(80).describe("Result column plotted on the x axis."),
+      y: z.string().min(1).max(80).describe("Result column plotted on the y axis."),
+      title: z.string().max(120).describe("Optional chart heading, at most 120 characters.").optional(),
+      maxPoints: z
+        .number()
+        .int()
+        .min(10)
+        .max(5000)
+        .describe("Requested point ceiling; values above the measured budget clamp with a warning.")
+        .optional(),
     })
+    .describe("Chart axes; the point count in summaries is always the measured value.")
     .optional(),
   grid: z
     .strictObject({
-      visible: z.boolean(),
-      maxRows: z.number().int().min(1).max(50000).optional(),
+      visible: z.boolean().describe("Whether the data grid may paint; policy can still forbid it."),
+      maxRows: z.number().int().min(1).max(50000).describe("Row ceiling for the grid view.").optional(),
     })
+    .describe("Grid visibility request; a grid that crosses policy denies the request, never strips.")
     .optional(),
 });
 
