@@ -93,7 +93,7 @@ Both datasets are generated in browser memory. No customer data, testimonials, d
 - Vite, React, TypeScript, Tailwind CSS
 - `@duckdb/duckdb-wasm` in a Web Worker
 - ECharts
-- Self-hosted Inter and JetBrains Mono variable fonts
+- Self-hosted Geist, Space Grotesk, and JetBrains Mono variable fonts
 - Cloudflare Pages static deployment with COOP/COEP headers
 - MIT license
 
