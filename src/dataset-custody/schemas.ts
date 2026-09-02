@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ErrorCodeSchema, PolicySchema } from "../revisioned-workspace/schemas";
+import type { PresetColumn } from "../demo-presets/schemas";
 
 /**
  * Custody-kernel schemas (§4.2, §4.6, §5; ARCHITECTURE.md puts the kernel
@@ -10,6 +11,21 @@ import { ErrorCodeSchema, PolicySchema } from "../revisioned-workspace/schemas";
  */
 
 export type BindingValue = string | number | boolean | null;
+
+/**
+ * The governed source a statement runs against (§5; slice 3 widens it from
+ * the preset catalog): the one authorized relation — a preset's datasetId or
+ * an artifact's generated `artifact_a_NN` — with the policy the kernel
+ * enforces over it. An artifact source carries its committed schema and its
+ * release's cohort minimum, so a refinement is governed exactly like the
+ * analysis that produced its source.
+ */
+export interface GovernedSource {
+  readonly relation: string;
+  readonly policy: z.infer<typeof PolicySchema>;
+  readonly minimumCohortSize: number;
+  readonly columns: readonly PresetColumn[];
+}
 
 /** §4.6 budget axes an agent may request; defaults and hard maxima below. */
 export const BudgetRequestSchema = z.strictObject({

@@ -251,9 +251,10 @@ export function WorkspaceShell() {
                 <p className="meta mt-1.5">No artifacts — operations settle here as immutable artifacts.</p>
               ) : (
                 <ul className="meta mt-1.5 space-y-1">
-                  {vm.recentArtifacts.map((artifactId) => (
-                    <li key={artifactId} className="mono-value">
-                      {artifactId}
+                  {vm.recentArtifacts.map((artifact) => (
+                    <li key={artifact.artifactId} className="mono-value">
+                      {artifact.artifactId}
+                      {artifact.evicted ? <span className="meta"> · evicted</span> : null}
                     </li>
                   ))}
                 </ul>

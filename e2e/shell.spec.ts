@@ -43,8 +43,21 @@ test.describe("walking skeleton @ rev 0", () => {
   });
 
   test("junk search params surface as a route error, not a stripped param", async ({ page }) => {
-    await page.goto("/?artifact=a_01");
+    // `rev` and `artifact` gained slice-3 readers; a param nobody reads is
+    // still junk and must surface, never be stripped silently.
+    await page.goto("/?view=insights");
     await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).not.toBeVisible();
+  });
+
+  test("a rev pin matching the live workspace renders; a stale pin is stripped", async ({ page }) => {
+    await page.goto("/?rev=0");
+    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+
+    // The pin names revision 9; the workspace lives at rev 0 — beforeLoad
+    // rejects the stale pin and lands on the live workspace (ticket 35).
+    await page.goto("/?rev=9");
+    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+    expect(new URL(page.url()).searchParams.get("rev")).toBeNull();
   });
 });
 

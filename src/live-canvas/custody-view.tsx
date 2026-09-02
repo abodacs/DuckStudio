@@ -1,5 +1,6 @@
 import { projectArtifact } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
+import { UnavailableArtifact } from "./artifact-states";
 
 /**
  * Custody evidence view. The ghost is the scope of verification —
@@ -21,6 +22,26 @@ export function CustodyView() {
             <p className="meta">No custody evidence yet — verification runs on artifacts.</p>
             <p className="meta mt-1">Run verify after your first artifact to see the evidence.</p>
           </div>
+        </div>
+      );
+    case "unavailable":
+      return <UnavailableArtifact artifactId={artifact.artifactId} reason={artifact.reason} />;
+    case "artifact":
+      return (
+        <div className="view-swap empty-state">
+          <p className="mono-value text-sm">
+            {artifact.artifact.artifactId} · release {artifact.artifact.release.status}
+          </p>
+          <p className="meta mt-2">
+            rows to tools: <span className="mono-value">{artifact.artifact.release.rawRowsToAgent}</span> · cohort
+            minimum <span className="mono-value">{artifact.artifact.release.cohortMinimum}</span>
+          </p>
+          {artifact.artifact.release.redactedBindingKeys.length > 0 ? (
+            <p className="meta mt-1">
+              redacted bindings:{" "}
+              <span className="mono-value">{artifact.artifact.release.redactedBindingKeys.join(", ")}</span>
+            </p>
+          ) : null}
         </div>
       );
   }

@@ -62,8 +62,12 @@ describe("projectArtifact at rev 0", () => {
     expect(projectArtifact(ws, ws.selectedArtifactId)).toEqual({ kind: "no_artifact" });
   });
 
-  it("throws on a non-null id — no artifact can exist to reference", () => {
-    expect(() => projectArtifact(ws, "a_01")).toThrow(/no artifact "a_01" can exist/);
+  it("discloses an unknown id as unavailable — the rev-0 workspace holds no artifacts", () => {
+    expect(projectArtifact(ws, "a_01")).toEqual({
+      kind: "unavailable",
+      artifactId: "a_01",
+      reason: "not_found",
+    });
   });
 
   it("returns the same reference for the same workspace and id", () => {

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { PolicySchema } from "../revisioned-workspace/schemas";
 
 /**
  * Preset catalog metadata (ticket 04): the seeded datasets live here as
@@ -7,7 +6,16 @@ import { PolicySchema } from "../revisioned-workspace/schemas";
  * stays null until a real activation (Slice 2). The catalog is the dataset's
  * release policy made explicit and checked in (§4.2); name-based detection is
  * only defense in depth.
+ *
+ * Policy vocabulary is defined here — ARCHITECTURE.md: policy travels with
+ * its dataset — and re-exported by `revisioned-workspace/schemas.ts` so the
+ * envelope surface keeps one spelling (import-equality is contract-tested).
  */
+
+/** §4.2 dataset policy vocabulary — one spelling for the workspace summary and the preset catalog. */
+export const PolicySchema = z.enum(["public_synthetic", "sensitive_aggregate_only"]);
+
+export type Policy = z.infer<typeof PolicySchema>;
 
 /** §4.2 ColumnClassification: enums, not prose. */
 export const ColumnClassificationSchema = z.enum([

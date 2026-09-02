@@ -29,6 +29,7 @@ describe("rev-0 seed", () => {
         "select_artifact",
       ],
       activeDatasetId: null,
+      activeDataset: null,
       selectedArtifactId: null,
       budgets: {
         executionMs: 5000,
@@ -40,6 +41,8 @@ describe("rev-0 seed", () => {
       },
       operations: [],
       recentArtifactIds: [],
+      artifacts: [],
+      evictedArtifactIds: [],
     });
   });
 

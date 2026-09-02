@@ -4,25 +4,23 @@ import {
   type BudgetLimits,
   type Capability,
   type Policy,
+  type RecentArtifact,
   type Workspace,
 } from "./schemas";
+import type { AnalysisArtifact, ArtifactSummary } from "../analysis-artifacts/schemas";
 
 /**
  * The single projection owner (ADR 0005 am3): `projectWorkspace` serves the
- * header badge, the left-pane cards, the simulator cards, and — at rev 0 —
- * the envelope `summary` (ticket 06's resolution of the ADR 0005 line-36
- * tension). `projectArtifact` serves the four evidence views. No adapter
+ * header badge, the left-pane cards, the simulator cards, and the envelope
+ * `summary`. `projectArtifact` serves the four evidence views and the
+ * artifact-bearing summaries (ADR 0005 am4: realized in Slice 3). No adapter
  * derives workspace or artifact display state any other way.
  */
 
 /** The projection input schema, compiled per ADR 0004's hot-path rule. */
 export const CompiledProjectionInput = z.compile(WorkspaceSchema);
 
-/**
- * Ticket-06 view model. `datasetState`'s active member and its metadata
- * arrive with activation (Slice 2); at rev 0 `activeDatasetId` can only be
- * null, so `none` is the only value the projection can produce.
- */
+/** §4.1 dataset state: none until an activation composes the catalog metadata in. */
 export type DatasetState =
   | { kind: "none" }
   | {
@@ -37,22 +35,27 @@ export type WorkspaceViewModel = {
   workspaceId: string;
   revision: number;
   datasetState: DatasetState;
-  /** Derived display line for the dataset state — "no dataset" until an activation composes `datasetId · policy` (Slice 2). */
+  /** Derived display line for the dataset state — `datasetId · policy` once active. */
   datasetLine: string;
   /** Derived display string, composed once here — header and cards share it verbatim. */
   badge: string;
   capabilities: Capability[];
   budgets: BudgetLimits;
   selectedArtifactId: string | null;
-  recentArtifacts: [];
+  /** Newest first; evicted artifacts stay listed, flagged (grilling 32). */
+  recentArtifacts: RecentArtifact[];
 };
 
 /**
- * The artifact-scope view (ticket 06): at rev 0 no artifact can exist, so
- * `no_artifact` is the only member; Slice 3's artifact-bearing views widen
- * this union, and every view's switch must grow with it.
+ * The artifact-scope view (ticket 06's union, widened by Slice 3): the
+ * committed record with its measured summary, the no-artifact empty state,
+ * or the eviction disclosure for an artifact whose relation retention
+ * dropped (grilling 32). Every view's switch grows with this union.
  */
-export type ArtifactView = { kind: "no_artifact" };
+export type ArtifactView =
+  | { kind: "no_artifact" }
+  | { kind: "unavailable"; artifactId: string; reason: "not_found" | "relation_evicted" }
+  | { kind: "artifact"; artifact: AnalysisArtifact; summary: ArtifactSummary };
 
 /** SECURITY.md: keep the badge copy exact. Upload accounting grows with Slice 2. */
 const NO_UPLOAD_BADGE = "0 Bytes of Dataset Uploaded";
@@ -70,18 +73,33 @@ export function projectWorkspace(workspace: Workspace): WorkspaceViewModel {
     return lastOutput as WorkspaceViewModel;
   }
   CompiledProjectionInput.parse(workspace);
+  const dataset = workspace.activeDataset;
   const output: WorkspaceViewModel = {
     workspaceId: workspace.workspaceId,
     revision: workspace.revision,
-    // No activation exists yet, so `none` is the only reachable state; the
-    // active mapping lands with Slice 2's activation metadata.
-    datasetState: { kind: "none" },
-    datasetLine: "no dataset",
+    datasetState:
+      dataset && workspace.activeDatasetId === dataset.datasetId
+        ? {
+            kind: "active",
+            datasetId: dataset.datasetId,
+            policy: dataset.policy,
+            rowCount: dataset.rowCount,
+            bytes: dataset.byteSizeEstimate,
+          }
+        : { kind: "none" },
+    datasetLine: dataset ? `${dataset.datasetId} · ${dataset.policy}` : "no dataset",
     badge: NO_UPLOAD_BADGE,
     capabilities: workspace.capabilities,
     budgets: workspace.budgets,
     selectedArtifactId: workspace.selectedArtifactId,
-    recentArtifacts: [],
+    // Commit order is oldest-first; cards read newest-first. Evicted
+    // artifacts stay listed with the flag (grilling 32's UI disclosure).
+    recentArtifacts: [...workspace.artifacts]
+      .reverse()
+      .map((record) => ({
+        artifactId: record.artifact.artifactId,
+        evicted: workspace.evictedArtifactIds.includes(record.artifact.artifactId),
+      })),
   };
   lastInput = workspace;
   lastOutput = output;
@@ -97,22 +115,28 @@ let lastArtifactOutput: ArtifactView | undefined;
  * yield the same object reference at every view (ADR 0005 am3's
  * referential-equality contract).
  *
- * At rev 0 `null` is the only legal id — `selectedArtifactId` cannot hold a
- * value and no artifact graph exists — so a non-null id is a caller bug and
- * throws instead of faking a view (ticket 04's no-stub rule). Slice 3
- * replaces the throw with the artifact-bearing union members.
+ * The artifact records ride the workspace snapshot (the store is the only
+ * writer), so the view is a pure lookup: selection always points at a
+ * committed artifact, and an evicted one discloses the eviction.
  */
 export function projectArtifact(workspace: Workspace, artifactId: string | null): ArtifactView {
   if (workspace === lastArtifactInput && artifactId === lastArtifactId) {
     return lastArtifactOutput as ArtifactView;
   }
   CompiledProjectionInput.parse(workspace);
-  if (artifactId !== null) {
-    throw new Error(
-      `projectArtifact: no artifact "${artifactId}" can exist — the workspace holds no artifacts until Slice 3.`,
-    );
+  let output: ArtifactView;
+  if (artifactId === null) {
+    output = { kind: "no_artifact" };
+  } else {
+    const record = workspace.artifacts.find((entry) => entry.artifact.artifactId === artifactId);
+    if (!record) {
+      output = { kind: "unavailable", artifactId, reason: "not_found" };
+    } else if (workspace.evictedArtifactIds.includes(artifactId)) {
+      output = { kind: "unavailable", artifactId, reason: "relation_evicted" };
+    } else {
+      output = { kind: "artifact", artifact: record.artifact, summary: record.summary };
+    }
   }
-  const output: ArtifactView = { kind: "no_artifact" };
   lastArtifactInput = workspace;
   lastArtifactId = artifactId;
   lastArtifactOutput = output;

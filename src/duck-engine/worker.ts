@@ -1,7 +1,7 @@
 import type { AuthorizedDecision } from "../dataset-custody/schemas";
 import { custodyKernel } from "../dataset-custody/kernel";
 import { createEngineClient, type EngineClient, type EngineResponse, type EngineTransport } from "./protocol";
-import type { ExecutionResult } from "./protocol";
+import type { ExecutionResult, MaterializedRelation } from "./protocol";
 
 /**
  * The worker singleton (ADR 0002) and the public engine seam:
@@ -21,15 +21,20 @@ export type EngineTransportSpawner = () => EngineTransport;
 export interface EngineSingleton {
   /** Idempotent; concurrent calls resolve the same client. */
   get(): Promise<EngineClient>;
+  /** Cancel = respawn (grilling 31): kills the live transport, so pending
+   * requests fail and the next request spawns a fresh engine. */
+  respawn(): void;
 }
 
 export function createEngineSingleton(spawn: EngineTransportSpawner): EngineSingleton {
   let enginePromise: Promise<EngineClient> | null = null;
+  let activeTransport: EngineTransport | null = null;
   return {
     get(): Promise<EngineClient> {
       if (!enginePromise) {
         const attempt = (async () => {
           const transport = spawn();
+          activeTransport = transport;
           const client = createEngineClient(transport);
           // Crash-respawn (grilling 21): pending requests are rejected by the
           // client; the memo clears so the next request spawns a fresh worker.
@@ -46,13 +51,20 @@ export function createEngineSingleton(spawn: EngineTransportSpawner): EngineSing
       }
       return enginePromise;
     },
+    respawn() {
+      // terminate() fires the terminated handlers (pending requests fail,
+      // memo clears) — respawn is exactly one kill; get() does the rest.
+      activeTransport?.terminate();
+    },
   };
 }
 
 /**
  * The browser spawner: a module worker over `duckdb.worker.ts` (Vite
  * bundles the worker chunk). Worker errors and malformed messages count as
- * termination — the singleton respawns on the next request.
+ * termination — the singleton respawns on the next request. An explicit
+ * `terminate()` (cancel) also fires the terminated handlers, because
+ * `worker.terminate()` itself raises no error event.
  */
 export function spawnBrowserTransport(): EngineTransport {
   const worker = new Worker(new URL("./duckdb.worker.ts", import.meta.url), { type: "module" });
@@ -78,6 +90,10 @@ export function spawnBrowserTransport(): EngineTransport {
     },
     onTerminated: (handler) => {
       terminatedHandlers.push(handler);
+    },
+    terminate: () => {
+      fireTerminated();
+      worker.terminate();
     },
   };
 }
@@ -109,3 +125,32 @@ export async function executeAuthorized(decision: AuthorizedDecision): Promise<E
   noteResultPayloads(result);
   return result;
 }
+
+/**
+ * The store's engine port (ticket 35): the four calls the mutation path
+ * makes, over the one worker singleton. Injected with fakes in tests
+ * (ARCHITECTURE.md: engine tests run against fakes); the app binding wires
+ * the browser worker below.
+ */
+export interface WorkspaceEngine {
+  execute(decision: AuthorizedDecision): Promise<ExecutionResult>;
+  /** Creates the artifact relation from a bounded result (grilling 32). */
+  materializeRelation(relationName: string, result: ExecutionResult): Promise<MaterializedRelation>;
+  /** Relation-only DROP — denial cleanup and retention eviction. */
+  dropRelation(relationName: string): Promise<void>;
+  /** Cancel = respawn (grilling 31): kills the worker; the next request respawns it. */
+  respawn(): void;
+}
+
+export const workspaceEngine: WorkspaceEngine = {
+  execute: executeAuthorized,
+  async materializeRelation(relationName, result) {
+    const engine = await appEngine.get();
+    return engine.materializeRelation(relationName, result);
+  },
+  async dropRelation(relationName) {
+    const engine = await appEngine.get();
+    await engine.dropRelation(relationName);
+  },
+  respawn: () => appEngine.respawn(),
+};

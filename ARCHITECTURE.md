@@ -24,7 +24,7 @@ src/
 
 Folder meaning:
 
-- `revisioned-workspace/` owns the domain-command interface, revision, idempotency, single-flight operations, events, atomic commit, the §7 envelope (transport vocabulary, shape, builders, tool-summary budget), and the projection functions. Human, chip, simulator, and WebMCP adapters dispatch into it, and it exports the one app store binding (`workspaceStore`) that both the agent adapters and the UI hold.
+- `revisioned-workspace/` owns the domain-command interface (all six commands), revision, the idempotency cache, single-flight operations, the bounded event ring, atomic commit, presentation inference and deny-over-strip, the §7 envelope (transport vocabulary, shape, builders, tool-summary budget), and the projection functions. Human, chip, simulator, and WebMCP adapters dispatch into it, and it exports the one app store binding (`workspaceStore`) that both the agent adapters and the UI hold.
 - `dataset-custody/` is the custody kernel behind that interface: policy, SQL inspection, release, cohort confirmation, and upload/release evidence. Do not add `egress-audit/`.
 - `duck-engine/` is the worker, bindings, budgets, and cancellation. It executes custody decisions verbatim; it never re-derives them.
 - `analysis-artifacts/` is the immutable graph and lineage.
@@ -62,7 +62,7 @@ Human controls, prompt chips, Agent Simulator, and WebMCP adapters must dispatch
 - Do not manufacture transcript cards, artifacts, timings, revisions, or audit evidence for the demo.
 - Equivalent commands through different adapters must produce equivalent events, artifacts, errors, and projections.
 - WebMCP registers exactly the four canonical tools. `selectArtifact` and `cancelActiveOperation` remain workspace commands for human and simulator adapters.
-- One projection owner, two named functions: `projectWorkspace(ws)` for workspace scope (left-pane cards, simulator cards, header badge) and `projectArtifact(ws, id)` for artifact scope (Insights KPIs, the four views). The envelope `summary` sources `projectWorkspace` while no artifact can exist — at rev 0 it is the five workspace-scope bootstrap fields (ticket 06); artifact-bearing summaries move to `projectArtifact` when artifacts arrive (Slice 3). The referential-equality contract test covers all four call sites, so DOM evidence and tool payloads cannot drift.
+- One projection owner, two named functions: `projectWorkspace(ws)` for workspace scope (left-pane cards, simulator cards, header badge) and `projectArtifact(ws, id)` for artifact scope (Insights KPIs, the four views, artifact-bearing envelope summaries). Artifact records — the §4.3 artifact plus its measured §8.3 summary — ride the workspace snapshot, so the projection is a pure lookup and envelope, cards, and Insights render one object. The referential-equality contract test covers all four call sites, so DOM evidence and tool payloads cannot drift.
 
 ## Explicit State Only
 

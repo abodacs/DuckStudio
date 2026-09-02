@@ -1,5 +1,6 @@
 import { projectArtifact } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
+import { UnavailableArtifact } from "./artifact-states";
 
 /**
  * Data Grid evidence view. The empty-state ghost previews the grid's
@@ -28,6 +29,22 @@ export function DataGridView() {
             <p className="meta">No artifact — the grid paints rows only from an approved artifact.</p>
             <p className="meta mt-1">Rows paint after your first analysis — nothing ambient, nothing preloaded.</p>
           </div>
+        </div>
+      );
+    case "unavailable":
+      return <UnavailableArtifact artifactId={artifact.artifactId} reason={artifact.reason} />;
+    case "artifact":
+      return (
+        <div className="view-swap empty-state">
+          <p className="mono-value text-sm">
+            {artifact.artifact.artifactId} · {artifact.artifact.rowCount} rows · policy{" "}
+            {artifact.artifact.policy}
+          </p>
+          <p className="meta mt-2">
+            {artifact.artifact.policy === "public_synthetic"
+              ? "Bounded rows render from the artifact relation."
+              : "Policy suppresses raw rows for sensitive datasets — aggregates only."}
+          </p>
         </div>
       );
   }

@@ -87,6 +87,32 @@ async function createBrowserRuntime(): Promise<DuckEngineRuntime> {
       }
       return { schema, rows, executionMs: performance.now() - started };
     },
+
+    async materialize(relationName, result) {
+      const columns = result.schema.map((column) => column.name);
+      const columnList = result.schema
+        .map((column) => `"${column.name}" ${column.type}`)
+        .join(", ");
+      await connection.query(`CREATE TABLE ${relationName} (${columnList})`);
+      const placeholders = columns.map((_, index) => `$${index + 1}`).join(", ");
+      const insert = await connection.prepare(`INSERT INTO ${relationName} VALUES (${placeholders})`);
+      try {
+        let rowCount = 0;
+        for (const batch of result.batches) {
+          for (let rowIndex = 0; rowIndex < batch.rowCount; rowIndex += 1) {
+            await insert.query(...columns.map((name) => (batch.values[name]?.[rowIndex] as never) ?? null));
+            rowCount += 1;
+          }
+        }
+        return { relationName, rowCount };
+      } finally {
+        await insert.close();
+      }
+    },
+
+    async drop(relationName) {
+      await connection.query(`DROP TABLE IF EXISTS ${relationName}`);
+    },
   };
 }
 

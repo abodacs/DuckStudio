@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCustodyKernel } from "../kernel";
+import { createCustodyKernel, governedSource } from "../kernel";
 import { CustodyFailureSchema } from "../schemas";
 import type { DuckEngineRuntime } from "../../duck-engine/worker-handler";
 import { createWorkerHandler } from "../../duck-engine/worker-handler";
@@ -21,7 +21,7 @@ const SENSITIVE_BINDING = "MRN-CLASSIFIED-0042";
 describe("authorize-time failures (pre-worker)", () => {
   it("UNSAFE_SQL: not retryable, names the blocked construct", () => {
     const result = kernel.authorize({
-      dataset: saasChurnPreset,
+      source: governedSource(saasChurnPreset),
       sql: "ATTACH 'x.db' AS x",
       bindings: {},
     });
@@ -36,7 +36,7 @@ describe("authorize-time failures (pre-worker)", () => {
 
   it("VALIDATION_ERROR: not retryable, carries field details", () => {
     const result = kernel.authorize({
-      dataset: saasChurnPreset,
+      source: governedSource(saasChurnPreset),
       sql: "SELECT * FROM saas_churn WHERE tickets = $tickets",
       bindings: { tickets: "five" },
     });
@@ -50,7 +50,7 @@ describe("authorize-time failures (pre-worker)", () => {
 
   it("DATASET_UNAVAILABLE: retryable, names the relation", () => {
     const result = kernel.authorize({
-      dataset: saasChurnPreset,
+      source: governedSource(saasChurnPreset),
       sql: "SELECT diagnosis FROM healthcare_pii",
       bindings: {},
     });
@@ -64,7 +64,7 @@ describe("authorize-time failures (pre-worker)", () => {
 
   it("budget above a hard maximum is VALIDATION_ERROR with the axis and limit", () => {
     const result = kernel.authorize({
-      dataset: saasChurnPreset,
+      source: governedSource(saasChurnPreset),
       sql: SAAS_CHURN_CANONICAL_SQL,
       bindings: {},
       requestedBudget: { executionMs: 99_999 },
@@ -80,12 +80,12 @@ describe("authorize-time failures (pre-worker)", () => {
   it("sensitive binding values never appear in any authorize failure", () => {
     const results = [
       kernel.authorize({
-        dataset: healthcarePiiPreset,
+        source: governedSource(healthcarePiiPreset),
         sql: "SELECT * FROM healthcare_pii WHERE mrn = '$mrn'",
         bindings: { mrn: SENSITIVE_BINDING },
       }),
       kernel.authorize({
-        dataset: healthcarePiiPreset,
+        source: governedSource(healthcarePiiPreset),
         sql: "SELECT * FROM healthcare_pii WHERE mrn = $mrn AND visit_count = $visit_count",
         bindings: { mrn: SENSITIVE_BINDING, visit_count: "not-a-number" },
       }),
@@ -102,7 +102,7 @@ describe("authorize-time failures (pre-worker)", () => {
 describe("post-materialization failures", () => {
   it("POLICY_DENIED: not retryable, blockedFields plus cohort details", () => {
     const result = kernel.decideRelease({
-      dataset: healthcarePiiPreset,
+      source: governedSource(healthcarePiiPreset),
       sql: "SELECT age_band FROM healthcare_pii",
       resultSchema: [{ name: "age_band", type: "VARCHAR" }],
       minCohortCount: null,
@@ -117,7 +117,7 @@ describe("post-materialization failures", () => {
       expect(result.failure.retryable).toBe(false);
       expect(result.failure.details.blockedFields).toBeTruthy();
       const cohort = kernel.decideRelease({
-        dataset: healthcarePiiPreset,
+        source: governedSource(healthcarePiiPreset),
         sql: "SELECT region, COUNT(*) AS n FROM healthcare_pii GROUP BY region",
         resultSchema: [{ name: "region", type: "VARCHAR" }, { name: "n", type: "BIGINT" }],
         minCohortCount: 3,
@@ -141,6 +141,8 @@ describe("runtime engine failures (classified once at the seam)", () => {
         new Promise((resolve) =>
           setTimeout(() => resolve({ schema: [], rows: [{ tickets: 1 }], executionMs: 50 }), 50),
         ),
+      materialize: () => Promise.resolve({ relationName: "x", rowCount: 0 }),
+      drop: () => Promise.resolve(),
     };
     const response = await createWorkerHandler(slow)({
       id: 1,
@@ -168,6 +170,8 @@ describe("runtime engine failures (classified once at the seam)", () => {
     const throwing: DuckEngineRuntime = {
       warm: () => Promise.resolve({ materializedRelations: [], warmMs: 0, materializationMs: 0 }),
       runBounded: () => Promise.reject(new Error("IO Error: unexpected internal state at line 42")),
+      materialize: () => Promise.resolve({ relationName: "x", rowCount: 0 }),
+      drop: () => Promise.resolve(),
     };
     const response = await createWorkerHandler(throwing)({
       id: 1,

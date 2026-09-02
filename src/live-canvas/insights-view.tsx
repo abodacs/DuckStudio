@@ -1,5 +1,6 @@
 import { projectArtifact } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
+import { UnavailableArtifact } from "./artifact-states";
 
 /**
  * Insights evidence view. The empty state is onboarding: an abstract ghost
@@ -39,6 +40,24 @@ export function InsightsView() {
             <p className="meta">No artifact — KPIs render only from a policy-approved artifact.</p>
             <p className="meta mt-1">Run a governed query and its readouts land here.</p>
           </div>
+        </div>
+      );
+    case "unavailable":
+      return <UnavailableArtifact artifactId={artifact.artifactId} reason={artifact.reason} />;
+    case "artifact":
+      return (
+        <div className="view-swap empty-state">
+          <p className="mono-value text-sm">
+            {artifact.artifact.artifactId} · source {artifact.artifact.source.id} · {artifact.artifact.rowCount} rows
+          </p>
+          <dl className="meta mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4">
+            {artifact.summary.kpis.map((kpi) => (
+              <div key={kpi.column} className="contents">
+                <dt>{kpi.label}</dt>
+                <dd className="mono-value">{kpi.value === null ? "—" : kpi.value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       );
   }
