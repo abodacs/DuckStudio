@@ -1,0 +1,27 @@
+# DuckStudio
+
+> A zero-upload, agent-native data lab. DuckDB-WASM analyzes local data entirely
+> in-browser while a WebMCP agent operates a governed workspace without ever
+> receiving result rows.
+
+DuckStudio runs a full analytical engine (DuckDB-WASM) inside the browser tab,
+isolated behind COOP/COEP/CORP headers. Datasets never leave the machine: the
+agent issues governed workspace commands through the WebMCP trust seam and reads
+structured evidence and artifacts, not raw data. First-party datasets used in
+demos are generated in browser memory — no customer data or uploaded benchmark
+is involved.
+
+## Main page
+
+- [DuckStudio Workspace](https://duckstudio.pages.dev/): the single-page app;
+  open it to load data locally, run SQL, and inspect governed evidence.
+
+## Project documentation
+
+- [README](https://github.com/abodacs/DuckStudio): project overview and quickstart.
+- [Architecture](https://github.com/abodacs/DuckStudio/blob/main/ARCHITECTURE.md):
+  the WebMCP trust seam, envelope, and shell isolation model.
+- [Product requirements](https://github.com/abodacs/DuckStudio/blob/main/docs/prd.md):
+  dataset custody, DuckDB engine, artifact graph, workspace commands.
+- [Security policy](https://github.com/abodacs/DuckStudio/blob/main/SECURITY.md):
+  how to report vulnerabilities.

@@ -1,0 +1,24 @@
+{
+  "name": "DuckStudio — Workspace",
+  "short_name": "DuckStudio",
+  "description": "Zero-upload, agent-native data lab. DuckDB-WASM analyzes local data in-browser; the WebMCP agent operates a governed workspace without receiving result rows.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#050508",
+  "theme_color": "#050508",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "16x16 32x32 48x48",
+      "type": "image/x-icon",
+      "purpose": "any"
+    }
+  ]
+}
