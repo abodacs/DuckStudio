@@ -23,7 +23,7 @@ Run tests, lint, typecheck, and production build after code changes. Fix failure
 
 ## End-to-End QA Suite
 
-`pnpm e2e` runs Playwright against the shipped build served by `wrangler pages dev dist` (production isolation headers), in Chromium with the `WebMCPTesting` flag. Requires `pnpm duckdb:download` and `pnpm build` first; CI runs the same suite.
+`pnpm e2e` runs Playwright against the shipped build served by `wrangler pages dev dist` (production isolation headers), in Chromium with the `WebMCPTesting` flag. Requires `pnpm duckdb:download` and `pnpm build` first; CI runs the same suite. On PRs whose diff is confined to spec files (or `playwright.config.ts`), CI runs only the changed specs via `--only-changed`; any app-code diff runs the full suite, since `--only-changed` selects by affected test files and would otherwise skip app-only changes entirely. Locally, `pnpm e2e:changed` applies the same filter to uncommitted changes (give it an explicit base with `pnpm exec playwright test --only-changed=<ref>`); the same vacuous-pass caveat applies, so treat a zero-test result as "nothing to run", not "nothing broke".
 
 - `e2e/shell.spec.ts` — the walking skeleton: origin isolation, boot, route errors, agent control plane happy paths.
 - `e2e/qa-envelope-contracts.spec.ts` — envelope contract QA (`agent-system-design.md` §15 scenarios 1, 4, 8, 9): one-read legibility under the byte budget, zero raw rows, stale-revision recovery, idempotent replay vs key conflict.
@@ -57,6 +57,17 @@ How the score works (<https://webmcp.ora.ai/audit>): Availability gates the scor
 - **Task completion** — weight 25. Could an agent get a task done here. We give an agent the tasks a site of this kind exists for and check it picks the right tool with the right arguments, and that the tool set covers the job.
 - **Tool quality** — weight 25. Are the tool contracts built right. Valid schemas, descriptions that say what comes back, names an agent can tell apart, handlers behind every tool.
 - **Trust** — weight 20. Can an agent trust what the tools declare. Read-only hints that match what the tool actually says it does, and metadata that describes tools instead of steering the agent reading it.
+
+CI runs the same audit against the live origin after every production deploy
+(`.github/workflows/ci.yml`, informational record). The binding gate —
+availability passed, overall score ≥ 70 — is asserted in the release PR
+together with the deployed-origin isolation proofs and dataset-upload
+accounting: [`docs/release-checklist.md`](./docs/release-checklist.md).
+Canonical-copy parity across the docs is scriptable:
+
+```sh
+pnpm docs:parity
+```
 
 ## Chrome Setup for WebMCP
 
