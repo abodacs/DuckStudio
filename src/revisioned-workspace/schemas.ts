@@ -326,16 +326,17 @@ export const RunAnalysisInputSchema = z
       .describe("Exactly one read-only SELECT or WITH statement; values belong in bindings, not literals."),
     bindings: z
       .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
-      .describe("Named parameter values supplied separately from the SQL; sensitive values are redacted downstream.")
-      .refine((bindings) => Object.keys(bindings).length <= 40, "bindings carries at most 40 entries"),
+      .describe("Named parameter values supplied separately from the SQL; pass {} if none; sensitive values are redacted downstream.")
+      .refine((bindings) => Object.keys(bindings).length <= 40, "bindings carries at most 40 entries")
+      .default({}),
     presentation: RunPresentationInputSchema.optional(),
     budget: z
       .strictObject({
-        executionMs: z.number().int().min(100).max(15000).describe("Execution deadline in milliseconds."),
-        resultRows: z.number().int().min(1).max(50000).describe("Maximum materialized rows."),
-        chartPoints: z.number().int().min(10).max(5000).describe("Maximum chart points."),
+        executionMs: z.number().int().min(100).max(15000).describe("Execution deadline in milliseconds.").optional(),
+        resultRows: z.number().int().min(1).max(50000).describe("Maximum materialized rows.").optional(),
+        chartPoints: z.number().int().min(10).max(5000).describe("Maximum chart points.").optional(),
       })
-      .describe("Stricter budgets are honored; requests above the workspace default are clamped and disclosed.")
+      .describe("Stricter budgets are honored; omitted axes fall back to workspace defaults; above-default requests are clamped and disclosed.")
       .optional(),
     expectedRevision: z
       .number()
@@ -398,6 +399,43 @@ export const VerifyCustodyInputSchema = z
 export const CompiledVerifyCustodyInput = z.compile(VerifyCustodyInputSchema);
 
 export type VerifyCustodyInput = z.infer<typeof VerifyCustodyInputSchema>;
+
+/**
+ * §8.1/§8.4 advertise the scoped dependencies the runtime `.superRefine`
+ * refinements enforce, as Draft 2020-12 `allOf`/`if`/`then` — one rule, two
+ * layers: the browser-visible schema lets a client validator reject a scope
+ * missing its id before a wasted call, while `.parse()` stays the trust
+ * boundary (§8.6). Owned beside the schemas they mirror so the advertised
+ * copy is derived from this module, never hand-duplicated by callers.
+ */
+function scopedRequiredConditional(scope: string, requiredKey: string) {
+  return {
+    if: { properties: { scope: { const: scope } }, required: ["scope"] },
+    // JSON Schema Draft 2020-12 conditional keyword, not a thenable.
+    // oxlint-disable-next-line unicorn/no-thenable
+    then: { required: [requiredKey] },
+  };
+}
+
+export function deriveGetContextInputJsonSchema() {
+  return {
+    ...z.toJSONSchema(GetContextInputSchema, { io: "input" }),
+    allOf: [
+      scopedRequiredConditional("schema", "datasetId"),
+      scopedRequiredConditional("artifact", "artifactId"),
+    ],
+  };
+}
+
+export function deriveVerifyCustodyInputJsonSchema() {
+  return {
+    ...z.toJSONSchema(VerifyCustodyInputSchema, { io: "input" }),
+    allOf: [
+      scopedRequiredConditional("operation", "operationId"),
+      scopedRequiredConditional("artifact", "artifactId"),
+    ],
+  };
+}
 
 /** §8.5 human-only `selectArtifact` — never a WebMCP tool. */
 export const SelectArtifactInputSchema = z.strictObject({

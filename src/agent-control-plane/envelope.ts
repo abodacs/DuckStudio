@@ -51,6 +51,8 @@ export {
   CompiledRunAnalysisInput,
   CompiledSelectArtifactInput,
   CompiledVerifyCustodyInput,
+  deriveGetContextInputJsonSchema,
+  deriveVerifyCustodyInputJsonSchema,
   EXECUTE_SQL_TO_CANVAS_TOOL_DESCRIPTION,
   GET_CONTEXT_TOOL_DESCRIPTION,
   GetContextArtifactDataSchema,

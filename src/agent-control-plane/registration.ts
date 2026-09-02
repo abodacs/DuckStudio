@@ -3,12 +3,12 @@ import {
   ACTIVATE_DATASET_TOOL_DESCRIPTION,
   EXECUTE_SQL_TO_CANVAS_TOOL_DESCRIPTION,
   GET_CONTEXT_TOOL_DESCRIPTION,
-  GetContextInputSchema,
   ActivateDatasetInputSchema,
   RunAnalysisInputSchema,
   VERIFY_ZERO_EGRESS_TOOL_DESCRIPTION,
-  VerifyCustodyInputSchema,
   ToolNameSchema,
+  deriveGetContextInputJsonSchema,
+  deriveVerifyCustodyInputJsonSchema,
   type ActivateDatasetInput,
   type Envelope,
   type GetContextInput,
@@ -79,7 +79,7 @@ export function buildGetContextTool(store: WorkspaceStore): WebMCPToolDefinition
   return {
     name: "duckdb_get_context",
     description: GET_CONTEXT_TOOL_DESCRIPTION,
-    inputSchema: z.toJSONSchema(GetContextInputSchema, { io: "input" }),
+    inputSchema: deriveGetContextInputJsonSchema(),
     execute(input: unknown) {
       return store.dispatch({ kind: "getContext", input: input as GetContextInput });
     },
@@ -115,7 +115,7 @@ export function buildVerifyZeroEgressTool(store: WorkspaceStore): WebMCPToolDefi
   return {
     name: "duckdb_verify_zero_egress",
     description: VERIFY_ZERO_EGRESS_TOOL_DESCRIPTION,
-    inputSchema: z.toJSONSchema(VerifyCustodyInputSchema, { io: "input" }),
+    inputSchema: deriveVerifyCustodyInputJsonSchema(),
     execute(input: unknown) {
       return store.dispatch({ kind: "verifyCustody", input: input as VerifyCustodyInput });
     },
