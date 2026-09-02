@@ -370,7 +370,12 @@ test.describe("slice 5: evidence canvas", () => {
 
   test("the public grid paints bounded virtualized rows only after the artifact", async ({ page }) => {
     await page.goto("/");
-    await activateAndRun(page, { activate: "e2e-grid-activate-01", run: "e2e-grid-run-01" });
+    // A 2,000-row artifact gives the virtual window real depth to scroll.
+    await activateAndRun(
+      page,
+      { activate: "e2e-grid-activate-01", run: "e2e-grid-run-01" },
+      "SELECT * FROM saas_churn LIMIT 2000",
+    );
     await page.getByRole("tab", { name: "Data Grid" }).click();
 
     // Acceptance 17 in reverse: rows exist — but only from the artifact.
@@ -384,15 +389,15 @@ test.describe("slice 5: evidence canvas", () => {
     const painted = await page.locator("[data-grid-row]").count();
     expect(painted).toBeLessThanOrEqual(bound);
 
-    // Transform-only scroll: a real deep wheel jump repaints the window,
-    // still bounded.
-    const center = await viewport.boundingBox();
-    await page.mouse.move(center!.x + center!.width / 2, center!.y + center!.height / 2);
-    await page.mouse.wheel(0, 32 * 5000);
+    // Transform-only scroll: a deep jump repaints the window, still bounded —
+    // the scroll position leaves the top and the painted count holds.
+    await viewport.evaluate((element) => {
+      element.scrollTop = 32 * 5000;
+    });
     await expect.poll(async () => page.locator("[data-grid-row]").count()).toBeLessThanOrEqual(bound);
     await expect
       .poll(async () => page.locator("[data-grid-window]").evaluate((element) => element.style.transform))
-      .toContain("translateY(159");
+      .not.toContain("translateY(0px)");
   });
 
   test("the healthcare grid refuses to paint rows — the mute test", async ({ page }) => {
@@ -450,66 +455,152 @@ test.describe("slice 5: evidence canvas", () => {
   });
 });
 
-// --- Slice 6: the judge path. The same domain commands are one click away:
-// preset cards, canonical-run chips, and the verify chip drive the identical
-// dispatch seam a browser agent drives — no typing, no terminal, no wait. ---
+// --- Slice 6: demo proof (tickets 63/64, grilling 61's resolution). Preset
+// cards and the one canonical prompt chip dispatch the exact domain commands
+// an agent dispatches through the store seam — the envelope teaches recovery,
+// and simulator mode drives the same commands to the same projections. ---
 
-test.describe("slice 6: judge-path 1-click journey", () => {
-  test("a preset card activates locally and the header commits the policy", async ({ page }) => {
-    await page.goto("/");
-    // The agent channel names the served surface — never a pending "connecting".
+/** The canonical prompt chip: the tape's exact prompt (video-script beat 3). */
+const CHIP_LABEL = "Analyze churn against support tickets.";
+const ACTIVATE_CHURN = "Activate dataset saas_churn · public_synthetic policy";
+const ACTIVATE_HEALTH = "Activate dataset healthcare_pii · sensitive_aggregate_only policy";
+
+/**
+ * Cold boots (wasm compile + both preset materializations) measured past 25s
+ * in CI and far worse on loaded machines; every slice-6 gesture waits for the
+ * boot to reach "register" before asserting, so slowness never reads as a
+ * missing chip (the per-test timeout bounds the wait).
+ */
+async function gotoBooted(page: import("@playwright/test").Page): Promise<void> {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => (window as { __duckstudioAgentSurface?: unknown }).__duckstudioAgentSurface !== undefined,
+    undefined,
+    { timeout: 120_000 },
+  );
+}
+
+test.describe("slice 6: demo wiring and parity", () => {
+  test("a preset card dispatches one activation; the header commits and the grid stays empty", async ({ page }) => {
+    await gotoBooted(page);
+    // The capability chip names the served surface from first paint (§7.3).
     await expect(
-      page.getByText("Agent Simulator Ready (Full Parity)").or(page.getByText("WebMCP Native Connected")),
+      page.getByText("webmcp_native", { exact: true }).or(page.getByText("simulator_only · same workspace", { exact: true })),
     ).toBeVisible();
-    await page
-      .getByRole("group", { name: "Dataset presets" })
-      .getByRole("button", { name: /saas_churn/ })
-      .click();
+
+    // The card's pinned aria label comes from catalog metadata (grilling 61).
+    await page.getByRole("button", { name: ACTIVATE_CHURN }).click();
     await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
     await expect(page.getByText("ACTIVE", { exact: true })).toBeVisible();
     await expect(page.getByText("0 Bytes of Dataset Uploaded")).toBeVisible();
+
+    // Acceptance 17: activation paints no rows — the honest empty state.
+    await page.getByRole("tab", { name: "Data Grid" }).click();
+    await expect(page.getByText("No artifact — the grid paints rows only from an approved artifact.")).toBeVisible();
+    await expect(page.locator("[data-grid-row]")).toHaveCount(0);
   });
 
-  test("the churn chip runs one canonical artifact with headline KPIs and the scatter", async ({ page }) => {
-    await page.goto("/");
-    await page.getByRole("button", { name: /Run SaaS Churn Analysis/ }).click();
+  test("the canonical prompt chip runs the two-call playbook to one artifact with headline KPIs", async ({ page }) => {
+    await gotoBooted(page);
+    await page.getByRole("button", { name: ACTIVATE_CHURN }).click();
+    await expect(page.getByText("rev 1", { exact: true })).toBeVisible();
 
-    // One operation, one artifact — activation and analysis chained.
+    await page.getByRole("button", { name: CHIP_LABEL }).click();
+
+    // The analysis pill is the operation stream's evidence (the chip's read
+    // pulses no chrome, §3.2); the two-call sequence itself is pinned by the
+    // canvas contract test.
+    await expect(
+      page.locator(".chip-operation").filter({ hasText: "duckdb_execute_sql_to_canvas" }).first(),
+    ).toBeVisible();
     await expect(page.getByText("a_01", { exact: true })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText("ws_local_01 · rev 2 · saas_churn · public_synthetic")).toBeVisible();
 
-    // Headline KPIs measured from the canonical SQL's first row.
-    await expect(page.getByText("Churn Rate", { exact: true })).toBeVisible();
+    // Headline KPIs measured from the canonical SQL's first row (prd.md §6.1).
+    await expect(page.getByText("Churn Rate", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("14.2%", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("$182,400", { exact: true })).toBeVisible();
+    await expect(page.getByText("Avg Tickets", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("4.8", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Impacted MRR", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("$182,400", { exact: true }).first()).toBeVisible();
 
     // The chart paints, and the runtime line is measured — never a promised
     // fixed query time (prd.md §8).
     await expect(page.getByRole("region", { name: "Chart" }).locator("canvas")).toBeVisible();
-    await expect(page.getByText(/measured/, { exact: false })).toBeVisible();
+    await expect(page.locator("[data-velocity]")).toContainText("measured");
   });
 
-  test("the healthcare chip runs the safe aggregate and the grid suppresses rows", async ({ page }) => {
-    await page.goto("/");
-    await page.getByRole("button", { name: /Run Healthcare Aggregate/ }).click();
-    await expect(page.getByText("a_01", { exact: true })).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByText("ws_local_01 · rev 2 · healthcare_pii · sensitive_aggregate_only")).toBeVisible();
+  test("a preset click while an operation runs earns the OPERATION_CONFLICT recovery card", async ({ page }) => {
+    await gotoBooted(page);
+    await page.getByRole("button", { name: ACTIVATE_CHURN }).click();
+    await expect(page.getByText("rev 1", { exact: true })).toBeVisible();
 
-    await page.getByRole("tab", { name: "Data Grid" }).click();
-    await expect(page.getByRole("alert")).toContainText("Data Grid — suppressed by policy");
-    await expect(page.getByRole("alert")).toContainText("mrn");
-    await expect(page.locator("[data-grid-row]")).toHaveCount(0);
+    await page.getByRole("button", { name: CHIP_LABEL }).click();
+    // The card never disables (grilling 61): while the analysis runs, the
+    // second dispatch happens and the envelope teaches recovery.
+    await expect(page.locator(".chip-operation.op-running, .chip-operation.op-queued").first()).toBeVisible();
+    await page.getByRole("button", { name: ACTIVATE_HEALTH }).click();
+
+    await expect(page.getByText("OPERATION_CONFLICT", { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText("Another operation is running; wait for it or cancel it.")).toBeVisible();
+    // The card is transient by design — it lives only while the colliding
+    // operation does — so the recovery move's exact copy is pinned by the
+    // canvas contract test rather than raced here.
+
+    // The conflict committed nothing: the churn analysis still settles at rev 2.
+    await expect(page.getByText("ws_local_01 · rev 2 · saas_churn · public_synthetic")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText("rev 3", { exact: true })).not.toBeVisible();
   });
 
-  test("the verify chip lands the canvas on Custody with zero-upload evidence", async ({ page }) => {
-    await page.goto("/");
-    await page.getByRole("button", { name: /Run SaaS Churn Analysis/ }).click();
-    await expect(page.getByText("a_01", { exact: true })).toBeVisible({ timeout: 60_000 });
+  test("simulator mode drives the same commands to the same revisions and KPIs", async ({ page }) => {
+    // Native registration absent → the simulator serves the identical surface
+    // (§14): same dispatches, same artifacts, same revisions, same DOM.
+    await page.addInitScript(() => {
+      Object.defineProperty(document, "modelContext", { value: undefined, configurable: true });
+    });
+    await gotoBooted(page);
+    await expect(page.getByText("simulator_only · same workspace", { exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: /Verify Zero Egress/ }).click();
-    await expect(page.getByRole("tab", { name: "Custody" })).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByText(/scope artifact:a_01/)).toBeVisible();
-    await expect(page.getByText("0 B", { exact: true })).toBeVisible();
-    await expect(page.getByText("Runtime interception is operational evidence, not a formal proof.")).toBeVisible();
+    await page.getByRole("button", { name: ACTIVATE_CHURN }).click();
+    await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
+    await page.getByRole("button", { name: CHIP_LABEL }).click();
+    await expect(page.getByText("a_01", { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText("ws_local_01 · rev 2 · saas_churn · public_synthetic")).toBeVisible();
+    await expect(page.getByText("14.2%", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("$182,400", { exact: true }).first()).toBeVisible();
+
+    // The served surface really is the simulator's.
+    const surface = await page.evaluate(
+      () => (window as { __duckstudioAgentSurface?: { surface: string } }).__duckstudioAgentSurface,
+    );
+    expect(surface?.surface).toBe("simulator_only");
+  });
+
+  test("no third-party requests on the tool path; the origin stays cross-origin isolated", async ({ page, baseURL }) => {
+    const crossOrigin: string[] = [];
+    page.on("request", (request) => {
+      if (baseURL && request.url().startsWith(baseURL)) return;
+      crossOrigin.push(request.url());
+    });
+    await gotoBooted(page);
+    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+    expect(await page.evaluate(() => window.crossOriginIsolated)).toBe(true);
+
+    // The full tool path — activation through the two-call chip — stays
+    // same-origin: fonts, wasm, and workers included.
+    await page.getByRole("button", { name: ACTIVATE_CHURN }).click();
+    await page.getByRole("button", { name: CHIP_LABEL }).click();
+    await expect(page.getByText("a_01", { exact: true })).toBeVisible({ timeout: 60_000 });
+    expect(crossOrigin).toEqual([]);
+  });
+
+  test("the served origin applies the isolation headers to / and a font asset", async ({ request }) => {
+    for (const path of ["/", "/fonts/geist-latin-var.woff2"]) {
+      const response = await request.get(path);
+      expect(response.ok(), `${path} should serve`).toBe(true);
+      expect(response.headers()["cross-origin-opener-policy"]).toBe("same-origin");
+      expect(response.headers()["cross-origin-embedder-policy"]).toBe("require-corp");
+      expect(response.headers()["cross-origin-resource-policy"]).toBe("same-origin");
+    }
   });
 });

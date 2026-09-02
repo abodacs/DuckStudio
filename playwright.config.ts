@@ -1,6 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
-const PORT = 8787;
+// Overridable so two checkouts on one machine can run the suite without
+// fighting over the default port (E2E_PORT=8899 pnpm e2e).
+const PORT = Number(process.env.E2E_PORT ?? 8787);
 const LOCAL_BASE_URL = `http://127.0.0.1:${PORT}`;
 // Opt-in: point the whole suite at the deployed origin instead of the local
 // build (E2E_BASE_URL=https://<deploy>.pages.dev pnpm e2e). The local
@@ -29,11 +31,27 @@ export default defineConfig({
   // Cold boots (fresh server, cold caches) have measured past 25s before the
   // shell renders; 120s leaves headroom for slow machines without masking
   // real hangs.
+  // Playwright's CI default reporter is bare `dot`, which writes no
+  // playwright-report/ at all — the workflow's "Upload Playwright report on
+  // failure" step would upload nothing. The html reporter is what packages
+  // the failure artifacts below into that directory.
+  reporter: process.env.CI
+    ? [["html", { open: "never" }]]
+    : [["list"], ["html", { open: "on-failure" }]],
   timeout: 120_000,
   expect: { timeout: 30_000 },
   use: {
     baseURL,
     launchOptions: { args: WEBMCP_TESTING_ARGS },
+    // CI failure evidence, embedded in the uploaded report. Screenshots cost
+    // nothing until a test fails; videos record during the run and are
+    // purged when it passes. Trace is kept-on-failure rather than the usual
+    // on-first-retry: retries stay at 0 by design (an acceptance-proof suite
+    // must not green itself on a second roll), so a retry-keyed trace could
+    // never fire.
+    screenshot: "only-on-failure",
+    video: "retain-on-failure",
+    trace: "retain-on-failure",
   },
   // Serves the shipped origin, not a dev server: `wrangler pages dev` reads
   // public/_headers natively, so the isolation headers asserted in E2E are the

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { formatKpiValue } from "../src/live-canvas/kpi";
 import {
   agentSurface,
   CHURN_ACTIVATE,
@@ -94,7 +95,7 @@ test.describe("qa: analysis lifecycle", () => {
     // The lineage view renders the exact chain, dataset first, never self.
     await page.getByRole("tab", { name: "SQL & Lineage" }).click();
     await expect(page.getByRole("tabpanel")).toContainText(
-      "lineage: dataset:saas_churn → artifact:a_01",
+      "dataset:saas_churn → artifact:a_01",
     );
   });
 
@@ -131,29 +132,31 @@ test.describe("qa: analysis lifecycle", () => {
     const analysis = (await invokeTool(page, "duckdb_execute_sql_to_canvas", churnAnalysis(1, "qa-projection-01"))) as EnvelopeSuccess;
     expect(analysis.ok).toBe(true);
     const summary = (analysis.data as {
-      summary: { kpis: { label: string; value: number | null }[] };
+      summary: { kpis: { label: string; value: number | null; format: "percent" | "decimal" | "currency_usd" | "integer" }[] };
     }).summary;
     expect(summary.kpis.length).toBeGreaterThan(0);
 
-    // The right pane's Insights dl carries the same label→value pairs the
-    // envelope measured at commit.
+    // The right pane's Insights tiles carry the same label→value pairs the
+    // envelope measured at commit — one object, rendered through the pinned
+    // format table (§15.15).
     await page.getByRole("tab", { name: "Insights" }).click();
     const panel = page.getByRole("tabpanel");
-    await expect(panel).toContainText("a_01 · source saas_churn");
     const rendered = await panel.evaluate((panelElement) => {
       const pairs = new Map<string, string>();
-      const dl = panelElement.querySelector("dl");
-      if (!dl) return pairs;
-      for (const row of dl.querySelectorAll(":scope > div")) {
-        const dt = row.querySelector("dt")?.textContent?.trim();
-        const dd = row.querySelector("dd")?.textContent?.trim();
-        if (dt && dd) pairs.set(dt, dd);
+      for (const tile of panelElement.querySelectorAll(".ghost-tile")) {
+        const spans = tile.querySelectorAll<HTMLElement>(":scope > span");
+        if (spans.length < 2) continue;
+        const label = spans[0]?.textContent?.trim();
+        const value = spans[1]?.textContent?.trim();
+        if (label && value) pairs.set(label, value);
       }
       return Object.fromEntries(pairs);
     });
     for (const kpi of summary.kpis) {
-      const expected = kpi.value === null ? "—" : String(kpi.value);
-      expect(rendered[kpi.label], `KPI ${kpi.label} should render its measured value`).toBe(expected);
+      expect(
+        rendered[kpi.label],
+        `KPI ${kpi.label} should render its measured value`,
+      ).toBe(formatKpiValue(kpi.value, kpi.format));
     }
     await expect(page.getByText("a_01", { exact: true })).toBeVisible();
   });
