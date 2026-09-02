@@ -34,7 +34,7 @@ Draft by default; stack separable steps; run /simplify on non-trivial diffs befo
 - [ ] `pnpm lint && pnpm typecheck`
 - [ ] `pnpm test`
 - [ ] `pnpm build` (skip if docs-only)
-- [ ] `npx ax webmcp-audit http://localhost:3000` (if WebMCP/canvas touched)
+- [ ] `npx ax webmcp-audit http://localhost:5173` (if WebMCP/canvas touched)
 - [ ] Manual / integration:
 
 ## Risks & rollback

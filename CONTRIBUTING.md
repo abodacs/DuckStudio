@@ -36,7 +36,7 @@ The script packs the exact `@duckdb/duckdb-wasm` pin from `package.json` and fai
 Audit before you publish:
 
 ```sh
-npx ax webmcp-audit http://localhost:3000
+npx ax webmcp-audit http://localhost:5173
 ```
 
 How the score works (<https://webmcp.ora.ai/audit>): Availability gates the score — a page no in-browser agent can use gets no number. What passes the gate is scored on four pillars, out of 100:
