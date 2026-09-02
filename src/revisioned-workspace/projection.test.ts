@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createStore, fakeEngine, activateSaasChurn, runChurn } from "./_contract/harness";
 import { createWorkspaceStore } from "./store";
 import { projectArtifact, projectWorkspace } from "./projection";
 import type { GetContextSummaryData } from "./schemas";
@@ -34,6 +35,8 @@ describe("projectWorkspace at rev 0", () => {
       },
       selectedArtifactId: null,
       recentArtifacts: [],
+      operations: [],
+      artifactCards: [],
     });
   });
 
@@ -114,5 +117,63 @@ describe("referential-equality contract across the four call sites (ADR 0005 am3
     const view = projectArtifact(workspace, workspace.selectedArtifactId);
     expect(projectArtifact(workspace, null)).toBe(view);
     expect(view).toEqual({ kind: "no_artifact" });
+  });
+});
+
+describe("the widened projection on an artifact-bearing workspace (Slice 5, grilling 51/52)", () => {
+  it("gives the envelope summary, the artifact card, and Insights the same objects", async () => {
+    const store = createStore(fakeEngine());
+    await activateSaasChurn(store);
+    const envelope = await runChurn(store, "projection-widened-01");
+    if (!envelope.ok) throw new Error(`expected the churn analysis to commit: ${JSON.stringify(envelope.error)}`);
+
+    const workspace = store.getSnapshot();
+    const summary = (envelope.data as { summary: { kpis: unknown[] } }).summary;
+    const vm = projectWorkspace(workspace);
+    const card = vm.artifactCards[0];
+    const view = projectArtifact(workspace, workspace.selectedArtifactId);
+
+    // The envelope summary and the projection's artifact view are one object.
+    expect(view.kind).toBe("artifact");
+    if (view.kind !== "artifact") throw new Error("unreachable");
+    expect(view.summary).toBe(summary);
+    expect(card.artifactId).toBe("a_01");
+    expect(card.selected).toBe(true);
+    expect(card.kpis[0]).toBe(summary.kpis[0]);
+    expect(view.insights.kpis).toBe(summary.kpis);
+    expect(view.insights.chart).toBe(summary.chart);
+    // Memoization: the same workspace + id return the same reference.
+    expect(projectArtifact(workspace, "a_01")).toBe(view);
+  });
+
+  it("merges the committed row cache and custody evidence synchronously", async () => {
+    const store = createStore(fakeEngine());
+    await activateSaasChurn(store);
+    await runChurn(store, "projection-widened-02");
+    const view = projectArtifact(store.getSnapshot(), "a_01");
+    if (view.kind !== "artifact") throw new Error("unreachable");
+
+    // Grid rows: bounded page memory captured at commit, never a fetch.
+    expect(view.grid.kind).toBe("rows");
+    if (view.grid.kind !== "rows") throw new Error("unreachable");
+    expect(view.grid.rows).toEqual([
+      [3, 120],
+      [9, 40],
+    ]);
+    expect(view.grid.truncated).toBe(false);
+    expect(view.grid.columns).toBe(view.artifact.schema);
+
+    // Lineage carries the exact statement, hash, source, chain, release, metrics.
+    expect(view.lineage.sql).toBe(view.artifact.sql);
+    expect(view.lineage.sqlHash).toBe(view.artifact.sqlHash);
+    expect(view.lineage.chain).toBe(view.artifact.lineage);
+
+    // Custody: the §8.4 snapshot the store captured from the kernel recorder.
+    expect(view.custody?.scope).toEqual({ kind: "artifact", id: "a_01" });
+    expect(view.custody?.datasetBytesUploaded).toBe(0);
+    expect(view.custody?.limitations).toHaveLength(2);
+
+    // Insights: downsampling derives from the measured metrics.
+    expect(view.insights.chartDownsampled).toBe(false);
   });
 });

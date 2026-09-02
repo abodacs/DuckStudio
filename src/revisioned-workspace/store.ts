@@ -12,7 +12,14 @@ import {
   measureSummary,
   resolvePresentation,
 } from "./presentation";
-import { projectWorkspace } from "./projection";
+import {
+  captureArtifactEvidence,
+  captureArtifactRows,
+  projectWorkspace,
+  releaseArtifactMemory,
+  type GridCell,
+  type GridRows,
+} from "./projection";
 import {
   ActivateDatasetInputSchema,
   CancelActiveOperationInputSchema,
@@ -664,6 +671,23 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     });
     const revision = workspace.revision + 1;
     const artifactId = record.artifact.artifactId;
+    // Page memory lands with the commit (grilling 51): the bounded row
+    // cache and the §8.4 evidence snapshot the Custody view and the
+    // suppression counters merge synchronously from the projection.
+    captureArtifactRows(
+      artifactId,
+      captureRows(
+        result,
+        Math.min(
+          authorized.decision.budget.resultRows,
+          presentation.spec.grid?.maxRows ?? authorized.decision.budget.resultRows,
+        ),
+      ),
+    );
+    captureArtifactEvidence(artifactId, {
+      ...kernel.evidence({ kind: "artifact", id: artifactId }, record.artifact.policy),
+      lineage: [...record.artifact.lineage, { kind: "artifact", id: artifactId }],
+    });
     replaceWorkspace({
       ...workspace,
       revision,
@@ -729,6 +753,8 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       try {
         await engine.dropRelation(relationName);
         graph.markEvicted(evictedId);
+        // The ring dropped the relation; its page memory goes with it.
+        releaseArtifactMemory(evictedId);
       } catch {
         continue;
       }
@@ -803,6 +829,25 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       redacted[key] = redactedKeys.includes(key) ? REDACTED : value;
     }
     return redacted;
+  }
+
+  /**
+   * The bounded row cache capture (grilling 51 item 3): the commit's batches
+   * flatten into page memory, capped at `min(resultRows, grid.maxRows)` —
+   * the projection merges them synchronously, so no view ever fetches from
+   * the engine at render.
+   */
+  function captureRows(result: ExecutionResult, limit: number): GridRows {
+    const columns = result.schema.map((column) => column.name);
+    const rows: GridCell[][] = [];
+    let remaining = limit;
+    for (const batch of result.batches) {
+      for (let index = 0; index < batch.rowCount && remaining > 0; index += 1, remaining -= 1) {
+        rows.push(columns.map((column) => (batch.values[column]?.[index] as GridCell) ?? null));
+      }
+      if (remaining <= 0) break;
+    }
+    return rows;
   }
 
   function internalFailure(): CustodyFailure {

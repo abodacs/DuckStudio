@@ -20,6 +20,7 @@
   "dependencies": {
     "@tanstack/react-router": "1.170.32",
     "@tanstack/zod-adapter": "1.167.0",
+    "echarts": "6.1.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "4.5.4"
