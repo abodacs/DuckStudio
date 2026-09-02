@@ -1,34 +1,40 @@
 ---
 name: DuckStudio
-description: Zero-upload, agent-native data lab — a dark instrument panel where every surface is custody evidence.
+description: Zero-upload, agent-native data lab — a dark optical instrument lit by two signal lamps, where every surface is glass you can see custody through.
 colors:
+  chassis: "#050508"
+  glass: "rgb(255 255 255 / 4%)"
+  glass-raised: "rgb(255 255 255 / 8%)"
+  edge: "rgb(255 255 255 / 9%)"
+  edge-bright: "rgb(255 255 255 / 16%)"
   signal-cyan: "#00F2FE"
   lamp-amber: "#FFB347"
-  canvas-ink: "#0A0B0F"
-  panel-graphite: "#161821"
-  hairline-edge: "#2D3139"
-  readout-white: "#E9EDF1"
-  readout-grey: "#9AA7B4"
+  ink: "#F4F7FA"
+  ink-secondary: "#9AA4B2"
 typography:
   title:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Space Grotesk, Geist, ui-sans-serif, sans-serif"
     fontSize: "18px"
-    fontWeight: 600
+    fontWeight: 500
     lineHeight: "28px"
     letterSpacing: "-0.01em"
-  label:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
+  numeral:
+    fontFamily: "Space Grotesk, Geist, ui-sans-serif, sans-serif"
     fontSize: "12px"
-    fontWeight: 600
+    fontWeight: 500
+  label:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "11px"
+    fontWeight: 500
     lineHeight: "16px"
-    letterSpacing: "0.025em"
+    letterSpacing: "0.14em"
   body:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: "20px"
   meta:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
     fontSize: "12px"
     fontWeight: 400
     lineHeight: "16px"
@@ -36,199 +42,232 @@ typography:
     fontFamily: "JetBrains Mono, ui-monospace, Cascadia Mono, monospace"
     fontSize: "1em"
     fontWeight: 400
-  metric:
-    fontFamily: "Space Grotesk, Inter, ui-sans-serif, sans-serif"
-    fontWeight: 500
 rounded:
-  md: "6px"
+  panel: "18px"
+  panel-inner: "14px"
+  island: "20px"
   pill: "9999px"
 spacing:
-  xs: "4px"
+  xs: "6px"
   sm: "8px"
-  md: "12px"
-  lg: "16px"
+  md: "10px"
+  lg: "12px"
+  xl: "16px"
+  2xl: "20px"
 components:
+  glass-island:
+    backgroundColor: "rgb(5 5 8 / 60%)"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.island}"
+    padding: "10px 16px"
   card-panel:
-    backgroundColor: "{colors.panel-graphite}"
-    textColor: "{colors.readout-white}"
-    rounded: "{rounded.md}"
-    padding: "8px 12px"
+    backgroundColor: "{colors.glass}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.panel}"
+    padding: "6px"
   card-operation:
-    backgroundColor: "{colors.panel-graphite}"
-    textColor: "{colors.readout-white}"
-    rounded: "{rounded.md}"
-    padding: "8px 12px"
+    backgroundColor: "{colors.glass}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.panel}"
+    padding: "6px"
+  panel-evidence:
+    backgroundColor: "{colors.glass}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.panel}"
+    padding: "6px"
+  preset-card:
+    backgroundColor: "{colors.glass}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.panel}"
+    padding: "6px"
   badge-zero-upload:
-    backgroundColor: "{colors.panel-graphite}"
-    textColor: "{colors.readout-white}"
+    backgroundColor: "rgb(0 242 254 / 6%)"
+    textColor: "{colors.ink}"
     rounded: "{rounded.pill}"
-    padding: "4px 12px"
+    padding: "4px 12px 4px 10px"
   chip-tool:
+    backgroundColor: "rgb(255 179 71 / 6%)"
     textColor: "{colors.lamp-amber}"
     typography: "{typography.mono}"
     rounded: "{rounded.pill}"
     padding: "2px 8px"
   chip-policy-sensitive:
+    backgroundColor: "rgb(255 179 71 / 5%)"
     textColor: "{colors.lamp-amber}"
+    typography: "{typography.meta}"
     rounded: "{rounded.pill}"
     padding: "2px 8px"
   chip-policy-public:
-    textColor: "{colors.readout-grey}"
+    backgroundColor: "rgb(255 255 255 / 3%)"
+    textColor: "{colors.ink-secondary}"
+    typography: "{typography.meta}"
     rounded: "{rounded.pill}"
     padding: "2px 8px"
+  tab-evidence:
+    textColor: "{colors.ink-secondary}"
+    rounded: "{rounded.pill}"
+    padding: "6px 14px"
   tab-evidence-active:
-    backgroundColor: "{colors.panel-graphite}"
-    textColor: "{colors.readout-white}"
-    rounded: "6px 6px 0 0"
-    padding: "6px 12px"
-  tab-evidence-idle:
-    textColor: "{colors.readout-grey}"
-    rounded: "6px 6px 0 0"
-    padding: "6px 12px"
+    backgroundColor: "rgb(0 242 254 / 8%)"
+    textColor: "{colors.signal-cyan}"
+    rounded: "{rounded.pill}"
+    padding: "6px 14px"
   button-recovery:
-    backgroundColor: "{colors.panel-graphite}"
-    textColor: "{colors.readout-white}"
-    rounded: "{rounded.md}"
-    padding: "6px 12px"
-  preset-card:
-    backgroundColor: "{colors.panel-graphite}"
-    textColor: "{colors.readout-white}"
-    rounded: "{rounded.md}"
-    padding: "8px 12px"
+    backgroundColor: "{colors.glass}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.pill}"
+    padding: "8px 16px"
 ---
 
 # Design System: DuckStudio
 
 ## Overview
 
-**Creative North Star: "The Instrument Panel"**
+**Creative North Star: "Custody Glass"**
 
-DuckStudio is styled as a precision instrument for data custody: a near-black chassis, graphite readout surfaces separated by 1px hairline seams, and exactly two signal lamps — Signal Cyan for trust, selection, and focus; Lamp Amber for agent tool operations and warnings. Nothing glows, nothing floats, nothing animates for attention. The screen is legible the way avionics are legible, because its audiences — analysts under egress bans, browser agents, challenge judges — must read state, not admire art. PRODUCT.md pins the tone: "a legible analytical lab, not a brand film."
+DuckStudio is a dark optical instrument lit by its own two signal lamps — Signal Cyan is custody and trust, Lamp Amber is the agent — and every surface is translucent white glass you can see custody through. The chassis is OLED black; two fixed radial lamp fields wash the room (cyan over the evidence pane, amber low over the agent rail); panels are machined hardware built as concentric double bezels with 1px white hairlines. It refuses the category's flat admin-panel arrangement: nothing here is a grey card on a grey dashboard — depth, light, and hairline construction make the workspace read as a scientific instrument. The tone stays "a luminous custody instrument — glass depth under two signal lamps, forensic legibility; not a brand film."
 
-Density is deliberately compact (12–14px working type). Every panel is a readout bound to explicit workspace state — a workspace ID, a revision, a policy enum, an artifact handle — and every empty state teaches the custody invariant it enforces rather than apologizing for missing data. The chrome stays quiet so the evidence can be loud: exact tool names, exact policy enums, and the fixed `0 Bytes of Dataset Uploaded` badge carry the product's specificity, not decoration.
+Density is deliberate and forensic: working type is 11–14px, every readout binds to explicit workspace state (workspace ID, revision, policy enum, artifact handle), and every empty state teaches the custody invariant it enforces with ghost geometry that fabricates no values. The aha is staged in the material itself: governed evidence renders on glass while the badge still reads `0 Bytes of Dataset Uploaded`.
+
+All state motion runs on one house glide (`cubic-bezier(0.32, 0.72, 0, 1)`) with full `prefers-reduced-motion` compliance; the lamp drift is the only ambient animation, and reduced motion pins it.
 
 **Key Characteristics:**
-- Flat, shadowless panels; depth = surface tone + hairline seam + the selected-tab z-fusion
-- Two chromatic voices only: Signal Cyan (trust) and Lamp Amber (agent operations/warnings)
-- JetBrains Mono marks anything the machine emitted; Inter carries everything human
-- Every readout binds to explicit workspace state (ID, revision, policy); no ambient state
-- Empty states state the rule; error frames give a stable code plus one recovery action
-- 150ms ease-out state shifts, a 0.97 press, and full motion-reduce compliance
+- OLED-black chassis (`#050508`) with two fixed radial lamp fields — cyan over evidence, amber over the agent rail — the only chromatic voices
+- Translucent white-glass panels with 1px hairlines, built as concentric double bezels (18px outer shell / 14px inner core)
+- One soft ambient shadow per panel; lamp glows appear only on lamp-owned surfaces (the agent operation card, the evidence instrument)
+- `backdrop-blur` only on fixed/sticky glass; scrolling content is never blurred, and lamp softness comes from gradient falloff, not filters
+- JetBrains Mono marks anything the machine emitted, read in ink-white on grey meta lines
+- Ghost empty states preview geometry, never values; disabled controls dim to 75% and state their reason
+- One house glide everywhere, staggered reading-order entry, a 0.97 press, full reduced-motion compliance
 
 ## Colors
 
-A near-black monochrome chassis whose entire expressive range is two signal lamps.
+A black-glass monochrome whose entire expressive range is two signal lamps: white at four opacities does every structural job, cyan and amber carry meaning.
 
 ### Primary
-- **Signal Cyan** (#00F2FE): the single live wire. Marks trust, selection, and focus: the zero-upload badge dot (full strength) and its border (30% opacity), `focus-visible` outlines (2px, offset −2), and selected-tab emphasis. It never marks agent activity and never fills large areas — its rarity is the signal.
+- **Signal Cyan** (`#00F2FE`): the custody lamp. Marks trust, custody, selection, and focus: the evidence instrument's hairline (15%) and surrounding glow, the zero-upload badge dot (full, pulsing) and border (30%), the active evidence tab (text full, background 8%, border 30%), the current first-run step numeral ring (border 40%, text full, fill 7%), ghost-readout accents (20–55%), and every `focus-visible` outline (2px, offset −2px). The lamp field itself is two radial cyan washes at 13% and 7% over the evidence side. Cyan never marks agent activity and never fills large areas — its rarity is the signal.
 
 ### Secondary
-- **Lamp Amber** (#FFB347): reserved exclusively for agent tool operations and warnings, per PRODUCT.md. Appears as the OPERATION card's border (40% opacity), exact-name tool pills (`duckdb_get_context`) in full-strength mono text, and the `sensitive_aggregate_only` policy chip. Never decorative; never marks human-initiated UI.
+- **Lamp Amber** (`#FFB347`): the agent lamp, reserved exclusively for agent tool operations and warnings. The OPERATION card wires its shell with amber (border 40%, core gradient tinted 6%→1.5%, plus the amber glow), the exact-name tool pill (`duckdb_get_context`) reads full-strength mono amber, and the `sensitive_aggregate_only` policy chip is amber. The lamp field is two radial amber washes at 9% and 5% low over the agent rail. Never decorative; never marks human-initiated UI.
 
 ### Neutral
-- **Canvas Ink** (#0A0B0F): page background — the chassis. Also the `theme-color` meta and the pre-hydration `<body>` inline background.
-- **Panel Graphite** (#161821): every readout surface — header strip, cards, tab panel, badge, buttons. One surface tone for everything raised above the chassis.
-- **Hairline Edge** (#2D3139): the only neutral border color, always 1px. Separates panes, wraps cards, fuses tabs to their panel.
-- **Readout White** (#E9EDF1): primary text and all mono machine values. ≈15:1 on Panel Graphite.
-- **Readout Grey** (#9AA7B4): labels, units, meta copy, and empty-state sentences. ≈7:1 on Panel Graphite — still AA at 12px, so it may carry real content, not just hints.
+- **Chassis** (`#050508`): the OLED-black room. Page background, `theme-color` meta, pre-hydration `<body>` background, and the glass header's tint base (60% opacity) — the chassis shows through the glass.
+- **Glass** (`rgb(255 255 255 / 4%)`): every resting panel surface — cards, tab panel, badge, buttons, preset cards.
+- **Glass Raised** (`rgb(255 255 255 / 8%)`): hover-raised surfaces (recovery button hover).
+- **Edge** (`rgb(255 255 255 / 9%)`): the 1px hairline that wraps every shell, core, tile, island, and divider.
+- **Edge Bright** (`rgb(255 255 255 / 16%)`): hover-lifted hairlines (recovery button) and the scrollbar thumb's register.
+- **Ink** (`#F4F7FA`): primary text and all mono machine values. ≈15:1 on the glass-over-chassis surface.
+- **Ink Secondary** (`#9AA4B2`): labels, meta copy, empty-state sentences, idle tabs. ≈7:1 on the glass-over-chassis surface — still AA at working sizes, so it may carry real content, not just hints.
 
 ### Named Rules
-**The Two-Lamp Rule.** Cyan and amber are the only chromatic colors in the system. A third hue on screen is a defect.
-**The Dim Border Rule.** Chromatic borders render dimmed (cyan at 30%, amber at 40%); chromatic text renders at full strength. A colored border marks; colored text speaks.
-**The Quiet Chrome Rule.** Neutrals do all structural work. Chrome never competes with evidence.
+**The Two-Lamp Rule.** Cyan and amber are the only chromatic colors in the system, and each owns one subject: cyan means custody, amber means the agent. A third hue on screen is a defect.
+
+**The Dim Border Rule.** Chromatic borders render dimmed (cyan at 15–40%, amber at 40%); chromatic text renders at full strength. A colored border marks; colored text speaks.
+
+**The Lamp-Glow Rule.** Glows mark the two lamps and nothing else: the amber glow lives only on the OPERATION card, the cyan glow only on the evidence instrument. Neutral panels get ambient shadow, never glow.
 
 ## Typography
 
-**Display Font:** Inter (variable 400–700, self-hosted woff2, preloaded; fallback ui-sans-serif/system-ui)
-**Body Font:** Inter
-**Label/Mono Font:** JetBrains Mono (variable 400–600, self-hosted woff2, preloaded; fallback ui-monospace/Cascadia Mono)
-**Metric Font:** Space Grotesk — committed in PRODUCT.md for KPI values; not yet self-hosted. Introduce it when the Insights KPI implementation lands; never substitute Inter for metrics.
+**Display Font:** Space Grotesk (variable 300–700, self-hosted woff2, preloaded; fallback Geist, then system sans) — the product title and display numerals.
+**Body Font:** Geist (variable 100–900, self-hosted woff2, preloaded; fallback ui-sans-serif/system-ui) — all human copy.
+**Label/Mono Font:** JetBrains Mono (variable 400–600, self-hosted woff2, preloaded; fallback ui-monospace/Cascadia Mono) — everything the machine emitted.
 
-**Character:** An instrument-panel pairing. Inter keeps dense human copy calm and legible; JetBrains Mono gives machine output the fixed-width authority of a readout. The family itself answers "what kind of thing is this?" — a value's typography is its type signature.
+**Character:** An optical-instrument pairing. Geist keeps dense human copy calm; Space Grotesk gives the title and numbered readouts their machined-display voice; JetBrains Mono gives machine output fixed-width authority. A value's typography is its type signature — the family answers "who emitted this?"
 
-Fonts are self-hosted because `Cross-Origin-Embedder-Policy: require-corp` makes third-party asset origins fragile (PRODUCT.md stack note); both woff2 files preload in `index.html`.
+Fonts are self-hosted because `Cross-Origin-Embedder-Policy: require-corp` makes third-party asset origins fragile; all three woff2 files preload in `index.html`.
 
 ### Hierarchy
-- **Title** (Inter 600, 18px/28px, tracking −0.01em): the app name `DuckStudio` and the error-frame heading. The only display-size text.
-- **Label** (Inter 600, 12px/16px, +0.025em tracking, uppercase): pane and group labels (`AGENT CONTROL & OPERATIONS`, `CUSTODY`). Card labels use the same treatment at weight 500. Always Readout Grey.
-- **Body** (Inter 400, 14px/20px): tab labels, tab-panel content, badge copy, dataset IDs' neighbors.
-- **Meta** (Inter 400, 12px/16px): secondary lines, preset metadata, empty-state and error explanations.
-- **Mono** (JetBrains Mono 400, 1em — inherits surrounding size, never rescales): workspace IDs, revisions, tool names, budgets, artifact IDs, transports, error codes, SQL. Mono values read in Readout White on grey meta lines.
-- **Metric** (Space Grotesk 500, size set with implementation): KPI values in the Insights view.
+- **Title** (Space Grotesk 500, 18px/28px, tracking −0.01em): the product name `DuckStudio` and the error-frame heading. The only display-size text.
+- **Numeral** (Space Grotesk 500, 12px): display numerals inside machined elements — the first-run step numbers seated in 28px circles.
+- **Label** (Geist 500, 11px/16px, +0.14em tracking, uppercase): pane labels (`AGENT CONTROL & OPERATIONS`, `SELECTED ARTIFACT`) and every card label (`CONTEXT`, `OPERATION`, `CUSTODY`). Always Ink Secondary.
+- **Body** (Geist 400, 14px/20px): tab-panel content, badge copy, recovery button, dataset IDs' neighbors. A 13px medium working size covers first-run move labels and tab labels.
+- **Meta** (Geist 400, 12px/16px): secondary lines, preset metadata, budget lists, empty-state and error explanations.
+- **Mono** (JetBrains Mono 400, 1em — inherits surrounding size, never rescales): workspace IDs, revisions, tool names, budgets, artifact IDs, transports, policy enums, error codes, SQL. Mono values read in Ink on grey meta lines.
 
 ### Named Rules
-**The Mono-Means-Machine Rule.** If the system emitted it, it's mono; if a human said it, it's Inter. Never set prose in mono; never set an ID, revision, or code in Inter.
+**The Mono-Means-Machine Rule.** If the system emitted it, it's JetBrains Mono in Ink; if a human said it, it's Geist in grey. Never set prose in mono; never set an ID, revision, or code in the UI font.
 
 ## Layout
 
-A single-screen application frame: a full-viewport (`h-dvh`) column with a one-row instrument header above a fixed two-pane grid — 35% agent operations left, 65% selected artifact right. The floor is `min-width: 960px` with horizontal scroll below it; panes never stack or crush (a deliberate demo-day guardrail against projector and split-window failure).
+A single-screen instrument frame: a full-viewport (`h-dvh`) column with `min-width: 960px` (horizontal scroll below; panes never stack or crush). A floating glass header island hovers above two independently scrolling panes in a fixed grid — 35% agent operations and context left, 65% selected artifact right. Z-order is the room's architecture: the lamp field is fixed at z-0, content sits at z-10, the header island floats at z-30.
 
-- **Header:** Panel Graphite strip, bottom hairline, 16px/8px padding. Title, then a `polite` live status line in Meta grey with mono values in Readout White separated by `·`, preset availability, and the badge pinned right (`margin-left: auto`).
-- **Panes:** 16px inner padding each side. The left pane stacks readout cards on an 8px rhythm; 12px before the context and dataset groups, 16px before the channel and custody footers.
-- **Card internals:** 12px horizontal / 8px vertical padding; 4px between a label and its content; 12px columns in the budget definition list; 4px in lists of artifacts.
-- **Type density:** working sizes are 12–14px; nothing larger than the 18px Title exists.
+- **Header island:** page gutter 20px/16px (`px-5 pt-4`); the island itself is `glass-island` — 20px radius, chassis-tinted glass at 60%, 1px hairline, `backdrop-blur-xl`, top inner highlight — with 10px/16px internal padding. Title, then a `polite` live status line (workspace ID, revision, dataset) in Meta grey with mono values separated by `·`, preset availability, and the badge pinned right (`margin-left: auto`).
+- **Panes:** the grid runs 35/65 with a 16px gap and 20px page gutters. The left pane scrolls (`overflow-y-auto`) with 4px gutter allowance; the right pane is a flex column: pane label, tab island, then the evidence panel filling all remaining height (`flex-1`) with its core scrolling inside.
+- **Left rail order:** FIRST ANALYSIS (the three-move first-run card) → CONTEXT → OPERATION → ARTIFACTS → DATASETS (preset cards) → agent-channel footer → CUSTODY. Cards stack on an 8px rhythm (`mt-2`), 12px before groups (`mt-3`); a card label sits 4–6px above its content.
+- **First paint:** regions rise in reading order via a `--rise-delay` stagger (left rail 60→440ms; right pane 140→260ms) — a 640ms rise of 14px with a blur-resolve (6px→0) on the house glide.
+- **Scrollbars:** instrument-quiet everywhere — thin, `rgb(255 255 255 / 14%)` thumb on transparent.
 
 ## Elevation & Depth
 
-The system is flat by conviction, not omission: no `box-shadow` appears anywhere in the incumbent code. Depth is conveyed three ways — tonal layering (Canvas Ink chassis behind Panel Graphite readouts), 1px Hairline Edge seams, and one structural exception: the selected evidence tab, which fuses with its panel by dropping its bottom border, translating down 1px, and sitting one z-level above (`z-10`). Focus is a 2px Signal Cyan outline offset −2px inward — the closest thing to a glow, and it is an outline, not a shadow.
+Depth is a hybrid of glass tone, hairline construction, and light. Every panel carries exactly one soft ambient shadow that seats it above the chassis; the two lamp-owned surfaces add a single colored glow each; every shell catches light along its top edge with an inset 1px white highlight. Softness in the room comes from radial-gradient falloff, never from blur filters — the lamp layer costs one paint.
 
 ### Shadow Vocabulary
-None. Do not add shadows; express depth with a seam or a tone shift.
+- **Ambient panel** (`box-shadow: 0 24px 48px -24px rgb(0 0 0 / 0.55)`): every card panel and the evidence instrument. One per panel — never stacked neutrals.
+- **Ambient island** (`0 24px 48px -24px rgb(0 0 0 / 0.65)` plus `inset 0 1px 0 rgb(255 255 255 / 0.07)`): the floating glass header island and error island — deeper seating for true float.
+- **Core highlight** (`inset 0 1px 0 rgb(255 255 255 / 0.06)`, ghost tiles `0.04`): the inner core's light-catch.
+- **Amber lamp glow** (`0 0 24px -8px rgb(255 179 71 / 0.18)`): only the OPERATION card, layered after its ambient shadow.
+- **Cyan lamp glow** (`0 0 48px -16px rgb(0 242 254 / 0.28)`): only the evidence instrument, layered after its ambient shadow.
 
 ### Named Rules
-**The Flat Panel Rule.** Surfaces are flat at rest, hover, and press. Depth comes from seams and tone, never shadows.
+**The One Ambient Shadow Rule.** Each panel casts exactly one soft ambient shadow (`0 24px 48px -24px` black). A second neutral shadow is a defect; the only additional shadow allowed is that panel's lamp glow.
+
+**The Blur Budget Rule.** `backdrop-blur` sits only on fixed or sticky glass (the header island, the error island). Scrolling content is never blurred; the lamp fields get their softness from radial-gradient falloff, not filters.
 
 ## Shapes
 
-Small radii and hard seams. Panels, cards, buttons, and the error-recovery action use a 6px radius; chips, pills, and the badge are fully rounded (9999px). The silhouette is semantic: the pill means "status," the rounded rectangle means "structure." Tabs are top-rounded (6px top, 0 bottom) so they fuse with their panel. The badge's status dot is a 6px circle. No large radii, no asymmetric corners, no clipped or notched shapes.
+Concentric double-bezel construction is the signature: every readout is machined hardware — an outer shell at 18px radius with a 1px hairline and 6px padding, holding an inner glass core at 14px radius (`18px − 4px`) with a brighter-but-fainter hairline (edge at 60%) and a white 5%→2% vertical glass gradient, padded 10px/12px. The 4px concentric offset is fixed; inner radius always equals outer minus 4. Status geometry is fully round: the badge, chips, tabs, recovery button, and the floating header island (20px) are pills. Ghost readouts reuse the inner radius (`ghost-tile`) so even empty geometry is machined. Borders are always 1px; no 2px strokes, no notched or clipped corners. Inline icons are hand-drawn 1.5px-stroke SVG glyphs — no icon library.
 
 ## Components
 
-### Header & status line
-The instrument strip: Title-weight `DuckStudio`, then the workspace readout — `ws_local_01 · rev 0 · no dataset` — in Meta grey with each machine value in mono Readout White, then preset availability. The whole line is a polite live region. The zero-upload badge sits at the far right.
+### Header glass island
+The room's one floating chrome: title, live status line (mono values in Ink on Meta grey), preset availability, and the zero-upload badge. `glass-island` construction: 20px radius, chassis glass at 60%, hairline, `backdrop-blur-xl`, island shadow with top inner highlight. The status line is a polite live region; the island is the only blurred element over scrolling content.
 
 ### Zero-upload badge (signature)
-The emotional core of the product and the most-protected element. A pill on Panel Graphite with a 1px Signal Cyan border at 30%, a 6px full-strength cyan status dot, and Body-size copy reading exactly `0 Bytes of Dataset Uploaded`. The copy is fixed by PRODUCT.md — never paraphrase, amplify, or soften the claim.
+The emotional core of the product and the most-protected element. A pill on cyan-tinted glass (6%) with a 1px cyan border at 30%, a 6px full-strength cyan dot pulsing on a 2.8s breathing cycle, and Body-size copy reading exactly `0 Bytes of Dataset Uploaded`. The copy is fixed by PRODUCT.md — never paraphrase, amplify, or soften the claim.
 
-### Readout cards (Context / Operation / Artifacts / Datasets / Custody)
-The left pane's atomic unit. 6px radius, Panel Graphite, 1px Hairline Edge border, 12px/8px padding, an uppercase 12px grey label, then Meta content with mono values. The OPERATION card is the single variant: its border swaps to Lamp Amber at 40% because agent operations are the one thing the chassis must flag.
+### Readout cards (double bezel)
+The left rail's atomic unit: `card-panel` shell (18px, glass 4%, hairline, ambient shadow, 6px padding) wrapping a `card-core` (14px, edge at 60%, white glass gradient, 10px/12px padding, top highlight). An uppercase 11px grey label, then Meta content with mono values. One chromatic variant exists: **card-operation** wires the shell amber (border 40%, amber-tinted core gradient, amber glow) because agent operations are the one thing the rail must flag; the evidence instrument gets the mirror treatment (**panel-evidence**: cyan hairline at 15%, cyan-tinted core, cyan glow) because the room's cyan lamp lands on it.
 
-### Tool pill
-Mono Lamp Amber text in a pill with a 1px amber 40% border, 2px/8px padding. Renders exact registered tool names (`duckdb_get_context`) — no friendly aliases, no re-casing (PRODUCT.md tool-name invariant).
+### First-run card
+The three-move path (activate → ask → evidence) as a numbered readout. Each move is a 28px circle holding a Space Grotesk numeral, with a 13px label and a Meta detail line. The current move — derived from workspace state, never a tour counter — renders its circle in cyan (border 40%, fill 7%, text full); spent and future moves stay grey hairline. Announces "(current move)" to screen readers.
 
-### Policy chip
-A 12px pill, 2px/8px padding. `sensitive_aggregate_only` renders Lamp Amber text on an amber 40% border; `public_synthetic` renders Readout Grey on a Hairline Edge border. The chip color is the policy mode, readable at a glance.
+### Tool pill and policy chips
+The tool pill is mono Lamp Amber text in an amber pill (border 40%, fill 6%, 2px/8px padding) rendering exact registered tool names — no aliases, no re-casing. Policy chips are 12px pills: `sensitive_aggregate_only` in amber (border 40%, fill 5%), `public_synthetic` in grey (hairline border, white 3%). Chip color is the policy mode, readable at a glance.
 
 ### Preset cards
-Full-width, text-left panel-card buttons: mono 14px dataset ID (`saas_churn`) with the policy chip right-aligned, Meta row line under. Disabled until dataset activation ships, with the reason associated via `aria-describedby`.
+Full-width, text-left panel buttons in double-bezel construction: mono 14px dataset ID (`saas_churn`), Meta row line (`250k rows · ~14.2 MB`), the policy chip and a 24px hairline arrow circle right-aligned. Disabled until dataset activation ships: dimmed to 75% opacity with the reason ("Dataset activation is coming online.") associated via `aria-describedby` — a disabled control never goes mute. Hover wiring (`state-shift press focus-ring`) is built in for the moment they activate.
 
-### Evidence tabs
-Top-rounded tab strip over the shared panel. Idle: transparent border, Readout Grey, hover to Panel Graphite background + Readout White. Active: Panel Graphite, Hairline Edge border without bottom, translated 1px, `z-10` — fused to the panel. Press scales to 0.97. Focus is the 2px cyan outline. The full roving-tabindex contract (Arrow/Home/End) is implemented. Transitions: 150ms ease-out on background-color, border-color, color, transform, with `motion-reduce` variants dropping transitions and transforms.
+### Evidence tab island
+A pill rail (hairline border, chassis glass at 80%, 6px padding, top inner highlight) holding four pill tabs (`Insights`, `Data Grid`, `SQL & Lineage`, `Custody`) at 13px medium. Idle: grey text, hover to white 4% + Ink. Active: cyan text on cyan 8% with a cyan 30% border. Full roving-tabindex keyboard contract (Arrow/Home/End). Tab switches morph the panel island via the View Transitions API (240ms house glide) where supported; the fallback remount resolves with a 320ms blur-rise (`view-swap`). Tabs are not workspace state.
 
-### Tab panel
-Bottom-rounded 6px, 1px Hairline Edge border, Panel Graphite, 16px padding, Body-size content. One panel serves all four views; tabs are not workspace state.
+### Evidence panel (the instrument)
+The right pane's full-height double bezel: `panel-evidence` shell (cyan hairline, cyan glow) with its core filling the pane and scrolling internally at Body size. One panel serves all four views.
 
-### Empty states (signature)
-Every no-artifact view renders a centered sentence (minimum 144px row) in Meta grey that teaches the invariant it enforces: "No artifact — the grid paints rows only from an approved artifact." Never "nothing here yet"; the empty state is the policy, stated.
+### Ghost empty states (signature)
+Every no-artifact view renders a centered composition (minimum 224px tall, 20px gaps): a ghost of the readout that will land there, then the governing custody sentence and the move that unlocks it, in Meta grey. The ghost is geometry only — glass bars at varying widths for the grid, three KPI tiles with a cyan-drawn sparkline (`ghost-draw` linework animating on the house glide) for Insights, a statement block flowing into a lineage chain for SQL & Lineage, concentric rings with one live center for Custody. Ghosts never fabricate values: no fake numbers, no fake rows, no placeholder text.
 
 ### Error frame
-Centered on Canvas Ink: a Title heading ("This view failed to render"), a Meta explanation in human terms, the stable code in mono (`E_URL_INVALID_PARAM`), and exactly one recovery action — a panel-card button ("Back to the workspace") whose hover lifts its border to Readout Grey. Stack traces and serialized validation output never render (product principle 6).
+Centered on the chassis under the lamp field: a glass island holding a Title heading ("This view failed to render"), a Meta explanation in human terms, the stable code in mono (`E_URL_INVALID_PARAM`), and exactly one recovery action — the pill recovery button (hairline border, glass fill; hover lifts the hairline to Edge Bright and the fill to Glass Raised; press scales 0.97). Stack traces and serialized validation output never render.
+
+### Motion contract (all components)
+One house glide (`cubic-bezier(0.32, 0.72, 0, 1)`) everywhere: state shifts at 300ms, entry rise at 640ms, view swap at 320ms, linework draw at 700ms (150ms delay), lamp drift at 22s/26s alternate. Interactive elements press to 0.97. Every transition and animation ships a `motion-reduce` fallback that drops it entirely (including the scale press) — reduced motion shows the finished, pinned instrument.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** render every machine-emitted value in JetBrains Mono at the surrounding text size: workspace IDs, revisions, tool names, budgets, artifact IDs, transports, error codes.
-- **Do** reserve Lamp Amber (#FFB347) for agent tool operations and warnings — tool pills, the OPERATION card border, the sensitive policy chip — with borders at 40% opacity.
-- **Do** use Signal Cyan (#00F2FE) only for trust, selection, focus, and status: badge dot (full), badge border (30%), focus outlines, selected-tab emphasis.
-- **Do** state the governing custody rule inside every empty state — one centered Meta sentence on a ≥144px row.
-- **Do** keep all state transitions at 150ms ease-out and ship `motion-reduce` variants that drop transitions and transforms.
-- **Do** hold the measured contrast floor: ≈7:1 for Readout Grey and ≈15:1 for Readout White on Panel Graphite; keep new color pairs at or above AA at these sizes.
+- **Do** build every readout as a concentric double bezel: `card-panel` shell (18px, 6px padding, hairline, one ambient shadow) wrapping a `card-core` (14px, 10px/12px padding, edge at 60%, top highlight). Inner radius = outer − 4px, always.
+- **Do** keep cyan for custody/trust/selection/focus and amber for agent operations/warnings only, with borders dimmed (cyan 15–40%, amber 40%) and text at full strength.
+- **Do** render machine values in JetBrains Mono at Ink on grey meta lines; humans read Geist in grey.
+- **Do** stagger first paint in reading order with `--rise-delay` on the 640ms rise, and run all motion on the house glide with `motion-reduce` fallbacks.
+- **Do** state the governing custody rule inside every empty state, with ghost geometry that fabricates no values.
+- **Do** hold the measured contrast floor: ≈15:1 for Ink and ≈7:1 for Ink Secondary on the glass-over-chassis surface; keep new pairs at or above AA at working sizes.
+- **Do** give disabled controls a visible dim (75%) and a spoken reason (`aria-describedby`).
 
 ### Don't:
-- **Don't** introduce shadows, glows, or gradients — depth is seams and tone (The Flat Panel Rule).
-- **Don't** add a third hue (The Two-Lamp Rule), and never use amber decoratively or for human-initiated UI.
+- **Don't** add a third hue, use amber decoratively, or let cyan mark agent activity (The Two-Lamp Rule).
+- **Don't** stack neutral shadows or put a glow on a neutral panel — one ambient shadow per panel, glows only where a lamp owns the surface (The One Ambient Shadow Rule, The Lamp-Glow Rule).
+- **Don't** apply `backdrop-blur` to scrolling content or use blur filters for lamp softness — radial-gradient falloff only (The Blur Budget Rule).
 - **Don't** paraphrase the badge: it reads exactly `0 Bytes of Dataset Uploaded` — no "zero-knowledge," no "SOC 2," no claims PRODUCT.md does not make.
-- **Don't** set prose in mono or machine values in Inter (The Mono-Means-Machine Rule).
-- **Don't** fabricate a readout: every number, status, and artifact on screen must bind to workspace state — no ambient "last result," no painted rows without a policy-approved artifact.
-- **Don't** soften error frames with generic advice; render a stable code and one recovery action.
+- **Don't** set prose in mono or machine values in the UI font (The Mono-Means-Machine Rule).
 - **Don't** stack or reflow the 35/65 panes responsively; below 960px the shell scrolls horizontally.
+- **Don't** soften error frames with generic advice; render a stable mono code and one recovery action.

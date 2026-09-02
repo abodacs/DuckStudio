@@ -1,12 +1,24 @@
 @import "tailwindcss";
 
-/* Self-hosted variable fonts — COEP require-corp forbids third-party asset origins. */
+/*
+ * Self-hosted variable fonts — COEP require-corp forbids third-party asset
+ * origins. Geist carries human copy, Space Grotesk the display numerals,
+ * JetBrains Mono everything the machine emitted.
+ */
 @font-face {
-  font-family: "Inter";
+  font-family: "Geist";
   font-style: normal;
-  font-weight: 400 700;
+  font-weight: 100 900;
   font-display: swap;
-  src: url("/fonts/inter-latin-var.woff2") format("woff2");
+  src: url("/fonts/geist-latin-var.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/space-grotesk-latin-var.woff2") format("woff2");
 }
 
 @font-face {
@@ -18,20 +30,79 @@
 }
 
 /*
- * Brand tokens from PRODUCT.md "Brand Commitments". Amber is reserved for
- * tool operations and warnings; cyan is the selection/focus/trust accent.
+ * "Custody Glass" world tokens. The chassis is OLED black; panels are
+ * translucent white glass over it. Two chromatic voices only: Signal Cyan
+ * (custody, trust, selection) and Lamp Amber (the agent, warnings).
  */
 @theme {
-  --color-canvas: #0a0b0f;
-  --color-surface: #161821;
-  --color-edge: #2d3139;
+  --color-canvas: #050508;
+  --color-glass: rgb(255 255 255 / 4%);
+  --color-glass-raised: rgb(255 255 255 / 8%);
+  --color-edge: rgb(255 255 255 / 9%);
+  --color-edge-bright: rgb(255 255 255 / 16%);
   --color-accent: #00f2fe;
   --color-amber: #ffb347;
-  --color-ink: #e9edf1;
-  --color-ink-secondary: #9aa7b4;
+  --color-ink: #f4f7fa;
+  --color-ink-secondary: #9aa4b2;
 
-  --font-ui: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-ui: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Geist", ui-sans-serif, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
+
+  /* Concentric radii: the inner core sits 4px inside its bezel shell. */
+  --radius-panel: 1.125rem;
+  --radius-panel-inner: calc(1.125rem - 4px);
+
+  /* The house glide: mass with a soft landing, never linear. */
+  --ease-glide: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --animate-rise: rise 640ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  --animate-pulse-dot: pulse-dot 2.8s cubic-bezier(0.32, 0.72, 0, 1) infinite;
+  --animate-drift-cyan: drift-cyan 22s ease-in-out infinite alternate;
+  --animate-drift-amber: drift-amber 26s ease-in-out infinite alternate;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgb(0 242 254 / 35%);
+  }
+  50% {
+    opacity: 0.75;
+    box-shadow: 0 0 0 4px rgb(0 242 254 / 0%);
+  }
+}
+
+@keyframes drift-cyan {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-4%, 6%, 0) scale(1.08);
+  }
+}
+
+@keyframes drift-amber {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+  to {
+    transform: translate3d(5%, -5%, 0) scale(1);
+  }
 }
 
 :root {
@@ -42,4 +113,245 @@ body {
   background-color: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-ui);
+}
+
+/*
+ * The room: two fixed lamp fields, cyan over the evidence side, amber low
+ * over the agent rail. Radial gradients only — softness comes from the
+ * gradient falloff, never from a blur filter, so the layer costs one paint.
+ * The drift keeps the chassis barely alive; reduced motion pins it.
+ */
+.lamp-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.lamp-field::before,
+.lamp-field::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+}
+
+.lamp-field::before {
+  background:
+    radial-gradient(ellipse 42% 38% at 76% 30%, rgb(0 242 254 / 13%), transparent 70%),
+    radial-gradient(ellipse 70% 55% at 85% 110%, rgb(0 242 254 / 7%), transparent 70%);
+  animation: var(--animate-drift-cyan);
+}
+
+.lamp-field::after {
+  background:
+    radial-gradient(ellipse 38% 34% at 12% 74%, rgb(255 179 71 / 9%), transparent 70%),
+    radial-gradient(ellipse 60% 45% at 8% -10%, rgb(255 179 71 / 5%), transparent 70%);
+  animation: var(--animate-drift-amber);
+}
+
+/*
+ * Component primitives named from the system's vocabulary (card-panel,
+ * chip-tool, preset-card, the type roles, the motion contract) so future
+ * slices compose the world instead of re-typing utility strings and
+ * drifting from DESIGN.md. Compositions that mix conflicting properties
+ * resolve inside @apply order, never in TSX class attributes.
+ */
+
+/* Type roles. */
+@utility title {
+  @apply font-display text-lg font-medium tracking-[-0.01em] text-ink;
+}
+
+@utility pane-label {
+  @apply text-[11px] font-medium tracking-[0.14em] uppercase text-ink-secondary;
+}
+
+@utility card-label {
+  @apply text-[11px] font-medium tracking-[0.14em] uppercase text-ink-secondary;
+}
+
+@utility meta {
+  @apply text-xs text-ink-secondary;
+}
+
+/* The Mono-Means-Machine rule: machine values read ink-white on grey meta. */
+@utility mono-value {
+  @apply font-mono text-ink;
+}
+
+/*
+ * Double-bezel construction: every readout is machined hardware — an outer
+ * shell (the housing) holding an inner glass core with a concentric radius.
+ */
+@utility card-panel {
+  @apply rounded-panel border border-edge bg-glass p-1.5 shadow-[0_24px_48px_-24px_rgb(0_0_0/0.55)];
+}
+
+@utility card-core {
+  @apply rounded-panel-inner border border-edge/60 bg-gradient-to-b from-white/[0.05] to-white/[0.02] px-3 py-2.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.06)];
+}
+
+/* The one variant: agent operations wire the shell with the amber lamp. */
+@utility card-operation {
+  @apply card-panel border-amber/40 shadow-[0_24px_48px_-24px_rgb(0_0_0/0.55),0_0_24px_-8px_rgb(255_179_71/0.18)];
+}
+
+@utility card-operation-core {
+  @apply card-core from-amber/[0.06] to-amber/[0.015];
+}
+
+/* The evidence instrument sits in the cyan lamp: the lamp light reads on its
+   hairline and core gradient, so the room's light lands on its surface. */
+@utility panel-evidence {
+  @apply card-panel border-accent/15 shadow-[0_24px_48px_-24px_rgb(0_0_0/0.55),0_0_48px_-16px_rgb(0_242_254/0.28)];
+}
+
+@utility panel-evidence-core {
+  @apply card-core from-accent/[0.05] to-white/[0.02];
+}
+
+@utility badge-zero-upload {
+  @apply ml-auto inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-accent/30 bg-accent/[0.06] py-1 pr-3 pl-2.5 text-sm text-ink;
+}
+
+@utility badge-dot {
+  @apply size-1.5 rounded-full bg-accent animate-pulse-dot;
+}
+
+@utility chip-tool {
+  @apply rounded-full border border-amber/40 bg-amber/[0.06] px-2 py-0.5 font-mono text-amber;
+}
+
+@utility chip-policy-sensitive {
+  @apply rounded-full border border-amber/40 bg-amber/[0.05] px-2 py-0.5 text-xs text-amber;
+}
+
+@utility chip-policy-public {
+  @apply rounded-full border border-edge bg-white/[0.03] px-2 py-0.5 text-xs text-ink-secondary;
+}
+
+/* Floating glass over the chassis — backdrop-blur only ever sits on fixed
+   or sticky elements, never on scrolling content. */
+@utility glass-island {
+  @apply rounded-[1.25rem] border border-edge bg-canvas/60 shadow-[0_24px_48px_-24px_rgb(0_0_0/0.65),inset_0_1px_0_rgb(255_255_255/0.07)] backdrop-blur-xl;
+}
+
+@utility preset-card {
+  @apply card-panel block w-full text-left state-shift press focus-ring;
+}
+
+@utility preset-arrow {
+  @apply flex size-6 shrink-0 items-center justify-center rounded-full border border-edge bg-white/[0.04] text-ink-secondary transition-[transform,border-color,background-color,color] duration-300 ease-glide;
+}
+
+@utility tab-evidence {
+  @apply rounded-full px-3.5 py-1.5 text-[13px] font-medium text-ink-secondary state-shift press focus-ring;
+}
+
+@utility tab-evidence-active {
+  @apply border border-accent/30 bg-accent/[0.08] text-accent;
+}
+
+@utility button-recovery {
+  @apply rounded-full border border-edge bg-glass px-4 py-2 text-sm text-ink transition-[background-color,border-color,transform] duration-300 ease-glide hover:border-edge-bright hover:bg-glass-raised active:scale-[0.97] focus-ring motion-reduce:transition-none motion-reduce:active:scale-100;
+}
+
+/*
+ * Empty states state the invariant: an abstract ghost of the readout that
+ * will land here (never fabricated values), the governing sentence, and
+ * what unlocks it.
+ */
+@utility empty-state {
+  @apply flex min-h-56 flex-1 flex-col items-center justify-center gap-5 text-center;
+}
+
+@utility ghost-tile {
+  @apply rounded-panel-inner border border-edge/70 bg-white/[0.025] shadow-[inset_0_1px_0_rgb(255_255_255/0.04)];
+}
+
+/* Motion contract: one house glide (0.32 0.72 0 1), a 0.97 press, first
+   paint rises with a staggered blur-resolve, and full reduce compliance
+   (Tailwind's scale property needs its own reduced-motion reset). */
+@utility state-shift {
+  @apply transition-[background-color,border-color,color,transform] duration-300 ease-glide motion-reduce:transition-none motion-reduce:transform-none;
+}
+
+@utility press {
+  @apply active:scale-[0.97] motion-reduce:active:scale-100;
+}
+
+@utility focus-ring {
+  @apply focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent;
+}
+
+/* First paint: regions rise in reading order via --rise-delay. */
+.rise {
+  animation: var(--animate-rise);
+  animation-delay: var(--rise-delay, 0ms);
+}
+
+/*
+ * Evidence-view swap bridge: the tab panel's content remounts on tab switch
+ * (tabs are not workspace state), and this rise resolves the swap. Reduced
+ * motion drops it entirely.
+ */
+@keyframes view-swap {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(4px);
+  }
+}
+
+.view-swap {
+  animation: view-swap 320ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Ghost linework draws on with the house glide; the resting offset is 0 so
+   reduced motion (animation: none) shows the finished stroke. */
+.ghost-draw {
+  stroke-dashoffset: 0;
+  animation: ghost-draw 700ms cubic-bezier(0.32, 0.72, 0, 1) 150ms backwards;
+}
+
+@keyframes ghost-draw {
+  from {
+    stroke-dashoffset: 320;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-swap,
+  .rise {
+    animation: none;
+  }
+
+  .ghost-draw {
+    animation: none;
+  }
+
+  .lamp-field::before,
+  .lamp-field::after {
+    animation: none;
+  }
+}
+
+/* The tab-panel island morphs across view swaps where the platform
+   supports it (feature-detected in shell.tsx); elsewhere the remount
+   keyframe above is the fallback. */
+#evidence-panel {
+  view-transition-name: evidence-panel;
+}
+
+::view-transition-old(evidence-panel),
+::view-transition-new(evidence-panel) {
+  animation-duration: 240ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Instrument scrollbars: quiet, hairline-thin, no bright thumb. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 14%) transparent;
 }

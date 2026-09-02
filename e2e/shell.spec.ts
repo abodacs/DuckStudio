@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-// Pinned empty-state copy per tab (ticket 06 — copy is decided, not invented).
+// Pinned empty-state copy per tab (ticket 06 — copy is decided, not invented;
+// the Insights line was re-voiced by the 2026-09-02 layout/UX pass review).
 const EMPTY_STATE_COPY: readonly (readonly [label: string, copy: string])[] = [
-  ["Insights", "No artifact selected — run an analysis to see approved KPIs."],
+  ["Insights", "No artifact — KPIs render only from a policy-approved artifact."],
   ["Data Grid", "No artifact — the grid paints rows only from an approved artifact."],
   ["SQL & Lineage", "No artifact — lineage appears with your first analysis."],
   ["Custody", "No custody evidence yet — verification runs on artifacts."],

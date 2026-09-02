@@ -6,10 +6,11 @@
 - Technical Area: Frontend, Performance
 - Amendment 1: 2026-09-01 (worker warm-up is awaited from studio-shell/boot.ts start(), not main.tsx)
 - Amendment 2: 2026-09-02 (shipped font set is two self-hosted variable fonts — Inter, JetBrains Mono; Space Grotesk dropped; preload tags live in index.html, `public/_headers` pins only the isolation headers)
+- Amendment 3: 2026-09-02 (shipped font set is three self-hosted variable fonts — Geist, Space Grotesk, JetBrains Mono; Inter removed with the Custody Glass design pass)
 
 ## Context
 
-The static build serves a single COOP/COEP origin (ADR 0006). The COEP header enables `SharedArrayBuffer`, which DuckDB-WASM needs, but the first analysis cannot pay a multi-second cold start once a user reaches the canvas. Three things load on the critical path: the DuckDB-WASM worker, ECharts, and the self-hosted fonts (Inter and JetBrains Mono; Space Grotesk was dropped from the shipped set before release — amendment 2). TanStack Router v1 adds ~30 KB gzipped to the main bundle (ADR 0001). The PRD measures the time from first paint to the first `duckdb_get_context` envelope; the demo tape will too.
+The static build serves a single COOP/COEP origin (ADR 0006). The COEP header enables `SharedArrayBuffer`, which DuckDB-WASM needs, but the first analysis cannot pay a multi-second cold start once a user reaches the canvas. Three things load on the critical path: the DuckDB-WASM worker, ECharts, and the self-hosted fonts (Geist, Space Grotesk, and JetBrains Mono — amendment 3). TanStack Router v1 adds ~30 KB gzipped to the main bundle (ADR 0001). The PRD measures the time from first paint to the first `duckdb_get_context` envelope; the demo tape will too.
 
 ## Decision
 

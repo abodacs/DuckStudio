@@ -47,6 +47,11 @@ Define success criteria. Loop until verified.
 - "Add validation" → Write tests for invalid inputs, then make them pass
 - "Fix bug" → Write test that reproduces it, then make it pass
 
+### Web Platform Baseline
+- Before implementing any web feature, search `modern-web-guidance` (`npx -y modern-web-guidance@latest search "<query>" --skill-version 2026_05_16-c5e78707`) and follow the retrieved guides.
+- Baseline Widely available platform features ship without fallbacks.
+- Baseline Newly available features follow the guide's fallback strategy: feature-detect and degrade gracefully.
+
 ## Agent skills
 
 ### Issue tracker

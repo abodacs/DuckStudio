@@ -103,10 +103,11 @@ Multi-file join wizards, cloud/S3 connectors, multi-agent coordination, voice, r
 
 - **Name:** DuckStudio.
 - **Badge:** `0 Bytes of Dataset Uploaded`.
-- **Tone:** a legible analytical lab, not a brand film.
+- **Tone:** a luminous custody instrument — glass depth under two signal lamps, forensic legibility; not a brand film.
 - **Tool names:** always exact; no friendly aliases.
-- **Palette:** background `#0A0B0F`, surfaces `#161821`, borders `#2D3139`, cyan `#00F2FE`, WebMCP amber `#FFB347` reserved for tool operations and warnings.
-- **Typography:** Inter for UI, Space Grotesk for metrics, JetBrains Mono for SQL, IDs, revisions, and logs.
+- **Palette:** OLED-black background `#050508`; translucent white-glass surfaces with 1px white hairlines; cyan `#00F2FE` for custody, trust, selection, and focus; WebMCP amber `#FFB347` reserved for tool operations and warnings; text `#F4F7FA`, secondary text `#9AA4B2`. These two lamps are the only chromatic voices.
+- **Typography:** Geist for UI, Space Grotesk for display numerals and metrics, JetBrains Mono for SQL, IDs, revisions, and logs.
+- **Depth:** glass panels over fixed radial lamp fields; depth comes from tone, hairlines, and one soft ambient shadow per panel — glows mark the two lamps and nothing else.
 
 ## Product Principles
 

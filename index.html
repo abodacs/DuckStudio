@@ -7,8 +7,39 @@
       name="description"
       content="DuckStudio — a zero-upload, agent-native data lab. DuckDB-WASM analyzes local data in-browser while a WebMCP agent operates a governed workspace without receiving result rows."
     />
-    <meta name="theme-color" content="#0A0B0F" />
-    <link rel="preload" href="/fonts/inter-latin-var.woff2" as="font" type="font/woff2" crossorigin />
+    <meta name="theme-color" content="#050508" />
+    <link rel="canonical" href="https://duckstudio.pages.dev/" />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/favicon.ico" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="DuckStudio" />
+    <meta property="og:url" content="https://duckstudio.pages.dev/" />
+    <meta property="og:title" content="DuckStudio — zero-upload, agent-native data lab" />
+    <meta
+      property="og:description"
+      content="DuckDB-WASM analyzes local data in-browser while a WebMCP agent operates a governed workspace without receiving result rows."
+    />
+    <meta property="og:image" content="https://duckstudio.pages.dev/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="DuckStudio — zero-upload, agent-native data lab" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="DuckStudio — zero-upload, agent-native data lab" />
+    <meta
+      name="twitter:description"
+      content="DuckDB-WASM analyzes local data in-browser while a WebMCP agent operates a governed workspace without receiving result rows."
+    />
+    <meta name="twitter:image" content="https://duckstudio.pages.dev/og-image.png" />
+    <link rel="preload" href="/fonts/geist-latin-var.woff2" as="font" type="font/woff2" crossorigin />
+    <link
+      rel="preload"
+      href="/fonts/space-grotesk-latin-var.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <link
       rel="preload"
       href="/fonts/jetbrains-mono-latin-var.woff2"
@@ -18,7 +49,33 @@
     />
     <title>DuckStudio — Workspace</title>
   </head>
-  <body style="background-color: #0a0b0f">
+  <body style="background-color: #050508">
+    <!--
+    DIRECTION CONTRACT — "Custody Glass" (concept seed ff937efc; brief-pinned:
+    high-end-visual-design / Ethereal Glass, replacing the flat instrument panel).
+    THESIS: the lab is a dark optical instrument lit by its own two signal lamps —
+    cyan = custody/trust, amber = the agent — and every surface is glass you can
+    see custody through. It refuses the category's flat admin-panel arrangement.
+    OWN-WORLD: OLED-black chassis (#050508) with two fixed radial lamp fields
+    (cyan over evidence, amber over the agent rail); translucent white-glass
+    panels with 1px white hairlines, soft ambient depth shadows, concentric
+    double-bezel construction (18px outer / 14px inner); Geist for UI, Space
+    Grotesk for display numerals, JetBrains Mono for machine values; cyan and
+    amber are the only chromatic voices.
+    STORY: a visitor reads the two-lamp custody model from the room itself,
+    follows the three-move first-analysis path (activate → ask → evidence),
+    and reaches the aha — governed evidence on glass while the badge still
+    reads 0 Bytes of Dataset Uploaded.
+    FIRST VIEWPORT: floating glass header island over two scrolling panes;
+    left rail opens with the three-move first-run card, then context,
+    operation, artifacts, datasets, custody; right pane is one full-height
+    glass evidence instrument with a sticky blurred tab island and ghost
+    readouts teaching each view's custody rule.
+    FORM: brief-pinned Ethereal Glass (variance: double-bezel bento rail +
+    floating HUD island, not the marketing-scroll archetype); staging keeps
+    the PRD two-pane contract.
+    FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md.
+    -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
