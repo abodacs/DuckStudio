@@ -129,7 +129,7 @@ test.describe("qa: analysis lifecycle", () => {
 
     // No partial commit: revision and canvas are untouched.
     await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
-    await expect(page.getByText("No artifacts — operations settle here as immutable artifacts.")).toBeVisible();
+    await expect(page.getByText("No results yet. Run an analysis and it appears here.")).toBeVisible();
   });
 
   test("scenario 15: the envelope summary, the artifact card, and Insights render one object", async ({

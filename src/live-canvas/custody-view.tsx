@@ -8,8 +8,8 @@ import { UnavailableArtifact } from "./artifact-states";
  * transports, lineage, and both pinned limitations. The view dispatches
  * nothing: a `verifyCustody` read never mutates chrome (§3.2).
  */
-/** The pinned empty-state line (ticket 06 — copy is decided, not invented). */
-export const CUSTODY_EMPTY_STATE = "No custody evidence yet — verification runs on artifacts.";
+/** The actionable empty-state line (slice-7 plan stage 2): what to do next. */
+export const CUSTODY_EMPTY_STATE = "Run an analysis and its custody evidence lands here.";
 
 export function CustodyView() {
   const artifact = useWorkspace((ws) => projectArtifact(ws, ws.selectedArtifactId));

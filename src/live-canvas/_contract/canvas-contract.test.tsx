@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { CustodyView } from "../custody-view";
-import { DataGridView } from "../data-grid-view";
+import { DataGridView, GRID_EMPTY_STATE } from "../data-grid-view";
 import { InsightsView } from "../insights-view";
 import { WorkspaceShell } from "../../studio-shell/shell";
 import { workspaceStore } from "../../revisioned-workspace/store";
@@ -123,7 +123,7 @@ describe("healthcare suppression contract (grilling 51 item 2)", () => {
     const { container } = render(<DataGridView />);
 
     // The honest empty state, and not one record-shaped element.
-    expect(screen.getByText("No artifact — the grid paints rows only from an approved artifact.")).toBeDefined();
+    expect(screen.getByText(GRID_EMPTY_STATE)).toBeDefined();
     expect(container.querySelectorAll("[data-grid-row]")).toHaveLength(0);
   });
 
@@ -133,7 +133,7 @@ describe("healthcare suppression contract (grilling 51 item 2)", () => {
 
     // The pinned banner copy, with the identifier line from the release data.
     expect(screen.getByRole("alert")).toBeDefined();
-    expect(screen.getByText("Data Grid — suppressed by policy")).toBeDefined();
+    expect(screen.getByText("Rows — suppressed by policy")).toBeDefined();
     expect(screen.getByText(/Raw records never paint on the shared canvas/)).toBeDefined();
     expect(screen.getByText(/k ≥ 10/)).toBeDefined();
     expect(screen.getByText("mrn")).toBeDefined();

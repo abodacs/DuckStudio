@@ -70,8 +70,8 @@ export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
  * Owned beside the codes; the studio shell renders it verbatim.
  */
 export const ERROR_RECOVERY_MESSAGE: Record<ErrorCode, string> = {
-  VALIDATION_ERROR: "The command's fields didn't match the schema; the agent corrects the named fields.",
-  STALE_REVISION: "The workspace moved since the command was prepared; the agent re-reads the delta and retries with the current revision.",
+  VALIDATION_ERROR: "Some fields didn't match what's allowed; the named fields say which.",
+  STALE_REVISION: "The workspace moved since this command was prepared; catch up on what changed, then retry with the current revision.",
   IDEMPOTENCY_CONFLICT: "That key was reused for a different command; a new key or an exact resend settles it.",
   POLICY_DENIED: "The request would cross release policy — nothing was released.",
   UNSAFE_SQL: "The statement violates execution policy; nothing ran.",
@@ -86,8 +86,8 @@ export const ERROR_RECOVERY_MESSAGE: Record<ErrorCode, string> = {
 
 /** Recovery guidance per code — the agent's legal next move (§9's recovery column). */
 export const ERROR_RECOVERY_MOVE: Record<ErrorCode, string> = {
-  VALIDATION_ERROR: "Recovery: corrected fields, then resend.",
-  STALE_REVISION: "Recovery: re-read events from the expected revision, then retry with the current revision.",
+  VALIDATION_ERROR: "Recovery: fix the named fields, then resend.",
+  STALE_REVISION: "Recovery: read what changed since the prepared revision, then retry with the current one.",
   IDEMPOTENCY_CONFLICT: "Recovery: new key, or resend the original command exactly.",
   POLICY_DENIED: "Recovery: use the permitted presentation or safer SQL.",
   UNSAFE_SQL: "Recovery: apply the blocked-construct details and rewrite the statement.",

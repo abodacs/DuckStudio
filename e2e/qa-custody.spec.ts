@@ -8,6 +8,7 @@ import {
 } from "./agent-surface";
 import { HEALTHCARE_PII_CANONICAL_SQL, SAAS_CHURN_CANONICAL_SQL } from "../src/demo-presets/canonical-sql";
 import { EVIDENCE_LIMITATIONS, MONITORED_TRANSPORTS } from "../src/dataset-custody/schemas";
+import { GRID_EMPTY_STATE } from "../src/live-canvas/data-grid-view";
 
 // --- QA spec: custody and safety denials, in the live page
 // (agent-system-design.md §15 scenarios 5, 6, 7, 12, 17). Every case here is
@@ -57,7 +58,7 @@ test.describe("qa: sql isolation", () => {
     // Ten denials, zero commits: the workspace never left rev 1 and the
     // engine worker never saw a statement.
     await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
-    await expect(page.getByText("No artifacts — operations settle here as immutable artifacts.")).toBeVisible();
+    await expect(page.getByText("No results yet. Run an analysis and it appears here.")).toBeVisible();
   });
 
   test("statements referencing unauthorized relations are rejected", async ({ page }) => {
@@ -107,7 +108,7 @@ test.describe("qa: sensitive dataset custody", () => {
 
     // The denial commits nothing.
     await expect(page.getByText("ws_local_01 · rev 1 · healthcare_pii · sensitive_aggregate_only")).toBeVisible();
-    await expect(page.getByText("No artifacts — operations settle here as immutable artifacts.")).toBeVisible();
+    await expect(page.getByText("No results yet. Run an analysis and it appears here.")).toBeVisible();
   });
 
   test("scenario 5: a releasable aggregate paints no raw rows — in the envelope or the DOM", async ({
@@ -149,7 +150,7 @@ test.describe("qa: sensitive dataset custody", () => {
     // document.
     await page.getByRole("tab", { name: "Data Grid" }).click();
     const panel = page.getByRole("tabpanel");
-    await expect(panel).toContainText("Data Grid — suppressed by policy");
+    await expect(panel).toContainText("Rows — suppressed by policy");
     await expect(panel).toContainText("Raw records never paint on the shared canvas");
     await expect(page.locator("table")).toHaveCount(0);
     await expect(page.locator("td")).toHaveCount(0);
@@ -195,7 +196,7 @@ test.describe("qa: sensitive dataset custody", () => {
     expect(denied.ok).toBe(false);
     expect(denied.error.code).toBe("POLICY_DENIED");
     expect(denied.error.message).toContain("sensitive_aggregate_only");
-    await expect(page.getByText("No artifacts — operations settle here as immutable artifacts.")).toBeVisible();
+    await expect(page.getByText("No results yet. Run an analysis and it appears here.")).toBeVisible();
   });
 });
 
@@ -279,9 +280,7 @@ test.describe("qa: no preview grid", () => {
 
     await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
     await page.getByRole("tab", { name: "Data Grid" }).click();
-    await expect(page.getByRole("tabpanel")).toContainText(
-      "No artifact — the grid paints rows only from an approved artifact.",
-    );
+    await expect(page.getByRole("tabpanel")).toContainText(GRID_EMPTY_STATE);
     await expect(page.locator("table")).toHaveCount(0);
     await expect(page.locator("td")).toHaveCount(0);
   });

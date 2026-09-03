@@ -8,10 +8,11 @@ import { GRID_EMPTY_STATE } from "../src/live-canvas/data-grid-view";
 import { LINEAGE_EMPTY_STATE } from "../src/live-canvas/sql-lineage-view";
 import { CUSTODY_EMPTY_STATE } from "../src/live-canvas/custody-view";
 
-// Pinned empty-state copy per tab (ticket 06) — the lines the views render,
-// imported from them so the browser proof is the assertion, not the typing.
+// Pinned empty-state copy per tab (ticket 06; stage-2 made it actionable) —
+// the lines the views render at rev 0, imported from them so the browser
+// proof is the assertion, not the typing.
 const EMPTY_STATE_COPY: readonly (readonly [label: string, copy: string])[] = [
-  ["Insights", INSIGHTS_EMPTY_STATE],
+  ["Insights", INSIGHTS_EMPTY_STATE.noDataset],
   ["Data Grid", GRID_EMPTY_STATE],
   ["SQL & Lineage", LINEAGE_EMPTY_STATE],
   ["Custody", CUSTODY_EMPTY_STATE],
@@ -380,7 +381,7 @@ test.describe("slice 5: evidence canvas", () => {
 
     // The pinned suppression banner, with the identifier line and counters
     // rendered from the projection's release/custody data.
-    await expect(page.getByRole("alert")).toContainText("Data Grid — suppressed by policy");
+    await expect(page.getByRole("alert")).toContainText("Rows — suppressed by policy");
     await expect(page.getByRole("alert")).toContainText("mrn");
     await expect(page.getByText("Uploaded to network:", { exact: false })).toBeVisible();
     await expect(page.getByText("0 B", { exact: true })).toBeVisible();
@@ -449,7 +450,7 @@ test.describe("slice 6: demo wiring and parity", () => {
 
     // Acceptance 17: activation paints no rows — the honest empty state.
     await page.getByRole("tab", { name: "Data Grid" }).click();
-    await expect(page.getByText("No artifact — the grid paints rows only from an approved artifact.")).toBeVisible();
+    await expect(page.getByText(GRID_EMPTY_STATE)).toBeVisible();
     await expect(page.locator("[data-grid-row]")).toHaveCount(0);
   });
 

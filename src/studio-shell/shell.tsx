@@ -344,7 +344,7 @@ export function WorkspaceShell() {
             <div className="card-operation-core">
               <h3 className="card-label">OPERATIONS</h3>
               {vm.operations.length === 0 ? (
-                <p className="meta mt-1.5">No operations yet — agent moves settle here.</p>
+                <p className="meta mt-1.5">Nothing running yet. Analyses appear here while they run.</p>
               ) : (
                 <>
                   <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Operation stream">
@@ -427,7 +427,7 @@ export function WorkspaceShell() {
             <div className="card-core">
               <h3 className="card-label">ARTIFACTS</h3>
               {vm.artifactCards.length === 0 ? (
-                <p className="meta mt-1.5">No artifacts — operations settle here as immutable artifacts.</p>
+                <p className="meta mt-1.5">No results yet. Run an analysis and it appears here.</p>
               ) : (
                 <ul className="mt-1.5 space-y-1.5">
                   {vm.artifactCards.map((card) => (
@@ -436,7 +436,7 @@ export function WorkspaceShell() {
                         // Grilling 32/51 item 4: eviction discloses; the
                         // metadata remains, the rows do not.
                         <p className="meta">
-                          <span className="mono-value">{card.artifactId}</span> released from retention — run the
+                          <span className="mono-value">{card.artifactId}</span> cleaned up to save space — run the
                           analysis again
                         </p>
                       ) : (

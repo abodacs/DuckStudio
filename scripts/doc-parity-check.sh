@@ -20,6 +20,16 @@ check() {
   done
 }
 
+# Presence in at least one of the files (the derived-directory form of `check`).
+check_in_any() {
+  local needle="$1"
+  shift
+  if ! grep -qF -- "$needle" "$@"; then
+    echo "MISSING: \"$needle\" not found in any of: $*"
+    fail=1
+  fi
+}
+
 TOOLS=(
   docs/agent-system-design.md
   docs/prd.md
@@ -45,6 +55,18 @@ done
 
 check "0 Bytes of Dataset Uploaded" docs/prd.md docs/video-script.md docs/submission.md src/revisioned-workspace/projection.ts
 check "document.modelContext.registerTool" CONTRIBUTING.md docs/video-script.md
+
+# The derived BDD scenarios must use the canonical spellings too. These are
+# directory-level presence checks: each string must appear in at least one
+# feature file (individual scenarios need not name every tool).
+BDD_FILES=(docs/bdd/*.feature)
+for tool in duckdb_get_context duckdb_activate_dataset duckdb_execute_sql_to_canvas duckdb_verify_zero_egress; do
+  check_in_any "$tool" "${BDD_FILES[@]}"
+done
+for policy in public_synthetic sensitive_aggregate_only; do
+  check_in_any "$policy" "${BDD_FILES[@]}"
+done
+check_in_any "0 Bytes of Dataset Uploaded" "${BDD_FILES[@]}"
 
 if [ "$fail" -ne 0 ]; then
   echo "doc parity check FAILED — fix the canonical spellings, not this script."

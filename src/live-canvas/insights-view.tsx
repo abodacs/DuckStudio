@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { projectArtifact, projectWorkspace } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
+import { runCanonicalChurnAnalysis } from "./human-commands";
 import { KpiTile, UnavailableArtifact } from "./artifact-states";
 
 /**
@@ -10,8 +11,15 @@ import { KpiTile, UnavailableArtifact } from "./artifact-states";
  */
 const EvidenceChart = lazy(() => import("./chart"));
 
-/** The pinned empty-state line (ticket 06 — copy is decided, not invented). */
-export const INSIGHTS_EMPTY_STATE = "No artifact — KPIs render only from a policy-approved artifact.";
+/**
+ * The actionable empty-state copy (slice-7 plan stage 2): each state says
+ * what to do next, not what is missing. The sample-analysis button exists
+ * only while `saas_churn` is active — the one preset with a canonical run.
+ */
+export const INSIGHTS_EMPTY_STATE = {
+  noDataset: "Activate a dataset on the left to begin.",
+  datasetActive: "Run the sample analysis and results land here.",
+} as const;
 
 /**
  * Insights evidence view (grilling 52): KPI cards from the measured
@@ -22,7 +30,8 @@ export function InsightsView() {
   const artifact = useWorkspace((ws) => projectArtifact(ws, ws.selectedArtifactId));
   const datasetState = useWorkspace(projectWorkspace).datasetState;
   switch (artifact.kind) {
-    case "no_artifact":
+    case "no_artifact": {
+      const datasetActive = datasetState.kind === "active";
       return (
         <div className="view-swap empty-state">
           <div aria-hidden className="flex w-60 items-end gap-2">
@@ -49,11 +58,20 @@ export function InsightsView() {
             <circle cx="236" cy="14" r="2.5" fill="rgb(0 242 254 / 55%)" />
           </svg>
           <div className="rise" style={{ animationDelay: "220ms" }}>
-            <p className="meta">{INSIGHTS_EMPTY_STATE}</p>
-            <p className="meta mt-1">Run a governed query and its readouts land here.</p>
+            <p className="meta">
+              {datasetActive ? INSIGHTS_EMPTY_STATE.datasetActive : INSIGHTS_EMPTY_STATE.noDataset}
+            </p>
+            {datasetState.kind === "active" && datasetState.datasetId === "saas_churn" && (
+              <p className="mt-2">
+                <button type="button" className="button-run" onClick={() => void runCanonicalChurnAnalysis()}>
+                  <span aria-hidden>⚡</span> Run the sample analysis
+                </button>
+              </p>
+            )}
           </div>
         </div>
       );
+    }
     case "unavailable":
       return <UnavailableArtifact artifactId={artifact.artifactId} reason={artifact.reason} />;
     case "artifact": {
