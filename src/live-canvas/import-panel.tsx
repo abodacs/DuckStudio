@@ -38,13 +38,13 @@ export function ImportPanel({ importFile }: { importFile: (file: File) => Promis
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        className={`rounded-xl border border-dashed px-3 py-4 transition-colors ${
+        className={`rounded-panel-inner border border-dashed px-3 py-4 transition-colors ${
           dragging ? "border-accent/60 bg-accent/[0.06]" : "border-edge bg-white/[0.02] hover:border-accent/40"
         }`}
       >
         <button
           type="button"
-          className="w-full cursor-pointer text-center"
+          className="w-full cursor-pointer rounded-panel-inner text-center focus-ring"
           onClick={() => inputRef.current?.click()}
         >
           <span className="block text-[13px] font-medium text-ink">Drop a CSV here — it never leaves this tab.</span>
