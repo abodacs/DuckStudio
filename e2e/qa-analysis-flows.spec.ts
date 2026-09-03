@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import { sha256Hex } from "../src/analysis-artifacts/sql-hash";
-import { formatKpiValue } from "../src/live-canvas/kpi";
 import { SAAS_CHURN_CANONICAL_SQL } from "../src/demo-presets/canonical-sql";
 import {
   agentSurface,
@@ -130,6 +129,7 @@ test.describe("qa: analysis lifecycle", () => {
     expect(denied.error.retryable).toBe(true);
     expect(denied.error.details.axis).toBe("executionMs");
     expect(Number(denied.error.details.limit)).toBe(100);
+    expect(Number(denied.error.details.elapsed)).toBeGreaterThanOrEqual(100);
 
     // No partial commit: revision and canvas are untouched.
     await expect(page.getByText("rev 1 · saas_churn · public_synthetic")).toBeVisible();
@@ -165,10 +165,20 @@ test.describe("qa: analysis lifecycle", () => {
       return Object.fromEntries(pairs);
     });
     for (const kpi of summary.kpis) {
-      expect(
-        rendered[kpi.label],
-        `KPI ${kpi.label} should render its measured value`,
-      ).toBe(formatKpiValue(kpi.value, kpi.format));
+      // The rendered form is the kpi.ts formatter's output (pinned by
+      // kpi.test.ts); here the projection contract is what matters: the
+      // envelope's measured value is what paints, label for label.
+      const expected =
+        kpi.format === "percent"
+          ? (kpi.value === null ? null : (kpi.value * 100).toFixed(1) + "%")
+          : kpi.format === "currency_usd"
+            ? (kpi.value === null ? null : "$" + kpi.value.toLocaleString("en-US"))
+            : kpi.format === "decimal"
+              ? (kpi.value === null ? null : kpi.value.toFixed(1))
+              : kpi.value === null
+                ? null
+                : kpi.value.toLocaleString("en-US");
+      expect(rendered[kpi.label], `KPI ${kpi.label} should render its measured value`).toBe(expected);
     }
     await expect(page.getByText("a_01", { exact: true })).toBeVisible();
   });
