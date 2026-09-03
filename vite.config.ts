@@ -11,7 +11,8 @@ export default defineConfig({
     format: "es",
   },
   test: {
-    // Never collect the local prototype extract; e2e/ belongs to Playwright.
-    exclude: [...configDefaults.exclude, ".scratch/**", "e2e/**"],
+    // Never collect local prototypes or nested worktrees; e2e/ belongs to
+    // Playwright and each nested worktree owns its own test dependencies.
+    exclude: [...configDefaults.exclude, ".scratch/**", ".claude/**", "e2e/**"],
   },
 });
