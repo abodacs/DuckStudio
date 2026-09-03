@@ -131,7 +131,7 @@ describe("atomic runAnalysis path (ticket 37)", () => {
     expect(engine.materialized).toEqual(["artifact_a_01"]);
   });
 
-  it("redacts direct-identifier binding values everywhere downstream of the kernel", async () => {
+  it("redacts restricted-classified binding values everywhere downstream of the kernel", async () => {
     const store = storeWith(fakeEngine());
     await store.dispatch({
       kind: "activateDataset",
@@ -141,8 +141,11 @@ describe("atomic runAnalysis path (ticket 37)", () => {
       kind: "runAnalysis",
       input: {
         source: { kind: "dataset", id: "healthcare_pii" },
-        sql: "SELECT diagnosis, COUNT(*) AS patients FROM healthcare_pii WHERE mrn = $mrn GROUP BY diagnosis HAVING COUNT(*) >= 10",
-        bindings: { mrn: "MRN-CLASSIFIED-0042" },
+        // Bound on the sensitive-classified column: since the release gate
+        // denies any direct-identifier reference, restricted bindings that
+        // can still release are sensitive-classified ones.
+        sql: "SELECT diagnosis, COUNT(*) AS patients FROM healthcare_pii WHERE diagnosis = $diagnosis GROUP BY diagnosis HAVING COUNT(*) >= 10",
+        bindings: { diagnosis: "MIGRAINE-CLASSIFIED-0042" },
         expectedRevision: 1,
         idempotencyKey: "binding-01",
       },
@@ -150,16 +153,123 @@ describe("atomic runAnalysis path (ticket 37)", () => {
     expect(envelope.ok).toBe(true);
     // The raw value never leaves the kernel — not in the envelope, not in
     // the committed artifact's redacted bindings.
-    expect(JSON.stringify(envelope)).not.toContain("MRN-CLASSIFIED-0042");
+    expect(JSON.stringify(envelope)).not.toContain("MIGRAINE-CLASSIFIED-0042");
 
     const artifact = await store.dispatch({ kind: "getContext", input: { scope: "artifact", artifactId: "a_01" } });
     expect(artifact.ok).toBe(true);
     if (artifact.ok) {
       const record = artifact.data as { artifact: { bindings: Record<string, unknown>; release: { redactedBindingKeys: string[] } } };
-      expect(record.artifact.release.redactedBindingKeys).toEqual(["mrn"]);
-      expect(record.artifact.bindings).toEqual({ mrn: "[redacted]" });
-      expect(JSON.stringify(record)).not.toContain("MRN-CLASSIFIED-0042");
+      expect(record.artifact.release.redactedBindingKeys).toEqual(["diagnosis"]);
+      expect(record.artifact.bindings).toEqual({ diagnosis: "[redacted]" });
+      expect(JSON.stringify(record)).not.toContain("MIGRAINE-CLASSIFIED-0042");
     }
+  });
+});
+
+describe("analysis commit settles with an envelope, never a throw", () => {
+  it("commits a non-finite KPI measurement as an honest null, not a crash", async () => {
+    const engine = fakeEngine((decision) => {
+      if (decision.positionalSql.includes("min_cohort")) return defaultFakeExecute(decision);
+      const schema = [{ name: "rate", type: "DOUBLE" }];
+      return Promise.resolve({
+        schema,
+        batches: [{ columns: schema, rowCount: 1, values: { rate: [1e308 * 10] } }],
+        metrics: { executionMs: 1, materializedRows: 1, chartPoints: 0 },
+      });
+    });
+    const store = storeWith(engine);
+    await activateSaasChurn(store);
+    const envelope = await store.dispatch({
+      kind: "runAnalysis",
+      input: {
+        source: { kind: "dataset", id: "saas_churn" },
+        sql: "SELECT 1e308 * 10 AS rate FROM saas_churn",
+        bindings: {},
+        expectedRevision: 1,
+        idempotencyKey: "commit-nonfinite-01",
+      },
+    });
+    expect(envelope.ok).toBe(true);
+    if (envelope.ok) {
+      const summary = (envelope.data as { summary: { kpis: { value: number | null }[] } }).summary;
+      expect(summary.kpis.map((kpi) => kpi.value)).toEqual([null]);
+    }
+  });
+
+  it("commits an over-long alias cleanly: the inferred KPI label truncates to the schema bound", async () => {
+    const alias65 = "y".repeat(65);
+    const engine = fakeEngine((decision) => {
+      if (decision.positionalSql.includes("min_cohort")) return defaultFakeExecute(decision);
+      const schema = [{ name: alias65, type: "DOUBLE" }];
+      return Promise.resolve({
+        schema,
+        batches: [{ columns: schema, rowCount: 1, values: { [alias65]: [2] } }],
+        metrics: { executionMs: 1, materializedRows: 1, chartPoints: 0 },
+      });
+    });
+    const store = storeWith(engine);
+    await activateSaasChurn(store);
+    const envelope = await store.dispatch({
+      kind: "runAnalysis",
+      input: {
+        source: { kind: "dataset", id: "saas_churn" },
+        sql: `SELECT 1 AS "${alias65}" FROM saas_churn`,
+        bindings: {},
+        expectedRevision: 1,
+        idempotencyKey: "commit-label-01",
+      },
+    });
+    expect(envelope.ok).toBe(true);
+    if (envelope.ok) {
+      const kpis = (envelope.data as { summary: { kpis: { label: string }[] } }).summary.kpis;
+      expect(kpis).toHaveLength(1);
+      expect(kpis[0]?.label.length).toBeLessThanOrEqual(60);
+    }
+  });
+
+  it("settles a residual commit-phase violation with an envelope and frees the slot", async () => {
+    // A 100-char result column overflows ArtifactSummarySchema's KPI column
+    // bound (80) inside graph.append — the commit-phase throw the guard
+    // converts into a recoverable envelope.
+    const longName = "x".repeat(100);
+    const engine = fakeEngine((decision) => {
+      if (!decision.positionalSql.includes(longName)) return defaultFakeExecute(decision);
+      const schema = [{ name: longName, type: "DOUBLE" }];
+      return Promise.resolve({
+        schema,
+        batches: [{ columns: schema, rowCount: 1, values: { [longName]: [1.5] } }],
+        metrics: { executionMs: 1, materializedRows: 1, chartPoints: 0 },
+      });
+    });
+    const store = storeWith(engine);
+    await activateSaasChurn(store);
+    const envelope = await store.dispatch({
+      kind: "runAnalysis",
+      input: {
+        source: { kind: "dataset", id: "saas_churn" },
+        sql: `SELECT 1 AS "${longName}" FROM saas_churn`,
+        bindings: {},
+        expectedRevision: 1,
+        idempotencyKey: "commit-overflow-01",
+      },
+    });
+    expect(envelope.ok).toBe(false);
+    if (!envelope.ok) {
+      expect(envelope.error.code).toBe("INTERNAL_ERROR");
+      expect(envelope.error.details.phase).toBe("commit");
+    }
+    // The operation is terminal, not stuck `running` — and the pre-commit
+    // state is intact: no revision bump, no artifact committed or selected.
+    const snapshot = store.getSnapshot();
+    expect(snapshot.operations[snapshot.operations.length - 1]?.status).toBe("failed");
+    expect(snapshot.revision).toBe(1);
+    expect(snapshot.recentArtifactIds).not.toContain("a_01");
+    expect(snapshot.selectedArtifactId).toBeNull();
+    // The materialized relation did not leak.
+    expect(engine.dropped).toEqual(["artifact_a_01"]);
+    // The slot freed: the next dispatch is not OPERATION_CONFLICT.
+    const next = await runChurn(store, "post-commit-failure-01");
+    expect(next.ok).toBe(true);
   });
 });
 

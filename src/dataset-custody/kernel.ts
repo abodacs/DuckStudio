@@ -14,7 +14,7 @@ import {
   type GovernedSource,
   type ReleaseDecision,
 } from "./schemas";
-import { inspectSql } from "./sql-inspector";
+import { inspectSql, lexSql } from "./sql-inspector";
 
 /**
  * The custody kernel (§5; ARCHITECTURE.md): policy, SQL inspection, budget
@@ -86,6 +86,10 @@ export interface StatementPlan {
   readonly groupExpressions: readonly string[];
   /** Raw WHERE clause; null when absent. */
   readonly whereExpression: string | null;
+  /** A row-reassembling function (`FIRST`, `ANY_VALUE`, …) was applied. */
+  readonly reassembles: boolean;
+  /** The first reassembling function applied (e.g. `FIRST`); null when none. */
+  readonly reassemblingFn: string | null;
 }
 
 /** The kernel is stateful only in its evidence counters and monitored transports. */
@@ -198,6 +202,20 @@ function resultColumnClassifications(
   return new Map(resultSchema.map((column) => [column.name, byName.get(column.name) ?? "public"]));
 }
 
+/** First token naming a direct-identifier column of the source, else null. */
+function referencesIdentifierColumn(sql: string, source: GovernedSource): string | null {
+  const identifiers = new Set(
+    source.columns.filter((c) => c.classification === "direct_identifier").map((c) => c.name.toUpperCase()),
+  );
+  if (identifiers.size === 0) return null;
+  for (const token of lexSql(sql)) {
+    if ((token.kind === "word" || token.kind === "quotedIdent") && identifiers.has(token.value.toUpperCase())) {
+      return token.value;
+    }
+  }
+  return null;
+}
+
 function inspectStatementShape(sql: string, authorizedRelations: readonly string[]): StatementPlan {
   // Planning mode: the SQL is already authorized; bindings are not re-checked.
   const inspection = inspectSql({
@@ -208,7 +226,14 @@ function inspectStatementShape(sql: string, authorizedRelations: readonly string
     skipBindings: true,
   });
   if (!inspection.ok) {
-    return { hasAggregate: false, hasGrouping: false, groupExpressions: [], whereExpression: null };
+    return {
+      hasAggregate: false,
+      hasGrouping: false,
+      groupExpressions: [],
+      whereExpression: null,
+      reassembles: false,
+      reassemblingFn: null,
+    };
   }
   const shaped = inspection.inspection;
   return {
@@ -216,6 +241,8 @@ function inspectStatementShape(sql: string, authorizedRelations: readonly string
     hasGrouping: shaped.hasGrouping,
     groupExpressions: [...shaped.groupExpressions],
     whereExpression: shaped.whereExpression,
+    reassembles: shaped.reassembles,
+    reassemblingFn: shaped.reassemblingFn,
   };
 }
 
@@ -361,13 +388,40 @@ export function createCustodyKernel(now: () => string = () => new Date().toISOSt
 
       const sensitive = policy === "sensitive_aggregate_only";
       if (sensitive) {
+        const shape = inspectStatementShape(sql, [relation]);
         // §5.1: raw grids are suppressed; only aggregates survive.
-        if (!inspectStatementShape(sql, [relation]).hasAggregate) {
+        if (!shape.hasAggregate) {
           const failure: CustodyFailure = {
             code: "POLICY_DENIED",
             message: "The dataset is sensitive_aggregate_only; raw rows are suppressed and only aggregates release.",
             retryable: false,
             details: { blockedFields: resultSchema.map((column) => column.name).join(",") },
+          };
+          return { ok: false, failure };
+        }
+        // §5.1: an aggregate that reassembles a raw per-row value (FIRST,
+        // ANY_VALUE, …) is an aggregate by shape only and cannot release.
+        // `reassemblingFn` is non-null exactly when `reassembles` is true.
+        if (shape.reassemblingFn !== null) {
+          const failure: CustodyFailure = {
+            code: "POLICY_DENIED",
+            message: `Sensitive datasets release aggregates only; ${shape.reassemblingFn}() reassembles a raw row value and cannot release.`,
+            retryable: false,
+            details: { blockedConstruct: shape.reassemblingFn },
+          };
+          return { ok: false, failure };
+        }
+        // Identifier provenance, statement-level by design: on a sensitive
+        // source any reference to a direct-identifier column — aliased,
+        // wrapped, or through a CTE — can only feed the result, so it is
+        // denied regardless of the result schema's names.
+        const identifierToken = referencesIdentifierColumn(sql, source);
+        if (identifierToken !== null) {
+          const failure: CustodyFailure = {
+            code: "POLICY_DENIED",
+            message: "The result would derive from direct-identifier values, which never leave custody.",
+            retryable: false,
+            details: { blockedFields: identifierToken },
           };
           return { ok: false, failure };
         }

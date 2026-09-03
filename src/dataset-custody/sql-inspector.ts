@@ -30,6 +30,10 @@ export interface SqlInspection {
   /** Raw `WHERE` clause, verbatim; null when absent. */
   readonly whereExpression: string | null;
   readonly hasAggregate: boolean;
+  /** A row-reassembling function (`FIRST`, `ANY_VALUE`, …) was applied — aggregate-shaped, row-valued. */
+  readonly reassembles: boolean;
+  /** The first reassembling function applied (e.g. `FIRST`); null when none. */
+  readonly reassemblingFn: string | null;
 }
 
 export type InspectResult =
@@ -66,7 +70,13 @@ const CLAUSE_WORDS = new Set([
 const AGGREGATE_WORDS = new Set([
   "COUNT", "SUM", "AVG", "MIN", "MAX", "TOTAL", "MEDIAN", "MODE", "STRING_AGG", "LIST", "ARRAY_AGG",
   "FIRST", "LAST", "PRODUCT", "STDDEV", "VARIANCE", "BOOL_AND", "BOOL_OR",
+  // Genuine DuckDB aggregates too — without them an `ANY_VALUE(x) … GROUP BY`
+  // statement passes the aggregate gate before the reassembling scan runs.
+  "ANY_VALUE", "ARBITRARY",
 ]);
+
+/** Row-reassembling functions: legal aggregates by shape, but each returns a raw per-row value. */
+const REASSEMBLING_WORDS = new Set(["FIRST", "LAST", "ANY_VALUE", "ARBITRARY", "LIST", "ARRAY_AGG", "STRING_AGG"]);
 
 /** §6: DDL, DML, transaction control, external data, extension loading, session mutation. */
 const FORBIDDEN_WORDS = new Set([
@@ -207,6 +217,14 @@ function nameToken(tokens: readonly Token[], k: number): Token | null {
 
 /** Depth-aware relation scan: every candidate named after FROM/JOIN (any depth) must be authorized or a CTE. */
 function checkRelations(tokens: readonly Token[], authorized: ReadonlySet<string>): CustodyFailure | null {
+  // A WITH header this parser cannot vouch for fails the whole scan closed:
+  // returning "no violation" here would skip the FROM/JOIN scan below.
+  const cteHeaderFailure: CustodyFailure = {
+    code: "UNSAFE_SQL",
+    message: 'The statement uses the blocked construct "cte_header" (SQL execution policy §6).',
+    retryable: false,
+    details: { blockedConstruct: "cte_header" },
+  };
   // CTE names are relations the statement itself defines.
   const defined = new Set<string>();
   let i = 0;
@@ -217,7 +235,7 @@ function checkRelations(tokens: readonly Token[], authorized: ReadonlySet<string
     if (afterWith?.kind === "word" && afterWith.text.toUpperCase() === "RECURSIVE") i += 1;
     while (i < tokens.length) {
       const name = nameToken(tokens, i);
-      if (!name) return null;
+      if (!name) return cteHeaderFailure;
       defined.add(name.value);
       let j = i + 1;
       if (tokens[j]?.text === "(") {
@@ -232,7 +250,14 @@ function checkRelations(tokens: readonly Token[], authorized: ReadonlySet<string
           j += 1;
         }
       }
-      if (tokens[j]?.text.toUpperCase() !== "AS" || tokens[j + 1]?.text !== "(") return null;
+      if (tokens[j]?.text.toUpperCase() !== "AS") return cteHeaderFailure;
+      // Legal DuckDB spellings: `AS MATERIALIZED (` and `AS NOT MATERIALIZED (`.
+      if (tokens[j + 1]?.text.toUpperCase() === "MATERIALIZED") {
+        j += 1;
+      } else if (tokens[j + 1]?.text.toUpperCase() === "NOT" && tokens[j + 2]?.text.toUpperCase() === "MATERIALIZED") {
+        j += 2;
+      }
+      if (tokens[j + 1]?.text !== "(") return cteHeaderFailure;
       let depth = 1;
       j += 2;
       while (j < tokens.length && depth > 0) {
@@ -394,6 +419,8 @@ export function inspectSql(input: InspectInput): InspectResult {
   let groupExpressions: string[] = [];
   let whereExpression: string | null = null;
   let hasAggregate = false;
+  let reassembles = false;
+  let reassemblingFn: string | null = null;
 
   for (let k = 0; k < meaningful.length; k += 1) {
     const token = meaningful[k] as Token;
@@ -473,6 +500,10 @@ export function inspectSql(input: InspectInput): InspectResult {
     if (token.kind === "word" && AGGREGATE_WORDS.has(upper) && meaningful[k + 1]?.text === "(") {
       hasAggregate = true;
     }
+    if (token.kind === "word" && REASSEMBLING_WORDS.has(upper) && meaningful[k + 1]?.text === "(") {
+      reassembles = true;
+      reassemblingFn ??= upper;
+    }
   }
   rebuilt += sql.slice(cursor);
 
@@ -485,6 +516,8 @@ export function inspectSql(input: InspectInput): InspectResult {
       groupExpressions,
       whereExpression,
       hasAggregate: hasAggregate || hasGrouping,
+      reassembles,
+      reassemblingFn,
     },
   };
 }

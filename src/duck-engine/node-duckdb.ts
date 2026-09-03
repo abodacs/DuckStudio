@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PRESET_TRIPLES, presetCsv, type BoundedRead, type DuckEngineRuntime } from "./worker-handler";
 import { buildIntakeSql, describeIntakeColumns, intakeFileName, materializedIntakeColumns } from "./intake";
+import { quoteIdentifier } from "./identifiers";
 import { decodeEngineCell } from "./result-decode";
 import type { IntakeResult, WarmResult } from "./protocol";
 
@@ -81,11 +82,11 @@ export async function createNodeDuckRuntime(): Promise<NodeDuckRuntime> {
     async materialize(relationName, result) {
       const columns = result.schema.map((column) => column.name);
       const columnList = result.schema
-        .map((column) => `"${column.name}" ${column.type}`)
+        .map((column) => `${quoteIdentifier(column.name)} ${column.type}`)
         .join(", ");
-      await connection.run(`CREATE TABLE ${relationName} (${columnList})`);
+      await connection.run(`CREATE TABLE ${quoteIdentifier(relationName)} (${columnList})`);
       const placeholders = columns.map((_, index) => `$${index + 1}`).join(", ");
-      const insert = await connection.prepare(`INSERT INTO ${relationName} VALUES (${placeholders})`);
+      const insert = await connection.prepare(`INSERT INTO ${quoteIdentifier(relationName)} VALUES (${placeholders})`);
       try {
         let rowCount = 0;
         for (const batch of result.batches) {

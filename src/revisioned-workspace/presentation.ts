@@ -69,7 +69,8 @@ export function inferPresentation(input: PresentationInput): PresentationSpec {
   // 1. KPIs: up to six numeric result columns in result order.
   if (numeric.length > 0) {
     spec.kpis = numeric.slice(0, 6).map((column) => ({
-      label: column.name,
+      // The summary schema caps labels at 60 while column names may reach 80.
+      label: column.name.slice(0, 60),
       column: column.name,
       format: columnKind(column.type) === "integer" ? ("integer" as const) : ("decimal" as const),
     }));
@@ -248,7 +249,9 @@ export function measureSummary(
   return {
     kpis: (spec.kpis ?? []).map((kpi) => {
       const value = firstRow.get(kpi.column);
-      return { ...kpi, value: typeof value === "number" ? value : null };
+      // Non-finite measurements measure nothing: an honest null KPI instead
+      // of a value the summary schema would reject at commit.
+      return { ...kpi, value: typeof value === "number" && Number.isFinite(value) ? value : null };
     }),
     chart: spec.chart
       ? {

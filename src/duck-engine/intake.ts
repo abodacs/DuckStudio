@@ -1,4 +1,5 @@
 import type { DescribedColumn, EngineColumn } from "./protocol";
+import { quoteIdentifier } from "./identifiers";
 
 /**
  * The intake helpers shared by both `DuckEngineRuntime` adapters (slice 7):
@@ -101,6 +102,8 @@ export function intakeFileName(name: string): string {
  * never in the column list at all.
  */
 export function buildIntakeSql(relation: string, fileName: string, columns: readonly EngineColumn[]): string {
-  const projection = columns.map((column) => `"${column.name}"`).join(", ");
-  return `CREATE OR REPLACE TABLE ${relation} AS SELECT ${projection} FROM read_csv('${fileName}')`;
+  // `fileName` is SQL-safe by construction (intakeFileName sanitizes to
+  // [-A-Za-z0-9_]); the projection quotes untrusted CSV header names.
+  const projection = columns.map((column) => quoteIdentifier(column.name)).join(", ");
+  return `CREATE OR REPLACE TABLE ${quoteIdentifier(relation)} AS SELECT ${projection} FROM read_csv('${fileName}')`;
 }
