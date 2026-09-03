@@ -68,8 +68,13 @@ describe("intake ceilings and SQL build", () => {
   it("builds an explicit projection that omits direct identifiers", () => {
     const described = describeIntakeColumns([column("patient_id"), { name: "amount", type: "DOUBLE" }]);
     expect(buildIntakeSql("local_x_ab12", "my_sales.csv", materializedIntakeColumns(described))).toBe(
-      `CREATE OR REPLACE TABLE local_x_ab12 AS SELECT "amount" FROM read_csv('my_sales.csv')`,
+      `CREATE OR REPLACE TABLE "local_x_ab12" AS SELECT "amount" FROM read_csv('my_sales.csv')`,
     );
+  });
+
+  it("escapes double quotes in header names, so a hostile CSV cannot inject a statement", () => {
+    const sql = buildIntakeSql("local_x_ab12", "file.csv", [column('a"b')]);
+    expect(sql).toBe(`CREATE OR REPLACE TABLE "local_x_ab12" AS SELECT "a""b" FROM read_csv('file.csv')`);
   });
 
   it("sanitizes the virtual file name", () => {
@@ -177,6 +182,41 @@ describe("real-DuckDB intake (node runtime): the relation omits the identifier c
       10,
     );
     expect(Number(names.rows[0]?.n)).toBe(0);
+  });
+});
+
+describe("identifier quoting at the DDL assembly sites (node runtime)", () => {
+  let runtime: NodeDuckRuntime;
+
+  afterAll(async () => {
+    await runtime?.dispose();
+  });
+
+  it("materializes a result whose alias decoded a doubled quote (decode → re-encode)", async () => {
+    runtime = await createNodeDuckRuntime();
+    const read = await runtime.runBounded('SELECT 42 AS "we""ird"', [], 10);
+    expect(read.schema.map((column) => column.name)).toEqual(['we"ird']);
+    const materialized = await runtime.materialize("artifact_quoted_beef", {
+      schema: read.schema,
+      batches: [{ columns: read.schema, rowCount: 1, values: { 'we"ird': [42] } }],
+      metrics: { executionMs: 1, materializedRows: 1, chartPoints: 0 },
+    });
+    expect(materialized.relationName).toBe("artifact_quoted_beef");
+    expect(materialized.rowCount).toBe(1);
+    const count = await runtime.runBounded('SELECT COUNT(*) AS n FROM "artifact_quoted_beef"', [], 10);
+    expect(Number(count.rows[0]?.n)).toBe(1);
+  });
+
+  it("imports a CSV whose header carries a quoted name — nothing throws, metadata keeps the name", async () => {
+    runtime = await createNodeDuckRuntime();
+    const csv = new TextEncoder().encode('"a""b",region\n7,east\n');
+    const result = await runtime.intake("local_quoted_cafe", "quoted.csv", csv);
+    expect(result.relationName).toBe("local_quoted_cafe");
+    expect(result.rowCount).toBe(1);
+    expect(result.columns.map((column) => column.name)).toEqual(['a"b', "region"]);
+    const rows = await runtime.runBounded('SELECT "a""b" AS value FROM "local_quoted_cafe"', [], 10);
+    // The sniffer types the oddly named column VARCHAR; the value round-trips.
+    expect(rows.rows).toEqual([{ value: "7" }]);
   });
 });
 

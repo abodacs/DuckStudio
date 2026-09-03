@@ -1,6 +1,7 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
 import { createWorkerHandler, presetCsv, PRESET_TRIPLES, type BoundedRead, type DuckEngineRuntime } from "./worker-handler";
 import { buildIntakeSql, describeIntakeColumns, intakeFileName, materializedIntakeColumns } from "./intake";
+import { quoteIdentifier } from "./identifiers";
 import { decodeEngineCell, duckDbType } from "./result-decode";
 import type { EngineColumn, EngineRequest, EngineResponse, IntakeResult, WarmResult } from "./protocol";
 
@@ -117,11 +118,11 @@ async function createBrowserRuntime(): Promise<DuckEngineRuntime> {
     async materialize(relationName, result) {
       const columns = result.schema.map((column) => column.name);
       const columnList = result.schema
-        .map((column) => `"${column.name}" ${column.type}`)
+        .map((column) => `${quoteIdentifier(column.name)} ${column.type}`)
         .join(", ");
-      await connection.query(`CREATE TABLE ${relationName} (${columnList})`);
+      await connection.query(`CREATE TABLE ${quoteIdentifier(relationName)} (${columnList})`);
       const placeholders = columns.map((_, index) => `$${index + 1}`).join(", ");
-      const insert = await connection.prepare(`INSERT INTO ${relationName} VALUES (${placeholders})`);
+      const insert = await connection.prepare(`INSERT INTO ${quoteIdentifier(relationName)} VALUES (${placeholders})`);
       try {
         let rowCount = 0;
         for (const batch of result.batches) {
