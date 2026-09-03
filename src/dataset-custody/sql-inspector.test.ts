@@ -140,6 +140,37 @@ describe("rejection: relation references (pinned order 4)", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.failure.code).toBe("DATASET_UNAVAILABLE");
   });
+
+  it("denies a foreign relation hidden behind AS MATERIALIZED instead of skipping the scan", () => {
+    const result = inspect("WITH t AS MATERIALIZED (SELECT * FROM healthcare_pii) SELECT COUNT(*) FROM t");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.failure.code).toBe("DATASET_UNAVAILABLE");
+      expect(result.failure.details.relation).toBe("healthcare_pii");
+    }
+  });
+});
+
+describe("CTE header parsing fails closed (pinned order 4)", () => {
+  it("fails closed when the CTE name is not an identifier", () => {
+    expect(unsafeConstruct(inspect("WITH 1 AS (SELECT 1) SELECT 1"))).toBe("cte_header");
+  });
+
+  it("fails closed when AS is not followed by a parenthesized body", () => {
+    expect(unsafeConstruct(inspect("WITH t AS SELECT 1 SELECT * FROM t"))).toBe("cte_header");
+  });
+
+  it("accepts the legal AS MATERIALIZED spelling", () => {
+    expect(inspect("WITH t AS MATERIALIZED (SELECT 1 AS x) SELECT * FROM t").ok).toBe(true);
+  });
+
+  it("accepts the legal AS NOT MATERIALIZED spelling", () => {
+    expect(inspect("WITH t AS NOT MATERIALIZED (SELECT 1 AS x) SELECT * FROM t").ok).toBe(true);
+  });
+
+  it("keeps accepting the plain WITH spelling", () => {
+    expect(inspect("WITH t AS (SELECT 1 AS x) SELECT * FROM t").ok).toBe(true);
+  });
 });
 
 describe("rejection: binding interpolation (pinned order 5)", () => {
