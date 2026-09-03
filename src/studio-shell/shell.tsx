@@ -130,6 +130,12 @@ export function WorkspaceShell() {
    */
   const [dispatchFailure, setDispatchFailure] = useState<{ code: ErrorCode } | null>(null);
 
+  // A rejected dispatch echoes until the workspace next succeeds — the advice
+  // is consumed by the move it teaches, so a later success clears the card.
+  useEffect(() => {
+    if (vm.operations[0]?.status === "succeeded") setDispatchFailure(null);
+  }, [vm.operations]);
+
   // The post-commit tab (grilling 52): the human adapter's captured
   // `initialView` applies once per succeeded analysis, else §4.5 inference.
   // Tab state stays canvas-local — this never dispatches.
@@ -286,7 +292,7 @@ export function WorkspaceShell() {
               </ol>
             </div>
           </div>
-          <div role="group" aria-label="Canonical runs" className="card-panel rise mt-2" style={rise(130)}>
+          <div role="group" aria-label="Run an analysis" className="card-panel rise mt-2" style={rise(130)}>
             <div className="card-core">
               <h3 className="card-label">ASK THE AGENT</h3>
               <button
@@ -400,19 +406,20 @@ export function WorkspaceShell() {
                       )}
                     </div>
                   )}
-                  {/* Grilling 61: a rejected preset dispatch (OPERATION_CONFLICT
-                      and friends) renders the standard recovery card while the
-                      operation it collided with is live — the envelope teaches. */}
-                  {operationsLive && dispatchFailure && (
-                    <div className="operation-card operation-card-failed">
-                      <p className="mt-1.5 flex items-center gap-2">
-                        <span className="chip-error">{dispatchFailure.code}</span>
-                        <span className="meta">{ERROR_RECOVERY_MESSAGE[dispatchFailure.code]}</span>
-                      </p>
-                      <p className="meta mt-1">{ERROR_RECOVERY_MOVE[dispatchFailure.code]}</p>
-                    </div>
-                  )}
                 </>
+              )}
+              {/* Grilling 61: a rejected preset dispatch (OPERATION_CONFLICT
+                  and friends) renders the standard recovery card — live
+                  operation or not; a failed dispatch with nothing running is
+                  exactly when a dead click would otherwise hide it. */}
+              {dispatchFailure && (
+                <div className="operation-card operation-card-failed">
+                  <p className="mt-1.5 flex items-center gap-2">
+                    <span className="chip-error">{dispatchFailure.code}</span>
+                    <span className="meta">{ERROR_RECOVERY_MESSAGE[dispatchFailure.code]}</span>
+                  </p>
+                  <p className="meta mt-1">{ERROR_RECOVERY_MOVE[dispatchFailure.code]}</p>
+                </div>
               )}
             </div>
           </div>
