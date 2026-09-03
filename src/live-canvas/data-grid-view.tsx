@@ -1,7 +1,7 @@
 import { projectArtifact } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
 import { KpiTile, UnavailableArtifact } from "./artifact-states";
-import { VirtualGrid } from "./virtual-grid";
+import { InteractiveGrid } from "./interactive-grid";
 
 /**
  * Data Grid evidence view (grilling 51): virtualized committed rows only
@@ -44,7 +44,7 @@ export function DataGridView() {
         case "rows":
           return (
             <div className="view-swap flex h-full min-h-0 flex-1 flex-col p-3">
-              <VirtualGrid grid={artifact.grid} totalRows={artifact.artifact.rowCount} />
+              <InteractiveGrid grid={artifact.grid} totalRows={artifact.artifact.rowCount} />
             </div>
           );
         case "suppressed":

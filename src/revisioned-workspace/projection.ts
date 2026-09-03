@@ -46,6 +46,8 @@ export type ArtifactCard = {
   evicted: boolean;
   selected: boolean;
   sourceId: string;
+  /** The generated relation — the Query tab's refinement source (stage 4). */
+  relationName: string;
   policy: Policy;
   releaseStatus: AnalysisArtifact["release"]["status"];
   rowCount: number;
@@ -265,6 +267,7 @@ export function projectWorkspace(workspace: Workspace): WorkspaceViewModel {
           evicted: workspace.evictedArtifactIds.includes(artifactId),
           selected: workspace.selectedArtifactId === artifactId,
           sourceId: artifact.source.id,
+          relationName: artifact.relationName,
           policy: artifact.policy,
           releaseStatus: artifact.release.status,
           rowCount: artifact.rowCount,

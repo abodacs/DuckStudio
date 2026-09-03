@@ -12,10 +12,10 @@ import { CUSTODY_EMPTY_STATE } from "../src/live-canvas/custody-view";
 // the lines the views render at rev 0, imported from them so the browser
 // proof is the assertion, not the typing.
 const EMPTY_STATE_COPY: readonly (readonly [label: string, copy: string])[] = [
-  ["Insights", INSIGHTS_EMPTY_STATE.noDataset],
-  ["Data Grid", GRID_EMPTY_STATE],
+  ["Charts", INSIGHTS_EMPTY_STATE.noDataset],
+  ["Rows", GRID_EMPTY_STATE],
   ["SQL & Lineage", LINEAGE_EMPTY_STATE],
-  ["Custody", CUSTODY_EMPTY_STATE],
+  ["Zero Upload", CUSTODY_EMPTY_STATE],
 ];
 
 test.describe("walking skeleton @ rev 0", () => {
@@ -34,13 +34,10 @@ test.describe("walking skeleton @ rev 0", () => {
 
   test("the shell renders at rev 0", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
-    // The seeded catalog's canonical spelling in the header (ticket 13) —
-    // available to activate, never shown as active.
-    await expect(page.getByText("saas_churn · public_synthetic", { exact: true })).toBeVisible();
+    await expect(page.getByText("rev 0 · no dataset")).toBeVisible();
     await expect(page.getByText(NO_UPLOAD_BADGE)).toBeVisible();
-    await expect(page.getByText("AGENT CONTROL & OPERATIONS")).toBeVisible();
-    await expect(page.getByText("SELECTED ARTIFACT")).toBeVisible();
+    await expect(page.getByText("CONTROLS")).toBeVisible();
+    await expect(page.getByText("RESULTS")).toBeVisible();
   });
 
   test("every evidence tab discloses its empty state", async ({ page }) => {
@@ -55,17 +52,17 @@ test.describe("walking skeleton @ rev 0", () => {
     // `rev` and `artifact` gained slice-3 readers; a param nobody reads is
     // still junk and must surface, never be stripped silently.
     await page.goto("/?view=insights");
-    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).not.toBeVisible();
+    await expect(page.getByText("rev 0 · no dataset")).not.toBeVisible();
   });
 
   test("a rev pin matching the live workspace renders; a stale pin is stripped", async ({ page }) => {
     await page.goto("/?rev=0");
-    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+    await expect(page.getByText("rev 0 · no dataset")).toBeVisible();
 
     // The pin names revision 9; the workspace lives at rev 0 — beforeLoad
     // rejects the stale pin and lands on the live workspace (ticket 35).
     await page.goto("/?rev=9");
-    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+    await expect(page.getByText("rev 0 · no dataset")).toBeVisible();
     expect(new URL(page.url()).searchParams.get("rev")).toBeNull();
   });
 });
@@ -77,7 +74,7 @@ test.describe("slice 2: engine warm + zero egress from first paint", () => {
       timeout: 30_000,
     }).catch(() => null);
     await page.goto("/");
-    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+    await expect(page.getByText("rev 0 · no dataset")).toBeVisible();
     // The header renders after the warm step (BOOT_PLAN: gate → warm →
     // mount), so a warmed engine worker must exist by now.
     expect(await engineWorker).toBeTruthy();
@@ -103,7 +100,7 @@ test.describe("slice 2: engine warm + zero egress from first paint", () => {
       crossOrigin.push(request.url());
     });
     await page.goto("/");
-    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+    await expect(page.getByText("rev 0 · no dataset")).toBeVisible();
     // The header renders only after the worker warm slot, so the engine has
     // fully initialized (both presets materialized) with zero cross-origin
     // requests observed from the page.
@@ -161,7 +158,7 @@ test.describe("slice 4: agent control plane", () => {
     expect(envelope.nextActions[0]).toMatchObject({ kind: "tool", tool: "duckdb_execute_sql_to_canvas" });
     // Operator parity: the human header reads the same committed workspace.
     await expect(page.getByText("rev 1", { exact: true })).toBeVisible();
-    await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
+    await expect(page.getByText("rev 1 · saas_churn · public_synthetic")).toBeVisible();
   });
 
   test("duckdb_execute_sql_to_canvas creates and selects an artifact atomically", async ({ page }) => {
@@ -318,7 +315,7 @@ test.describe("slice 5: evidence canvas", () => {
 
     // The left pane carries the same commit: artifact card with source and policy.
     await expect(page.getByRole("button", { name: /a_01/ })).toBeVisible();
-    await expect(page.getByText("source saas_churn", { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: /a_01/ })).toContainText("saas_churn");
 
     // Insights: measured KPI cards + the lazy chart's canvas.
     await expect(page.getByRole("tabpanel").getByText("accounts", { exact: true }).first()).toBeVisible();
@@ -331,7 +328,7 @@ test.describe("slice 5: evidence canvas", () => {
     await expect(page.getByRole("tabpanel").getByText("allowed", { exact: true })).toBeVisible();
 
     // Custody: the captured §8.4 snapshot with its limitations.
-    await page.getByRole("tab", { name: "Custody" }).click();
+    await page.getByRole("tab", { name: "Zero Upload" }).click();
     await expect(page.getByText(/scope artifact:a_01/)).toBeVisible();
     await expect(page.getByText("0 B", { exact: true })).toBeVisible();
     await expect(page.getByText(EVIDENCE_LIMITATIONS[0])).toBeVisible();
@@ -345,7 +342,7 @@ test.describe("slice 5: evidence canvas", () => {
       { activate: "e2e-grid-activate-01", run: "e2e-grid-run-01" },
       "SELECT * FROM saas_churn LIMIT 2000",
     );
-    await page.getByRole("tab", { name: "Data Grid" }).click();
+    await page.getByRole("tab", { name: "Rows" }).click();
 
     // Acceptance 17 in reverse: rows exist — but only from the artifact.
     await expect(page.locator("[data-grid-row]").first()).toBeVisible();
@@ -377,7 +374,7 @@ test.describe("slice 5: evidence canvas", () => {
       HEALTHCARE_PII_CANONICAL_SQL,
       "healthcare_pii",
     );
-    await page.getByRole("tab", { name: "Data Grid" }).click();
+    await page.getByRole("tab", { name: "Rows" }).click();
 
     // The pinned suppression banner, with the identifier line and counters
     // rendered from the projection's release/custody data.
@@ -409,7 +406,7 @@ test.describe("slice 5: evidence canvas", () => {
     const revision = page.getByText("rev 2", { exact: true });
 
     // Tabs are canvas-local: four clicks, zero dispatches, revision unmoved.
-    for (const label of ["Data Grid", "SQL & Lineage", "Custody", "Insights"]) {
+    for (const label of ["Rows", "SQL & Lineage", "Zero Upload", "Charts"]) {
       await page.getByRole("tab", { name: label }).click();
       await expect(revision).toBeVisible();
     }
@@ -417,7 +414,7 @@ test.describe("slice 5: evidence canvas", () => {
     // One card click = one selectArtifact dispatch: rev 2 → rev 3, exactly.
     await page.getByRole("button", { name: /a_01/ }).click();
     await expect(page.getByText("rev 3", { exact: true })).toBeVisible();
-    for (const label of ["Data Grid", "Custody"]) {
+    for (const label of ["Rows", "Zero Upload"]) {
       await page.getByRole("tab", { name: label }).click();
       await expect(page.getByText("rev 3", { exact: true })).toBeVisible();
     }
@@ -438,18 +435,16 @@ test.describe("slice 6: demo wiring and parity", () => {
   test("a preset card dispatches one activation; the header commits and the grid stays empty", async ({ page }) => {
     await agentSurface(page);
     // The capability chip names the served surface from first paint (§7.3).
-    await expect(
-      page.getByText("webmcp_native", { exact: true }).or(page.getByText("simulator_only · same workspace", { exact: true })),
-    ).toBeVisible();
+    await expect(page.getByText("agent connected").or(page.getByText("built-in agent"))).toBeVisible();
 
     // The card's pinned aria label comes from catalog metadata (grilling 61).
     await page.getByRole("button", { name: ACTIVATE_CHURN }).click();
-    await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
+    await expect(page.getByText("rev 1 · saas_churn · public_synthetic")).toBeVisible();
     await expect(page.getByText("ACTIVE", { exact: true })).toBeVisible();
     await expect(page.getByText(NO_UPLOAD_BADGE)).toBeVisible();
 
     // Acceptance 17: activation paints no rows — the honest empty state.
-    await page.getByRole("tab", { name: "Data Grid" }).click();
+    await page.getByRole("tab", { name: "Rows" }).click();
     await expect(page.getByText(GRID_EMPTY_STATE)).toBeVisible();
     await expect(page.locator("[data-grid-row]")).toHaveCount(0);
   });
@@ -465,10 +460,10 @@ test.describe("slice 6: demo wiring and parity", () => {
     // pulses no chrome, §3.2); the two-call sequence itself is pinned by the
     // canvas contract test.
     await expect(
-      page.locator(".chip-operation").filter({ hasText: "duckdb_execute_sql_to_canvas" }).first(),
+      page.locator(".chip-operation").filter({ hasText: "Run analysis" }).first(),
     ).toBeVisible();
     await expect(page.getByText("a_01", { exact: true })).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByText("ws_local_01 · rev 2 · saas_churn · public_synthetic")).toBeVisible();
+    await expect(page.getByText("rev 2 · saas_churn · public_synthetic")).toBeVisible();
 
     // Headline KPIs measured from the canonical SQL's first row (prd.md §6.1).
     await expect(page.getByText("Churn Rate", { exact: true }).first()).toBeVisible();
@@ -517,7 +512,7 @@ test.describe("slice 6: demo wiring and parity", () => {
 
     // The conflict committed nothing: the workspace stays at rev 1 with churn
     // active even after the held operation pays its budget denial.
-    await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("rev 1 · saas_churn · public_synthetic")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("rev 2", { exact: true })).not.toBeVisible();
   });
 
@@ -528,13 +523,13 @@ test.describe("slice 6: demo wiring and parity", () => {
       Object.defineProperty(document, "modelContext", { value: undefined, configurable: true });
     });
     await agentSurface(page);
-    await expect(page.getByText("simulator_only · same workspace", { exact: true })).toBeVisible();
+    await expect(page.getByText("built-in agent", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: ACTIVATE_CHURN }).click();
-    await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
+    await expect(page.getByText("rev 1 · saas_churn · public_synthetic")).toBeVisible();
     await page.getByRole("button", { name: CHIP_LABEL }).click();
     await expect(page.getByText("a_01", { exact: true })).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByText("ws_local_01 · rev 2 · saas_churn · public_synthetic")).toBeVisible();
+    await expect(page.getByText("rev 2 · saas_churn · public_synthetic")).toBeVisible();
     await expect(page.getByText("14.2%", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("$182,400", { exact: true }).first()).toBeVisible();
 
@@ -552,7 +547,7 @@ test.describe("slice 6: demo wiring and parity", () => {
       crossOrigin.push(request.url());
     });
     await agentSurface(page);
-    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+    await expect(page.getByText("rev 0 · no dataset")).toBeVisible();
     expect(await page.evaluate(() => window.crossOriginIsolated)).toBe(true);
 
     // The full tool path — activation through the two-call chip — stays

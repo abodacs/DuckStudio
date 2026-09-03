@@ -148,7 +148,7 @@ test.describe("qa: sensitive dataset custody", () => {
     // The grid explains the suppression instead of painting rows: the pinned
     // banner copy (grilling 51), no table, no row cells, anywhere in the
     // document.
-    await page.getByRole("tab", { name: "Data Grid" }).click();
+    await page.getByRole("tab", { name: "Rows" }).click();
     const panel = page.getByRole("tabpanel");
     await expect(panel).toContainText("Rows — suppressed by policy");
     await expect(panel).toContainText("Raw records never paint on the shared canvas");
@@ -279,7 +279,7 @@ test.describe("qa: no preview grid", () => {
     expect(activated.ok).toBe(true);
 
     await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
-    await page.getByRole("tab", { name: "Data Grid" }).click();
+    await page.getByRole("tab", { name: "Rows" }).click();
     await expect(page.getByRole("tabpanel")).toContainText(GRID_EMPTY_STATE);
     await expect(page.locator("table")).toHaveCount(0);
     await expect(page.locator("td")).toHaveCount(0);

@@ -137,7 +137,7 @@ test.describe("slice 7: local file import", () => {
     const released = (analysis.data as { artifact: { schema: { name: string }[] } }).artifact;
     expect(released.schema.some((column) => column.name === "patient_id")).toBe(false);
 
-    await page.getByRole("tab", { name: "Data Grid" }).click();
+    await page.getByRole("tab", { name: "Rows" }).click();
     await expect(page.getByRole("alert")).toContainText("Rows — suppressed by policy");
     await expect(page.locator("[data-grid-row]")).toHaveCount(0);
     await expect(page.getByText(NO_UPLOAD_BADGE)).toBeVisible();

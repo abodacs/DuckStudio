@@ -1,45 +1,51 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { flushSync } from "react-dom";
-import { PRESET_CARD_SOURCES, saasChurnPreset, type PresetId } from "../demo-presets/catalog";
+import { PRESET_CARD_SOURCES, type PresetId } from "../demo-presets/catalog";
 import { ToolNameSchema } from "../agent-control-plane/envelope";
 import type { ErrorCode, OperationSummary } from "../revisioned-workspace/schemas";
 import { ERROR_RECOVERY_MESSAGE, ERROR_RECOVERY_MOVE } from "../revisioned-workspace/schemas";
-import { MONITORED_TRANSPORTS } from "../dataset-custody/schemas";
 import { projectWorkspace } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
-import { cancelActiveOperation, selectArtifact, activatePreset, runCanonicalChurnAnalysis, importLocalFile } from "../live-canvas/human-commands";
+import {
+  cancelActiveOperation,
+  selectArtifact,
+  activatePreset,
+  runCanonicalChurnAnalysis,
+  importLocalFile,
+} from "../live-canvas/human-commands";
 import { formatKpiValue } from "../live-canvas/kpi";
 import { ImportPanel } from "../live-canvas/import-panel";
-import { consumeInitialView, resolvePostCommitView } from "../live-canvas/view-intent";
+import { captureRunIntent, captureWorkbenchPrefill, consumeInitialView, resolvePostCommitView } from "../live-canvas/view-intent";
 import { CustodyView } from "../live-canvas/custody-view";
 import { DataGridView } from "../live-canvas/data-grid-view";
 import { InsightsView } from "../live-canvas/insights-view";
 import { SqlLineageView } from "../live-canvas/sql-lineage-view";
+import { WorkbenchView } from "../live-canvas/query-workbench/workbench-view";
 import "./shell.css";
 
+/**
+ * The production shell (stage 4): two panes — Controls and Results — with
+ * the locked card set (Datasets · Run an analysis · Saved results ·
+ * Activity) and the plain-language layer. Every card interaction is a named
+ * dispatch; tab clicks never dispatch. The v0 chrome (FIRST ANALYSIS /
+ * CONTEXT / CUSTODY cards, the workspace-id and available-preset lines) is
+ * gone: the header keeps title · rev · dataset · the 0-Bytes badge, with the
+ * served agent surface moved into the capability chip's tooltip.
+ */
+
 const VIEWS = {
-  insights: { label: "Insights", View: InsightsView },
-  grid: { label: "Data Grid", View: DataGridView },
+  insights: { label: "Charts", View: InsightsView },
+  query: { label: "Query", View: WorkbenchView },
+  grid: { label: "Rows", View: DataGridView },
   sql_lineage: { label: "SQL & Lineage", View: SqlLineageView },
-  custody: { label: "Custody", View: CustodyView },
+  custody: { label: "Zero Upload", View: CustodyView },
 };
 
 type ViewId = keyof typeof VIEWS;
 
-const VIEW_ORDER: readonly ViewId[] = ["insights", "grid", "sql_lineage", "custody"];
+const VIEW_ORDER: readonly ViewId[] = ["insights", "query", "grid", "sql_lineage", "custody"];
 
-/** Operation kind → the label its pill carries: the exact registered tool name, or the human command (slice 7's import is never a tool). */
-const TOOL_FOR_KIND: Record<OperationSummary["kind"], string> = {
-  activate_dataset: ToolNameSchema.enum.duckdb_activate_dataset,
-  run_analysis: ToolNameSchema.enum.duckdb_execute_sql_to_canvas,
-  import_local_file: "importLocalFile",
-};
-
-/**
- * Rev-0 preset-chip chrome (ticket 10). The chips keep their static cards
- * until activation exists (Slice 2); every chip field reads the seeded
- * catalog, so ids and policies have one spelling.
- */
+/** The preset chips in display order — read from the catalog, ids and policies one spelling. */
 const PRESETS = PRESET_CARD_SOURCES;
 
 /** Chip display line, composed from the catalog's own size facts. */
@@ -48,29 +54,28 @@ function presetMeta(entry: (typeof PRESETS)[number]): string {
   return `${Math.round(preset.rowCount / 1000)}k rows · ~${(preset.byteSizeEstimate / 1_000_000).toFixed(1)} MB`;
 }
 
-/**
- * The first-run path (PRD §7.3 first paint): three moves to the aha —
- * governed evidence on glass while the badge still reads zero upload. The
- * moves are guidance, not chrome state: the current move derives from
- * workspace state, never from a tour counter.
- */
-const FIRST_RUN_MOVES = [
-  {
-    id: "activate",
-    label: "Activate a dataset",
-    detail: "Pick a preset below — rows never leave this tab.",
+/** Operation kind → the pill's human label; the exact command/tool name rides the tooltip. */
+const LABEL_FOR_KIND: Record<OperationSummary["kind"], { label: string; title: string }> = {
+  activate_dataset: {
+    label: "Activate dataset",
+    title: ToolNameSchema.enum.duckdb_activate_dataset,
   },
-  {
-    id: "ask",
-    label: "Ask the agent",
-    detail: "The simulator or native WebMCP runs governed SQL.",
+  run_analysis: {
+    label: "Run analysis",
+    title: ToolNameSchema.enum.duckdb_execute_sql_to_canvas,
   },
-  {
-    id: "read",
-    label: "Read the evidence",
-    detail: "KPIs, grid, SQL, and custody land on the right.",
-  },
-] as const;
+  import_local_file: { label: "Import file", title: "importLocalFile" },
+};
+
+/** The plain-language policy labels; the header dataset line stays verbatim (BDD pins it). */
+const POLICY_LABEL: Record<string, string> = {
+  public_synthetic: "Public data",
+  sensitive_aggregate_only: "Sensitive — totals only",
+};
+
+function policyChip(policy: string): string {
+  return policy === "sensitive_aggregate_only" ? "chip-policy-sensitive" : "chip-policy-public";
+}
 
 /** Hairline arrow for the preset CTAs — 1.5px strokes, no icon library. */
 function ArrowGlyph() {
@@ -112,10 +117,10 @@ function measuredRuntime(operation: OperationSummary): string | null {
 }
 
 /**
- * Two-pane evidence chrome (PRD §7) rendered by the single projection owner
- * (ADR 0005 am3): the header and left-pane cards read `projectWorkspace`,
- * the right pane's views read `projectArtifact` — no second projection.
- * Every card interaction is a named dispatch; tab clicks never dispatch.
+ * The two-pane evidence chrome (prd §7) rendered by the single projection
+ * owner (ADR 0005 am3): the header and left-pane cards read
+ * `projectWorkspace`, the right pane's views read `projectArtifact` — no
+ * second projection. Every card interaction is a named dispatch.
  */
 export function WorkspaceShell() {
   const [activeView, setActiveView] = useState<ViewId>("insights");
@@ -126,17 +131,11 @@ export function WorkspaceShell() {
   const switchTo = switchView(setActiveView);
   /**
    * The human dispatches' rejected envelopes (grilling 61: "the envelope
-   * teaches"). Canvas-local echo only — the workspace never records a
-   * rejected command, so the card renders while the operation it conflicted
-   * with is live and disappears when the stream settles.
+   * teaches"). Canvas-local echo only — the strip renders in Activity
+   * whenever a dispatch is rejected and clears when the workspace next
+   * succeeds.
    */
   const [dispatchFailure, setDispatchFailure] = useState<{ code: ErrorCode } | null>(null);
-
-  // A rejected dispatch echoes until the workspace next succeeds — the advice
-  // is consumed by the move it teaches, so a later success clears the card.
-  useEffect(() => {
-    if (vm.operations[0]?.status === "succeeded") setDispatchFailure(null);
-  }, [vm.operations]);
 
   // The post-commit tab (grilling 52): the human adapter's captured
   // `initialView` applies once per succeeded analysis, else §4.5 inference.
@@ -181,12 +180,6 @@ export function WorkspaceShell() {
     tabRefs.current.get(next)?.focus();
   };
 
-  // The current first-run move reads workspace state: activation promotes
-  // move two, a settled artifact promotes move three. At rev 0 that is move
-  // one — honestly, not by a tour counter.
-  const currentMove =
-    vm.recentArtifacts.length > 0 ? 2 : vm.datasetState.kind === "active" ? 1 : 0;
-
   // Grilling 53.4: the amber pulse is painted from the operation stream
   // alone — `verifyCustody` and every read leave it untouched.
   const operationsLive = vm.operations.some(
@@ -199,13 +192,15 @@ export function WorkspaceShell() {
   const runtime = expandedOperation ? measuredRuntime(expandedOperation) : null;
 
   /**
-   * The judge-path surface facts (slice 6) read from the one projection:
-   * the served capability names the header chip, and the active dataset
-   * highlights its preset card. Neither gates a dispatch — grilling 61
-   * keeps every gesture enabled so the envelope teaches recovery.
+   * The projection facts: the active dataset highlights its preset card.
+   * Neither gates a dispatch — grilling 61 keeps every gesture enabled so
+   * the envelope teaches recovery.
    */
   const activeDatasetId = vm.datasetState.kind === "active" ? vm.datasetState.datasetId : null;
   const nativeSurface = vm.capabilities.includes("webmcp_native");
+  const surfaceTitle = nativeSurface
+    ? "The served agent surface: webmcp_native — the page's tools are registered with the browser"
+    : "The served agent surface: simulator_only — the built-in simulator drives the same workspace";
 
   /** One dispatch per click; the envelope's verdict echoes in the canvas. */
   const activate = (datasetId: PresetId) => {
@@ -215,6 +210,16 @@ export function WorkspaceShell() {
     });
   };
 
+  /** Refinement hands the statement and the artifact source to the Query tab. */
+  const refineFrom = (artifactId: string, relationName: string) => {
+    captureWorkbenchPrefill({
+      sql: `SELECT * FROM ${relationName}`,
+      source: { kind: "artifact", id: artifactId },
+    });
+    captureRunIntent({ presentation: { initialView: "query" } });
+    switchTo("query");
+  };
+
   return (
     <div className="relative flex h-dvh min-w-[960px] flex-col overflow-hidden">
       <div aria-hidden className="lamp-field" />
@@ -222,17 +227,9 @@ export function WorkspaceShell() {
         <div className="glass-island rise flex items-center gap-4 px-4 py-2.5">
           <h1 className="title shrink-0">DuckStudio</h1>
           <p aria-live="polite" className="meta whitespace-nowrap">
-            <span className="mono-value">{vm.workspaceId}</span>
-            <span aria-hidden> · </span>
             <span className="mono-value">rev {vm.revision}</span>
             <span aria-hidden> · </span>
             {vm.datasetLine}
-          </p>
-          <p className="meta whitespace-nowrap">
-            available preset{" "}
-            <span className="mono-value">
-              {saasChurnPreset.datasetId} · {saasChurnPreset.policy}
-            </span>
           </p>
           <span className="badge-zero-upload">
             <span aria-hidden className={`badge-dot ${operationsLive ? "badge-dot-live" : ""}`} />
@@ -240,63 +237,65 @@ export function WorkspaceShell() {
           </span>
           <span
             aria-label="Agent capability"
-            title="The served agent surface"
+            title={surfaceTitle}
             className="chip-capability"
           >
             <span aria-hidden className={`agent-dot ${nativeSurface ? "agent-dot-native" : "agent-dot-simulator"}`} />
-            <span className="mono-value">{nativeSurface ? "webmcp_native" : "simulator_only · same workspace"}</span>
+            <span className="meta">{nativeSurface ? "agent connected" : "built-in agent"}</span>
           </span>
         </div>
       </header>
       <main className="relative z-10 grid min-h-0 flex-1 grid-cols-[35%_65%] gap-4 px-5 pt-4 pb-5">
-        <section
-          aria-label="Agent control and operations"
-          className="min-h-0 overflow-y-auto pr-1"
-        >
+        <section aria-label="Controls" className="min-h-0 overflow-y-auto pr-1">
           <h2 className="pane-label rise" style={rise(60)}>
-            AGENT CONTROL &amp; OPERATIONS
+            CONTROLS
           </h2>
-          <div
-            role="group"
-            aria-label="First analysis"
-            className="card-panel rise mt-3"
-            style={rise(100)}
-          >
-            <div className="card-core">
-              <h3 className="card-label">FIRST ANALYSIS</h3>
-              <ol className="mt-2.5 space-y-3">
-                {FIRST_RUN_MOVES.map((move, index) => {
-                  const isCurrent = index === currentMove;
-                  return (
-                    <li key={move.id} className="flex items-start gap-3">
+          <div role="group" aria-label="Datasets" className="rise mt-3 space-y-2" style={rise(100)}>
+            <h3 className="card-label">DATASETS</h3>
+            <p id="preset-status" className="meta">
+              Click a preset to activate it — in this tab's memory only; rows never leave the browser.
+            </p>
+            {PRESETS.map((entry) => {
+              const isActive = activeDatasetId === entry.preset.datasetId;
+              return (
+                <button
+                  key={entry.id}
+                  type="button"
+                  aria-label={`Activate dataset ${entry.preset.datasetId} · ${entry.preset.policy} policy`}
+                  aria-describedby="preset-status"
+                  onClick={() => activate(entry.id)}
+                  className={isActive ? "preset-card preset-card-active" : "preset-card"}
+                >
+                  <span className="card-core flex items-center justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="mono-value block text-sm">{entry.preset.datasetId}</span>
+                      <span className="meta mt-1 block">{presetMeta(entry)}</span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
                       <span
-                        aria-hidden
-                        className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border font-display text-xs ${
-                          isCurrent
-                            ? "border-accent/40 bg-accent/[0.07] text-accent"
-                            : "border-edge bg-white/[0.03] text-ink-secondary"
-                        }`}
+                        className={policyChip(entry.preset.policy)}
+                        title={`${entry.preset.policy} — ${POLICY_LABEL[entry.preset.policy]}`}
                       >
-                        {index + 1}
+                        {POLICY_LABEL[entry.preset.policy]}
                       </span>
-                      <span className="min-w-0">
-                        <span
-                          className={`block text-[13px] leading-5 ${isCurrent ? "text-ink" : "text-ink-secondary"}`}
-                        >
-                          {move.label}
+                      {isActive ? (
+                        <span className="chip-active">ACTIVE</span>
+                      ) : (
+                        <span aria-hidden className="preset-arrow opacity-60">
+                          <ArrowGlyph />
                         </span>
-                        <span className="meta mt-0.5 block">{move.detail}</span>
-                      </span>
-                      {isCurrent && <span className="sr-only">(current move)</span>}
-                    </li>
-                  );
-                })}
-              </ol>
-            </div>
+                      )}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+            {/* Slice 7: bring your own file — drag-and-drop CSV import, in-tab only. */}
+            <ImportPanel importFile={(file) => importLocalFile(file, vm.revision)} />
           </div>
           <div role="group" aria-label="Run an analysis" className="card-panel rise mt-2" style={rise(130)}>
             <div className="card-core">
-              <h3 className="card-label">ASK THE AGENT</h3>
+              <h3 className="card-label">RUN AN ANALYSIS</h3>
               <button
                 type="button"
                 className="button-run"
@@ -307,53 +306,86 @@ export function WorkspaceShell() {
                 <span aria-hidden>⚡</span> Analyze churn against support tickets.
               </button>
               <p className="meta mt-1.5">
-                One prompt, two calls — <span className="mono-value">duckdb_get_context</span> then{" "}
-                <span className="mono-value">duckdb_execute_sql_to_canvas</span>: the same commands, budgets, and
-                custody as the agent.
+                One prompt, two calls — the same commands, budgets, and custody as the agent. To write your own SQL,
+                open the <span className="text-ink">Query</span> tab.
               </p>
             </div>
           </div>
-          <div role="group" aria-label="Workspace context" className="card-panel rise mt-2" style={rise(160)}>
+          <div role="group" aria-label="Saved results" className="card-panel rise mt-2" style={rise(160)}>
             <div className="card-core">
-              <h3 className="card-label">CONTEXT</h3>
-              <p className="meta mt-1.5">
-                <span className="mono-value">{vm.workspaceId}</span>
-                <span aria-hidden> · </span>
-                rev <span className="mono-value">{vm.revision}</span>
-              </p>
-              <p className="meta mt-1">dataset: {vm.datasetLine}</p>
-              {vm.datasetState.kind === "active" && (
-                <p className="meta mt-1">
-                  safe schema:{" "}
-                  <span className="mono-value">
-                    {vm.datasetState.safeSchemaCount} of {vm.datasetState.schemaCount}
-                  </span>{" "}
-                  columns
-                </p>
+              <h3 className="card-label">SAVED RESULTS</h3>
+              {vm.artifactCards.length === 0 ? (
+                <p className="meta mt-1.5">No results yet. Run an analysis and it appears here.</p>
+              ) : (
+                <ul className="mt-1.5 space-y-1.5">
+                  {vm.artifactCards.map((card) => (
+                    <li key={card.artifactId}>
+                      {card.evicted ? (
+                        // Grilling 32/51 item 4: eviction discloses; the
+                        // metadata remains, the rows do not.
+                        <p className="meta">
+                          <span className="mono-value">{card.artifactId}</span> cleaned up to save space — run the
+                          analysis again
+                        </p>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className={`artifact-card ${card.selected ? "artifact-card-selected" : ""}`}
+                            aria-pressed={card.selected}
+                            onClick={() => selectArtifact(card.artifactId, vm.revision)}
+                          >
+                            <span className="block text-sm text-ink">
+                              {card.sourceId} · {card.rowCount.toLocaleString("en-US")} rows
+                            </span>
+                            <span className="meta mt-0.5 block">
+                              <span className="mono-value">{card.artifactId}</span> · {card.releaseStatus}
+                            </span>
+                            <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                              {card.kpis.map((kpi) => (
+                                <span key={kpi.column} className="chip-kpi">
+                                  {kpi.label} <span className="mono-value">{formatKpiValue(kpi.value, kpi.format)}</span>
+                                </span>
+                              ))}
+                              <span className={policyChip(card.policy)} title={card.policy}>
+                                {POLICY_LABEL[card.policy]}
+                              </span>
+                            </span>
+                          </button>
+                          {card.selected && (
+                            <button
+                              type="button"
+                              className="button-recovery mt-1"
+                              title={`Refines from ${card.artifactId}'s relation ${card.relationName} in the Query tab`}
+                              onClick={() => refineFrom(card.artifactId, card.relationName)}
+                            >
+                              Refine from this result
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
-              <h4 className="card-label mt-2.5">BUDGETS</h4>
-              <dl className="meta mt-1 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3">
-                {Object.entries(vm.budgets).map(([knob, limit]) => (
-                  <div key={knob} className="contents">
-                    <dt>{knob}</dt>
-                    <dd className="mono-value">{limit}</dd>
-                  </div>
-                ))}
-              </dl>
             </div>
           </div>
-          <div role="group" aria-label="Operations" className="card-operation rise mt-2" style={rise(220)}>
+          <div role="group" aria-label="Activity" className="card-operation rise mt-2" style={rise(220)}>
             <div className="card-operation-core">
-              <h3 className="card-label">OPERATIONS</h3>
+              <h3 className="card-label">ACTIVITY</h3>
               {vm.operations.length === 0 ? (
                 <p className="meta mt-1.5">Nothing running yet. Analyses appear here while they run.</p>
               ) : (
                 <>
                   <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Operation stream">
                     {vm.operations.map((operation) => (
-                      <li key={operation.operationId} className={`chip-operation op-${operation.status}`}>
+                      <li
+                        key={operation.operationId}
+                        className={`chip-operation op-${operation.status}`}
+                        title={`${LABEL_FOR_KIND[operation.kind].title} · ${operation.operationId}`}
+                      >
                         <span aria-hidden className="op-dot" />
-                        <span className="font-mono">{TOOL_FOR_KIND[operation.kind]}</span>
+                        <span>{LABEL_FOR_KIND[operation.kind].label}</span>
                       </li>
                     ))}
                   </ul>
@@ -362,7 +394,7 @@ export function WorkspaceShell() {
                       <p className="meta flex items-center gap-2">
                         <span className={`chip-operation op-${expandedOperation.status}`}>
                           <span aria-hidden className="op-dot" />
-                          <span className="font-mono">{TOOL_FOR_KIND[expandedOperation.kind]}</span>
+                          <span>{LABEL_FOR_KIND[expandedOperation.kind].label}</span>
                         </span>
                         <span className="mono-value">{expandedOperation.status}</span>
                         {runtime && (
@@ -372,16 +404,22 @@ export function WorkspaceShell() {
                           </>
                         )}
                       </p>
-                      <p className="meta mt-1">
-                        op <span className="mono-value">{expandedOperation.operationId}</span>
-                        {expandedOperation.sourceId && (
+                      <p className="meta mt-1" title={expandedOperation.operationId}>
+                        {expandedOperation.kind === "import_local_file" && expandedOperation.sourceId && (
                           <>
-                            <span aria-hidden> · </span>source <span className="mono-value">{expandedOperation.sourceId}</span>
+                            importing <span className="mono-value">{expandedOperation.sourceId}</span>
+                            <span aria-hidden> · </span>
+                          </>
+                        )}
+                        {expandedOperation.sourceId && expandedOperation.kind !== "import_local_file" && (
+                          <>
+                            source <span className="mono-value">{expandedOperation.sourceId}</span>
+                            <span aria-hidden> · </span>
                           </>
                         )}
                         {expandedOperation.artifactId && (
                           <>
-                            <span aria-hidden> · </span>artifact <span className="mono-value">{expandedOperation.artifactId}</span>
+                            result <span className="mono-value">{expandedOperation.artifactId}</span>
                           </>
                         )}
                       </p>
@@ -415,135 +453,30 @@ export function WorkspaceShell() {
                       )}
                     </div>
                   )}
+                  {/* Grilling 61: a rejected dispatch renders the standard
+                      recovery card — live operation or not. */}
+                  {dispatchFailure && (
+                    <div className="operation-card operation-card-failed">
+                      <p className="mt-1.5 flex items-center gap-2">
+                        <span className="chip-error">{dispatchFailure.code}</span>
+                        <span className="meta">{ERROR_RECOVERY_MESSAGE[dispatchFailure.code]}</span>
+                      </p>
+                      <p className="meta mt-1">{ERROR_RECOVERY_MOVE[dispatchFailure.code]}</p>
+                    </div>
+                  )}
                 </>
               )}
-              {/* Grilling 61: a rejected preset dispatch (OPERATION_CONFLICT
-                  and friends) renders the standard recovery card — live
-                  operation or not; a failed dispatch with nothing running is
-                  exactly when a dead click would otherwise hide it. */}
-              {dispatchFailure && (
-                <div className="operation-card operation-card-failed">
-                  <p className="mt-1.5 flex items-center gap-2">
-                    <span className="chip-error">{dispatchFailure.code}</span>
-                    <span className="meta">{ERROR_RECOVERY_MESSAGE[dispatchFailure.code]}</span>
-                  </p>
-                  <p className="meta mt-1">{ERROR_RECOVERY_MOVE[dispatchFailure.code]}</p>
-                </div>
-              )}
-            </div>
-          </div>
-          <div role="group" aria-label="Artifact stream" className="card-panel rise mt-2" style={rise(280)}>
-            <div className="card-core">
-              <h3 className="card-label">ARTIFACTS</h3>
-              {vm.artifactCards.length === 0 ? (
-                <p className="meta mt-1.5">No results yet. Run an analysis and it appears here.</p>
-              ) : (
-                <ul className="mt-1.5 space-y-1.5">
-                  {vm.artifactCards.map((card) => (
-                    <li key={card.artifactId}>
-                      {card.evicted ? (
-                        // Grilling 32/51 item 4: eviction discloses; the
-                        // metadata remains, the rows do not.
-                        <p className="meta">
-                          <span className="mono-value">{card.artifactId}</span> cleaned up to save space — run the
-                          analysis again
-                        </p>
-                      ) : (
-                        <button
-                          type="button"
-                          className={`artifact-card ${card.selected ? "artifact-card-selected" : ""}`}
-                          aria-pressed={card.selected}
-                          onClick={() => selectArtifact(card.artifactId, vm.revision)}
-                        >
-                          <span className="mono-value block text-sm">{card.artifactId}</span>
-                          <span className="meta mt-0.5 block">
-                            source {card.sourceId} · {card.rowCount.toLocaleString("en-US")} rows ·{" "}
-                            {card.releaseStatus}
-                          </span>
-                          <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                            {card.kpis.map((kpi) => (
-                              <span key={kpi.column} className="chip-kpi">
-                                {kpi.label} <span className="mono-value">{formatKpiValue(kpi.value, kpi.format)}</span>
-                              </span>
-                            ))}
-                            <span
-                              className={card.policy === "sensitive_aggregate_only" ? "chip-policy-sensitive" : "chip-policy-public"}
-                            >
-                              {card.policy}
-                            </span>
-                          </span>
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-          <div role="group" aria-label="Dataset presets" className="rise mt-3 space-y-2" style={rise(340)}>
-            <h3 className="card-label">DATASETS</h3>
-            <p id="preset-status" className="meta">
-              Click a preset to activate it — in this tab's memory only; rows never leave the browser.
-            </p>
-            {PRESETS.map((entry) => {
-              const isActive = activeDatasetId === entry.preset.datasetId;
-              return (
-                <button
-                  key={entry.id}
-                  type="button"
-                  aria-label={`Activate dataset ${entry.preset.datasetId} · ${entry.preset.policy} policy`}
-                  aria-describedby="preset-status"
-                  onClick={() => activate(entry.id)}
-                  className={isActive ? "preset-card preset-card-active" : "preset-card"}
-                >
-                  <span className="card-core flex items-center justify-between gap-3">
-                    <span className="min-w-0">
-                      <span className="mono-value block text-sm">{entry.preset.datasetId}</span>
-                      <span className="meta mt-1 block">{presetMeta(entry)}</span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-2">
-                      <span
-                        className={
-                          entry.preset.policy === "sensitive_aggregate_only"
-                            ? "chip-policy-sensitive"
-                            : "chip-policy-public"
-                        }
-                      >
-                        {entry.preset.policy}
-                      </span>
-                      {isActive ? (
-                        <span className="chip-active">ACTIVE</span>
-                      ) : (
-                        <span aria-hidden className="preset-arrow opacity-60">
-                          <ArrowGlyph />
-                        </span>
-                      )}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-            {/* Slice 7: bring your own file — drag-and-drop CSV import, in-tab only. */}
-            <ImportPanel importFile={(file) => importLocalFile(file, vm.revision)} />
-          </div>
-          <div role="group" aria-label="Custody monitoring" className="card-panel rise mt-2" style={rise(440)}>
-            <div className="card-core">
-              <h3 className="card-label">CUSTODY</h3>
-              <p className="meta mt-1.5">
-                Monitored transports:{" "}
-                {MONITORED_TRANSPORTS.map((transport, index) => (
-                  <span key={transport}>
-                    {index > 0 && <span aria-hidden> · </span>}
-                    <span className="mono-value">{transport}</span>
-                  </span>
-                ))}
+              <p className="meta mt-2 border-t border-edge/60 pt-1.5">
+                Time limit: {Math.round(vm.budgets.executionMs / 1000)} s
+                <span aria-hidden> · </span>
+                Row limit: {vm.budgets.resultRows.toLocaleString("en-US")}
               </p>
             </div>
           </div>
         </section>
-        <section aria-label="Selected artifact" className="flex min-h-0 flex-col">
+        <section aria-label="Results" className="flex min-h-0 flex-col">
           <h2 className="pane-label rise" style={rise(140)}>
-            SELECTED ARTIFACT
+            RESULTS
           </h2>
           <div
             role="tablist"

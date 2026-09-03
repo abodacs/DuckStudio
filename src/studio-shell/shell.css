@@ -524,3 +524,62 @@ body {
   scrollbar-width: thin;
   scrollbar-color: rgb(255 255 255 / 14%) transparent;
 }
+
+/* The SQL workbench editor (stage 4). CodeMirror ships its own base styles,
+   so the scope keeps Tailwind's preflight from fighting it: everything is
+   namespaced under .wb-editor, with the editor chrome re-speaking the
+   page's tokens (hairline edges, quiet ink, mono text). */
+.wb-editor {
+  border: 1px solid var(--color-edge);
+  border-radius: 0.75rem;
+  background: rgb(255 255 255 / 2%);
+  overflow: hidden;
+  flex: none;
+}
+
+.wb-editor .cm-editor {
+  background: transparent;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+}
+
+.wb-editor .cm-editor.cm-focused {
+  outline: none;
+  border-color: transparent;
+}
+
+.wb-editor .cm-scroller {
+  font-family: inherit;
+  line-height: 1.5;
+  min-height: 7rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.wb-editor .cm-gutters {
+  background: transparent;
+  border-right: 1px solid var(--color-edge);
+  color: var(--color-ink-secondary, rgb(255 255 255 / 45%));
+}
+
+.wb-editor .cm-activeLine,
+.wb-editor .cm-activeLineGutter {
+  background: rgb(255 255 255 / 3%);
+}
+
+.wb-editor .cm-placeholder {
+  color: var(--color-ink-secondary, rgb(255 255 255 / 45%));
+}
+
+.wb-editor .cm-content {
+  caret-color: var(--color-accent, rgb(0 242 254));
+}
+
+.wb-editor .cm-cursor {
+  border-left-color: var(--color-accent, rgb(0 242 254));
+}
+
+.wb-editor .cm-selectionBackground,
+.wb-editor .cm-editor ::selection {
+  background: rgb(0 242 254 / 18%) !important;
+}

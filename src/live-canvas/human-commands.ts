@@ -2,9 +2,10 @@ import { workspaceStore } from "../revisioned-workspace/store";
 import { intakeTickets } from "../revisioned-workspace/intake-tickets";
 import type { ErrorCode } from "../revisioned-workspace/schemas";
 import { type PresetId } from "../demo-presets/catalog";
+import type { PresentationSpec } from "../analysis-artifacts/schemas";
 import { SAAS_CHURN_CANONICAL_SQL } from "../demo-presets/canonical-sql";
 import { SAAS_CHURN_ANALYSIS_PRESENTATION } from "../demo-presets/presentations";
-import { captureRunIntent } from "./view-intent";
+import { captureRunIntent, type EvidenceViewId } from "./view-intent";
 
 /**
  * The one seam the canvas's human gestures dispatch through (§7.2, ticket
@@ -62,6 +63,41 @@ export function activatePreset(
         ? ({ ok: true } as const)
         : ({ ok: false, code: envelope.error.code } as const),
     );
+}
+
+/**
+ * The workbench run gesture (stage 4): one `runAnalysis` with the composed
+ * presentation and the store's current revision — no dataset active still
+ * dispatches, and the DATASET_UNAVAILABLE strip teaches (plan: the envelope
+ * teaches). Bindings are empty by construction (values belong in the
+ * statement's literals for a human-run exploration; the kernel redacts what
+ * it must) and budget is omitted so the workspace defaults apply.
+ */
+export type WorkbenchVerdict =
+  | { ok: true }
+  | { ok: false; code: ErrorCode; message: string; details: Record<string, string | number | boolean | null> };
+
+export async function runWorkbenchAnalysis(input: {
+  source: { kind: "dataset" | "artifact"; id: string };
+  sql: string;
+  presentation?: PresentationSpec;
+  initialView?: EvidenceViewId;
+}): Promise<WorkbenchVerdict> {
+  captureRunIntent({ presentation: input.initialView ? { initialView: input.initialView } : undefined });
+  const envelope = await workspaceStore.dispatch({
+    kind: "runAnalysis",
+    input: {
+      source: input.source,
+      sql: input.sql,
+      bindings: {},
+      ...(input.presentation === undefined ? {} : { presentation: input.presentation }),
+      expectedRevision: workspaceStore.getSnapshot().revision,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  return envelope.ok
+    ? { ok: true }
+    : { ok: false, code: envelope.error.code, message: envelope.error.message, details: envelope.error.details };
 }
 
 /**

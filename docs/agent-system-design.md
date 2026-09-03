@@ -161,7 +161,7 @@ type Workspace = {
 - `revision` starts at `0` and increments once per committed mutation.
 - Reads never increment it.
 - A command either commits all state and presentation changes or none.
-- Canvas tab clicks (`insights` / `grid` / `sql_lineage` / `custody`) are not workspace state and do not increment revision.
+- Canvas tab clicks (`insights` / `query` / `grid` / `sql_lineage` / `custody`) are not workspace state and do not increment revision.
 
 ### 4.2 Dataset and policy
 
@@ -615,7 +615,7 @@ Response data includes `datasetId`, safe `schemaDigest`, `rowCount`, `byteSizeEs
           "required": ["visible"],
           "additionalProperties": false
         },
-        "initialView": { "type": "string", "enum": ["insights", "grid", "sql_lineage", "custody"] }
+        "initialView": { "type": "string", "enum": ["insights", "query", "grid", "sql_lineage", "custody"] }
       },
       "additionalProperties": false
     },
@@ -922,20 +922,21 @@ Call `duckdb_verify_zero_egress` for the relevant artifact or operation. Report 
 
 ## 13. UI Projection Contract
 
-The left pane shows:
+The Controls pane shows:
 
 - active dataset and policy;
 - workspace revision;
-- tool/operation cards with stable IDs and measured status;
-- artifact cards with handle, source, and the same safe `summary` as the envelope;
-- structured recovery cards for errors.
+- operation pills with human labels (the exact tool/command name in the tooltip) and measured status;
+- Saved results cards with source, the same safe `summary` as the envelope, and a selection action;
+- structured recovery cards for errors and the budget line.
 
-The right pane selects exactly one artifact and shows:
+The Results pane selects exactly one artifact and shows:
 
-- **Insights:** approved KPIs and chart from the projection;
-- **Data Grid:** virtualized rows only when an artifact exists and policy permits, otherwise a policy suppression panel or an empty-selection state;
+- **Charts:** approved KPIs and chart from the projection;
+- **Query:** the human SQL workbench — the statement, the pickers, and the results area (KPI chips plus the Rows view);
+- **Rows:** the interactive read-only grid — virtualized rows and columns only when an artifact exists and policy permits, with selection and copy as view state that never dispatches; otherwise a policy suppression panel or an empty-selection state;
 - **SQL & Lineage:** exact SQL, redacted bindings, SQL hash, source, artifact chain, and measured runtime;
-- **Custody:** scoped evidence and limitations from the same snapshot `verifyCustody` returns.
+- **Zero Upload:** scoped evidence and limitations from the same snapshot `verifyCustody` returns.
 
 Changing a view tab does not dispatch a workspace command. Selecting an artifact dispatches `selectArtifact` through the same command path regardless of operator.
 

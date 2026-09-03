@@ -147,7 +147,7 @@ test.describe("qa: analysis lifecycle", () => {
     // The right pane's Insights tiles carry the same label→value pairs the
     // envelope measured at commit — one object, rendered through the pinned
     // format table (§15.15).
-    await page.getByRole("tab", { name: "Insights" }).click();
+    await page.getByRole("tab", { name: "Charts" }).click();
     const panel = page.getByRole("tabpanel");
     const rendered = await panel.evaluate((panelElement) => {
       const pairs = new Map<string, string>();

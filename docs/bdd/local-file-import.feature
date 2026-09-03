@@ -83,7 +83,7 @@ Feature: Bring your own file — drag-and-drop CSV import that never leaves the 
     Scenario: The imported dataset defaults to sensitive_aggregate_only
       Given a dropped CSV and no classification UI
       Then the active dataset policy is "sensitive_aggregate_only"
-      And the Data Grid explains the policy suppression instead of painting rows
+      And the Rows explains the policy suppression instead of painting rows
 
     Scenario: Two files behind one slug derive different relations
       When "my sales.csv" and "my-sales.csv" are imported as different files

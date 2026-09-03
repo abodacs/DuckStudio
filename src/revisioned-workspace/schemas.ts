@@ -343,7 +343,7 @@ export type ActivateDatasetInput = z.infer<typeof ActivateDatasetInputSchema>;
 /** §8.3 `duckdb_execute_sql_to_canvas` presentation input: the committed spec plus the pass-through `initialView` hint, which is never stored (grilling 34). */
 export const RunPresentationInputSchema = PresentationSpecSchema.extend({
   initialView: z
-    .enum(["insights", "grid", "sql_lineage", "custody"])
+    .enum(["insights", "query", "grid", "sql_lineage", "custody"])
     .describe("Human-evidence-plane hint for which tab to open after commit; never stored on the artifact.")
     .optional(),
 }).describe(

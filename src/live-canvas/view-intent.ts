@@ -8,7 +8,7 @@
  * per run — never workspace state, never a second projection.
  */
 
-export type EvidenceViewId = "insights" | "grid" | "sql_lineage" | "custody";
+export type EvidenceViewId = "insights" | "query" | "grid" | "sql_lineage" | "custody";
 
 let capturedInitialView: EvidenceViewId | undefined;
 let capturedPolicyHint: string | undefined;
@@ -37,6 +37,29 @@ export function capturePolicyHint(details: { permittedPresentation?: unknown } |
 /** Read for the recovery card; the latest capture wins (one operation at a time). */
 export function peekPolicyHint(): string | undefined {
   return capturedPolicyHint;
+}
+
+/**
+ * The workbench prefill capture (stage 4): "Refine from this result" on a
+ * saved result captures the statement and artifact source; the workbench tab
+ * consumes it when it mounts. Canvas-local, one shot — never workspace state.
+ */
+let capturedWorkbenchPrefill: { sql: string; source: { kind: "dataset" } | { kind: "artifact"; id: string } } | undefined;
+
+export function captureWorkbenchPrefill(prefill: {
+  sql: string;
+  source: { kind: "dataset" } | { kind: "artifact"; id: string };
+}): void {
+  capturedWorkbenchPrefill = prefill;
+}
+
+/** One-shot read: the captured prefill, then gone. */
+export function consumeWorkbenchPrefill():
+  | { sql: string; source: { kind: "dataset" } | { kind: "artifact"; id: string } }
+  | undefined {
+  const prefill = capturedWorkbenchPrefill;
+  capturedWorkbenchPrefill = undefined;
+  return prefill;
 }
 
 /**

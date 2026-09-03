@@ -25,10 +25,10 @@ import { workspaceStore } from "../../revisioned-workspace/store";
  */
 describe("canvas projection selector contract (ADR 0003)", () => {
   const views = [
-    { name: "Insights", View: InsightsView, empty: INSIGHTS_EMPTY_STATE.noDataset },
-    { name: "Data Grid", View: DataGridView, empty: GRID_EMPTY_STATE },
+    { name: "Charts", View: InsightsView, empty: INSIGHTS_EMPTY_STATE.noDataset },
+    { name: "Rows", View: DataGridView, empty: GRID_EMPTY_STATE },
     { name: "SQL & Lineage", View: SqlLineageView, empty: LINEAGE_EMPTY_STATE },
-    { name: "Custody", View: CustodyView, empty: CUSTODY_EMPTY_STATE },
+    { name: "Zero Upload", View: CustodyView, empty: CUSTODY_EMPTY_STATE },
   ] as const;
 
   it("renders every view from projectArtifact's stable no_artifact view", () => {
