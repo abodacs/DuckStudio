@@ -10,14 +10,13 @@ import { intakeDigest, importedRelationName } from "../src/revisioned-workspace/
  * alongside the committed import.
  */
 
-const IMPORT_CSV = [
-  "patient_id,region,amount",
-  "1,east,10.5",
-  "2,west,20.0",
-  "3,east,30.25",
-  "4,north,5.0",
-  "",
-].join("\n");
+// Cohorts must clear the imported dataset's minimum cohort size of 10 so the
+// canonical aggregate releases: east ×12, west ×11.
+const IMPORT_ROWS = [
+  ...Array.from({ length: 12 }, (_, index) => `${index + 1},east,10.5`),
+  ...Array.from({ length: 11 }, (_, index) => `${index + 13},west,20`),
+];
+const IMPORT_CSV = ["patient_id,region,amount", ...IMPORT_ROWS, ""].join("\n");
 
 const FILE_NAME = "my_sales.csv";
 /** The deterministic relation the store derives from the file name + digest. */
@@ -60,7 +59,8 @@ test.describe("slice 7: local file import", () => {
     expect(artifact.artifactId).toBe("a_01");
     expect(artifact.lineage).toEqual([{ kind: "dataset", id: IMPORT_RELATION }]);
 
-    // Zero-egress lineage names the local relation with zero bytes.
+    // Zero-egress lineage names the local relation with zero bytes — and the
+    // evidence snapshot names the artifact after its ancestors (§8.4).
     const evidence = (await invokeTool(page, "duckdb_verify_zero_egress", {
       scope: "artifact",
       artifactId: "a_01",
@@ -68,7 +68,13 @@ test.describe("slice 7: local file import", () => {
     expect(evidence.ok).toBe(true);
     expect(
       (evidence.data as { datasetBytesUploaded: number; lineage: { kind: string; id: string }[] }),
-    ).toMatchObject({ datasetBytesUploaded: 0, lineage: [{ kind: "dataset", id: IMPORT_RELATION }] });
+    ).toMatchObject({
+      datasetBytesUploaded: 0,
+      lineage: [
+        { kind: "dataset", id: IMPORT_RELATION },
+        { kind: "artifact", id: "a_01" },
+      ],
+    });
 
     // The artifact card shows the same commit in the left pane.
     await expect(page.getByText("a_01", { exact: true })).toBeVisible();
