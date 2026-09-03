@@ -46,12 +46,12 @@ export type Envelope = EnvelopeSuccess | EnvelopeFailure;
 /**
  * Waits for boot to reach "register" and returns the served surface. Cold
  * boots (wasm compile + preset materialization) measured past 25s on
- * constrained machines; 120s absorbs the worst observed cold start (the
+ * constrained machines; 90s absorbs the worst observed cold start (the
  * per-test timeout bounds it) without masking a genuinely stuck boot.
  */
 export async function waitForSurface(page: Page): Promise<AgentSurface> {
   await page.waitForFunction(() => (window as SurfaceWindow).__duckstudioAgentSurface !== undefined, undefined, {
-    timeout: 120_000,
+    timeout: 90_000,
   });
   return page.evaluate(() => (window as SurfaceWindow).__duckstudioAgentSurface as AgentSurface);
 }

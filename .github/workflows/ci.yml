@@ -83,7 +83,9 @@ jobs:
     needs: gate
     if: needs.gate.outputs.scaffold == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 25 min: per-test waits are bounded by e2e/agent-surface.ts's boot
+    # absorption, but a full-suite run on a throttled runner needs headroom.
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -216,4 +218,19 @@ jobs:
     steps:
       - name: Record the four-pillar audit breakdown
         continue-on-error: true
-        run: npx -y ax webmcp-audit https://duckstudio.pages.dev
+        env:
+          # The audited origin defaults to production and is overridable via
+          # the AUDIT_ORIGIN repository variable (e.g. to audit a preview).
+          AUDIT_ORIGIN: ${{ vars.AUDIT_ORIGIN != '' && vars.AUDIT_ORIGIN || 'https://duckstudio.pages.dev' }}
+        run: |
+          # ax is pinned (no floating npx, same rule as wrangler above) and
+          # retried ×3 — the external origin intermittently sheds probes.
+          for attempt in 1 2 3; do
+            if npx -y ax@0.7.1 webmcp-audit "$AUDIT_ORIGIN"; then
+              exit 0
+            fi
+            echo "audit attempt ${attempt}/3 failed; retrying…"
+            sleep 10
+          done
+          echo "audit failed after 3 attempts"
+          exit 1
