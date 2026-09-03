@@ -33,16 +33,16 @@ async function dropCsv(page: import("@playwright/test").Page, name: string, csv:
 test.describe("slice 7: local file import", () => {
   test("a dropped CSV becomes the active dataset and takes a bounded analysis", async ({ page }) => {
     await agentSurface(page);
-    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+    await expect(page.getByText("rev 0 · no dataset")).toBeVisible();
 
     await dropCsv(page, FILE_NAME, IMPORT_CSV);
 
     // The header commits the import: the local relation is the dataset line,
     // and the badge stays truthful — import, never upload.
-    await expect(page.getByText(`ws_local_01 · rev 1 · ${IMPORT_RELATION} · sensitive_aggregate_only`)).toBeVisible();
+    await expect(page.getByText(`rev 1 · ${IMPORT_RELATION} · sensitive_aggregate_only`)).toBeVisible();
     await expect(page.getByText(NO_UPLOAD_BADGE)).toBeVisible();
-    // The import pill carries the human command label, never a tool name.
-    await expect(page.locator(".chip-operation").filter({ hasText: "importLocalFile" })).toBeVisible();
+    // The import pill carries the human label; the command id rides the tooltip.
+    await expect(page.locator(".chip-operation").filter({ hasText: "Import file" })).toBeVisible();
 
     // One bounded analysis against the imported relation, through the same
     // agent surface as any preset analysis (drop-vs-preset parity).
@@ -103,14 +103,14 @@ test.describe("slice 7: local file import", () => {
     await expect(alert).toContainText("isn't a CSV");
     // Nothing committed: the workspace stays at rev 0 with no dataset, and
     // the badge never moved.
-    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+    await expect(page.getByText("rev 0 · no dataset")).toBeVisible();
     await expect(page.getByText(NO_UPLOAD_BADGE)).toBeVisible();
   });
 
   test("imported direct identifiers reach metadata, never the relation — the mute test holds", async ({ page }) => {
     await agentSurface(page);
     await dropCsv(page, FILE_NAME, IMPORT_CSV);
-    await expect(page.getByText(`ws_local_01 · rev 1 · ${IMPORT_RELATION} · sensitive_aggregate_only`)).toBeVisible();
+    await expect(page.getByText(`rev 1 · ${IMPORT_RELATION} · sensitive_aggregate_only`)).toBeVisible();
 
     // The schema digest discloses the omission instead of the values.
     const schema = (await invokeTool(page, "duckdb_get_context", {

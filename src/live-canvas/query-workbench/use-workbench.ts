@@ -47,7 +47,9 @@ export function useWorkbench(activeDatasetId: string): {
         source: resolved,
         sql,
         presentation: composePresentation(pickers),
-        initialView: "grid",
+        // Stay on the workbench: the results area below the editor shows the
+        // same artifact, so a run never yanks the tab away.
+        initialView: "query",
       });
     } finally {
       setRunning(false);

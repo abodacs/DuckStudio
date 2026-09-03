@@ -36,8 +36,8 @@ test.describe("walking skeleton @ rev 0", () => {
     await page.goto("/");
     await expect(page.getByText("rev 0 · no dataset")).toBeVisible();
     await expect(page.getByText(NO_UPLOAD_BADGE)).toBeVisible();
-    await expect(page.getByText("CONTROLS")).toBeVisible();
-    await expect(page.getByText("RESULTS")).toBeVisible();
+    await expect(page.getByText("CONTROLS", { exact: true })).toBeVisible();
+    await expect(page.getByText("RESULTS", { exact: true })).toBeVisible();
   });
 
   test("every evidence tab discloses its empty state", async ({ page }) => {

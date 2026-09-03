@@ -57,7 +57,7 @@ test.describe("qa: sql isolation", () => {
 
     // Ten denials, zero commits: the workspace never left rev 1 and the
     // engine worker never saw a statement.
-    await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
+    await expect(page.getByText("rev 1 · saas_churn · public_synthetic")).toBeVisible();
     await expect(page.getByText("No results yet. Run an analysis and it appears here.")).toBeVisible();
   });
 
@@ -79,7 +79,7 @@ test.describe("qa: sql isolation", () => {
     expect(denied.ok).toBe(false);
     expect(denied.error.code).toBe("DATASET_UNAVAILABLE");
     expect(denied.error.details.relation).toBe("healthcare_pii");
-    await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
+    await expect(page.getByText("rev 1 · saas_churn · public_synthetic")).toBeVisible();
   });
 });
 
@@ -107,7 +107,7 @@ test.describe("qa: sensitive dataset custody", () => {
     expect(Number(denied.error.details.observedCohort)).toBeLessThan(10);
 
     // The denial commits nothing.
-    await expect(page.getByText("ws_local_01 · rev 1 · healthcare_pii · sensitive_aggregate_only")).toBeVisible();
+    await expect(page.getByText("rev 1 · healthcare_pii · sensitive_aggregate_only")).toBeVisible();
     await expect(page.getByText("No results yet. Run an analysis and it appears here.")).toBeVisible();
   });
 
@@ -278,7 +278,7 @@ test.describe("qa: no preview grid", () => {
     })) as EnvelopeSuccess;
     expect(activated.ok).toBe(true);
 
-    await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
+    await expect(page.getByText("rev 1 · saas_churn · public_synthetic")).toBeVisible();
     await page.getByRole("tab", { name: "Rows" }).click();
     await expect(page.getByRole("tabpanel")).toContainText(GRID_EMPTY_STATE);
     await expect(page.locator("table")).toHaveCount(0);

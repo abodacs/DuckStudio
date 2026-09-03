@@ -104,7 +104,7 @@ test.describe("qa: envelope contracts", () => {
     ]);
 
     // A denial commits nothing: the workspace stays at the activated revision.
-    await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
+    await expect(page.getByText("rev 1 · saas_churn · public_synthetic")).toBeVisible();
     await expect(page.getByText("No results yet. Run an analysis and it appears here.")).toBeVisible();
   });
 

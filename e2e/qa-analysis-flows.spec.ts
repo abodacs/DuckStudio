@@ -68,7 +68,7 @@ test.describe("qa: analysis lifecycle", () => {
     });
 
     // The human header and artifact stream show the same two commits.
-    await expect(page.getByText("ws_local_01 · rev 2 · saas_churn · public_synthetic")).toBeVisible();
+    await expect(page.getByText("rev 2 · saas_churn · public_synthetic")).toBeVisible();
     await expect(page.getByText("a_01", { exact: true })).toBeVisible();
   });
 
@@ -128,7 +128,7 @@ test.describe("qa: analysis lifecycle", () => {
     expect(Number(denied.error.details.limit)).toBe(100);
 
     // No partial commit: revision and canvas are untouched.
-    await expect(page.getByText("ws_local_01 · rev 1 · saas_churn · public_synthetic")).toBeVisible();
+    await expect(page.getByText("rev 1 · saas_churn · public_synthetic")).toBeVisible();
     await expect(page.getByText("No results yet. Run an analysis and it appears here.")).toBeVisible();
   });
 

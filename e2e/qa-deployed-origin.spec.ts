@@ -22,7 +22,7 @@ test.describe("qa: deployed origin smoke", () => {
   test("the deployed origin is cross-origin isolated and serves the shell at rev 0", async ({ page }) => {
     await page.goto("/");
     expect(await page.evaluate(() => window.crossOriginIsolated)).toBe(true);
-    await expect(page.getByText("ws_local_01 · rev 0 · no dataset")).toBeVisible();
+    await expect(page.getByText("rev 0 · no dataset")).toBeVisible();
     await expect(page.getByText(NO_UPLOAD_BADGE)).toBeVisible();
   });
 

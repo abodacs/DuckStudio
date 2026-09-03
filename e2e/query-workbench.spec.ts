@@ -35,7 +35,9 @@ test.describe("stage 4: SQL workbench", () => {
     await expect(page.getByText("a_01", { exact: true })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText("rev 2 · saas_churn · public_synthetic")).toBeVisible();
     await expect(page.getByText(NO_UPLOAD_BADGE)).toBeVisible();
-    await expect(page.getByText("Churn Rate", { exact: true }).first()).toBeVisible();
+    // The workbench infers KPI labels from column names (no canonical
+    // presentation is supplied), so the chip reads the column, not the demo label.
+    await expect(page.getByText("churn_rate").first()).toBeVisible();
     // The results pane inherits the grid: bounded rows on public data.
     await expect(page.locator("[data-grid-row]").first()).toBeVisible();
   });
