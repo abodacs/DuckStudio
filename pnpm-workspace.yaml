@@ -15,3 +15,10 @@ allowBuilds:
 peerDependencyRules:
   allowedVersions:
     "@tanstack/zod-adapter>zod": "4"
+
+# `pnpm outdated` / `pnpm update` also cover the GitHub Actions referenced in
+# .github/workflows; updates rewrite refs to immutable commit hashes with the
+# release tag kept as a comment. Everything else in the supply chain is pinned
+# exact — the actions were the last mutable refs.
+update:
+  githubActions: true
