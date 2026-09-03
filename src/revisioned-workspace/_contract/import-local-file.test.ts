@@ -5,6 +5,7 @@ import { createCustodyKernel } from "../../dataset-custody/kernel";
 import {
   CompiledGetContextEventsEnvelopeSuccess as CompiledGetContextEvents,
   CompiledGetContextSchemaEnvelopeSuccess as CompiledGetContextSchema,
+  CompiledImportLocalFileEnvelopeSuccess,
   CompiledRunAnalysisEnvelopeSuccess as CompiledRunAnalysis,
 } from "../envelope";
 import {
@@ -82,6 +83,9 @@ describe("importLocalFile: the happy path", () => {
     const { store, intake, engine } = importStore();
     const ticketId = putTicket(intake, "my_sales.csv");
     const envelope = expectOk(await dispatchImport(store, ticketId, "my_sales.csv"));
+    // The import envelope parses against its own compiled success shape (§8.5
+    // carries the §8.2 data), exactly like the activation path pins.
+    expect(CompiledImportLocalFileEnvelopeSuccess.parse(envelope).ok).toBe(true);
     const relation = importedRelationName("my_sales.csv", intakeDigest("my_sales.csv", CSV_BYTES));
     expect(envelope.revision).toBe(1);
     expect(envelope.data).toEqual({
