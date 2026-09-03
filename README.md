@@ -1,64 +1,53 @@
-# DuckStudio
+<div align="center">
 
-DuckStudio is an agent-native, zero-upload data lab. DuckDB-WASM analyzes local data inside a browser worker while WebMCP lets an agent operate a governed workspace without receiving result rows or taking custody of the file.
+<img src="public/og-image.png" alt="DuckStudio — zero-upload, agent-native data lab" width="720" />
 
-The core idea is **controlled release**. A browser agent can observe both tool payloads and the page, so one custody policy governs what may enter either surface. Product intent and positioning: [`PRODUCT.md`](./PRODUCT.md).
+[![CI](https://github.com/abodacs/DuckStudio/actions/workflows/ci.yml/badge.svg)](https://github.com/abodacs/DuckStudio/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-00F2FE.svg)](./LICENSE)
+![Node](https://img.shields.io/badge/node-26-339933?logo=node.js&logoColor=white)
+![pnpm](https://img.shields.io/badge/pnpm-11.25.0-F69220?logo=pnpm&logoColor=white)
 
-## Status
+**Analyze local data with DuckDB-WASM. Let an AI agent operate the lab without receiving result rows — or custody of the file.**
 
-All slices of the one-day build are implemented: the walking skeleton deploys from CI, dataset custody and the DuckDB-WASM engine run in a worker, the revisioned workspace creates immutable artifacts, the agent control plane registers all four WebMCP tools, the evidence canvas paints the four views — measured KPI tiles, the lazy chart, the virtualized grid with policy suppression, and captured custody evidence — and the demo surface ships proof: preset cards and the one canonical prompt chip dispatch the same domain commands as the agent, the deploy and audit gates run in CI, and the submission pack lives in [`docs/submission.md`](./docs/submission.md). The slice tracker in [`docs/prd.md`](./docs/prd.md) §9 is canonical.
+DuckDB-WASM analyzes local data inside a browser worker while WebMCP lets an agent operate a governed workspace. The core idea is **controlled release**: a browser agent can observe both tool payloads and the page, so one custody policy governs what may enter either surface.
 
-- Shared language: [`CONTEXT.md`](./CONTEXT.md)
-- Product intent: [`PRODUCT.md`](./PRODUCT.md)
-- Agent and protocol design: [`docs/agent-system-design.md`](./docs/agent-system-design.md)
-- Build scope and acceptance: [`docs/prd.md`](./docs/prd.md)
-- Demo contract: [`docs/video-script.md`](./docs/video-script.md)
-- Implementation architecture: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
-- Decision records: [`docs/adr/`](./docs/adr)
-- Custody and safe release: [`SECURITY.md`](./SECURITY.md)
-- Workflow, tests, audit, browser setup: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
-- Agent behavior: [`AGENTS.md`](./AGENTS.md)
+[Quick start](#quick-start) · [Connect an agent](#connect-a-browser-agent) · [WebMCP tools](#webmcp-tools) · [Documentation](#documentation)
 
-## WebMCP Tools
+<img src="docs/assets/screenshots/insights.png" alt="DuckStudio workspace — KPI tiles and the churn scatter chart" width="960" />
 
-| Tool                           | API        | Purpose                                                                                    |
-| ------------------------------ | ---------- | ------------------------------------------------------------------------------------------ |
-| `duckdb_get_context`           | Imperative | Bootstrap or delta-read the actionable workspace state.                                    |
-| `duckdb_activate_dataset`      | Imperative | Activate an already local preset with revision and idempotency control.                    |
-| `duckdb_execute_sql_to_canvas` | Imperative | Run one bounded read-only analysis, create an artifact, infer presentation, and select it. |
-| `duckdb_verify_zero_egress`    | Imperative | Read scoped upload, release, transport, policy, and lineage evidence.                      |
+*One screen, two panes: controls and agent context on the left; measured evidence on the right — KPI tiles, the lazy ECharts boundary, the virtualized grid, and captured custody evidence.*
 
-All four tools are imperative — the page exposes no declarative form tools. Tool contracts, envelopes, and agent playbooks: [`docs/agent-system-design.md`](./docs/agent-system-design.md) §8 and §12. The pinned registration-API facts: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+</div>
 
-## Demo Presets
+## Why DuckStudio
 
-Two synthetic presets are generated in browser memory and activated by ID — `saas_churn` and `healthcare_pii`. You can also bring your own file: drop a CSV (≤200 MB, ≤5,000 columns) onto the Datasets card and it imports as the active dataset under the sensitive-by-default policy — in this tab's memory only, never uploaded. Pinned numbers, policies, and demo order: [`docs/prd.md`](./docs/prd.md) §6.
+- **Zero upload, proven live.** The header badge reads `0 Bytes of Dataset Uploaded` — kept honest by egress interception across `fetch`, `XMLHttpRequest`, `sendBeacon`, `WebSocket`, and `WebTransport`. Datasets live in this tab's memory only.
+- **Agent-native, not agent-tolerated.** Four WebMCP tools expose the same domain commands the human UI dispatches. The agent receives safe metadata, aggregate releases, stable artifact handles, and operation evidence — never raw rows.
+- **A real analytical engine.** DuckDB-WASM runs in an isolated Web Worker: bounded, read-only SQL over 250k-row presets, measured in milliseconds, entirely client-side.
+- **Every call compounds.** Each successful analysis lands as an immutable artifact carrying its SQL, schema, lineage, policy release, and measured runtime. Refinements source a prior artifact instead of recomputing.
 
-## Stack
+> **Status:** all slices of the one-day build are implemented; deploy and audit gates run in CI. The slice tracker in [`docs/prd.md`](./docs/prd.md) §9 is canonical. Submission pack: [`docs/submission.md`](./docs/submission.md).
 
-Vite, React, TypeScript, Tailwind CSS, and `@tanstack/react-router`, with `@duckdb/duckdb-wasm` in a Web Worker, ECharts behind a lazy boundary in `src/live-canvas/chart.tsx`, and self-hosted fonts. Full stack and platform rationale: [`PRODUCT.md`](./PRODUCT.md).
+## Inside the workspace
 
-## Platform Boundaries
+**Charts** — measured KPIs and the churn scatter, computed in-worker and painted client-side (the hero image above). **SQL & Lineage** — every artifact carries its SQL, hash, lineage, and the exact policy release.
 
-- **Single-threaded by configuration** — only the self-hosted `eh` and `mvp` DuckDB-WASM bundles ship, no `coi`/pthread bundle, so `selectBundle` returns `eh` and queries run on one thread. The shipped COOP/COEP isolation exists for the document, not for DuckDB threading.
-- **WebAssembly memory ceiling** — the browser's wasm memory limit (4 GB, sometimes lower per browser) applies unmanaged; the effective query limit is the custody-clamped budget — a 5,000 ms execution deadline and a 10,000-row result cursor, enforced inside the worker.
-- **No remote reads** — the SQL inspector rejects external URLs/files, so there are no range-request reads of remote files; the only sources are the two registered presets and locally imported CSV relations (drop-and-import, in-tab only — never URLs). Deny list: `docs/agent-system-design.md` §6.
+<img src="docs/assets/screenshots/sql-lineage.png" alt="SQL and lineage view showing artifact hash, lineage, and policy release" width="960" />
 
-Engine lifecycle and the custody → engine seam: [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+## Quick start
 
-## Local Development
-
-Prerequisites, both defined and enforced:
-
-- **Node 26** — `.nvmrc` (`nvm use` selects it), `engines.node` in `package.json`, and pnpm's `engineStrict` fail the install on any other major.
-- **pnpm 11.25.0** — pinned via `packageManager`; corepack (or pnpm ≥ 10.17's own manager) switches to it automatically.
-
-On a clean checkout, fetch the self-hosted DuckDB-WASM assets once — `pnpm build` fails without them:
+Prerequisites are defined and enforced: **Node 26** (`.nvmrc`, `engines.node`, pnpm `engineStrict`) and **pnpm 11.25.0** (pinned via `packageManager`).
 
 ```bash
 pnpm install
-pnpm duckdb:download    # fetch gitignored DuckDB-WASM assets; required before the first build
-pnpm dev                # dev server on http://localhost:5173
+pnpm duckdb:download   # one-time: fetch gitignored DuckDB-WASM assets; required before the first build
+pnpm dev               # dev server on http://localhost:5173
+```
+
+<details>
+<summary><strong>All scripts and tooling notes</strong></summary>
+
+```bash
 pnpm lint               # oxlint over the repo; --deny-warnings: any warning fails
 pnpm lint:strict        # the nine trust-seam files, raised rules, --deny-warnings
 pnpm typecheck          # tsc --noEmit
@@ -73,23 +62,27 @@ E2E launches Chrome with `--enable-features=WebMCPTesting --enable-experimental-
 
 Never commit to `main` — work on a feature branch and open a PR with [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md). Workflow rules: [`AGENTS.md`](./AGENTS.md). Tests, checks, and the pre-publish audit: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
-## Deploy (Cloudflare Pages)
+</details>
 
-The Pages project was created once with `--production-branch main`. Every push to `main` deploys from CI: after the quality and E2E jobs are green, the deploy job builds and runs `wrangler pages deploy dist --project-name duckstudio --branch main`, authenticated with the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets. Deploys ship the static `dist/` and inherit `public/_headers` (COOP/COEP/CORP) at the edge.
+## Connect a browser agent
 
-Preview deploys for a feature branch are manual:
+WebMCP requires **Chromium `146.0.7672.0` or higher** with the `#enable-webmcp-testing` flag, and tools register only in a secure context — HTTPS or `localhost`; on a LAN IP they do not register. Full setup steps (remote debugging, flag, reload): [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
-```bash
-pnpm exec wrangler pages deploy dist --project-name duckstudio
-```
+When `document.modelContext` is absent, the built-in **Agent Simulator** takes over — same workspace, same operations; only the language model is simulated.
 
-## Connect a Browser Agent
+## WebMCP tools
 
-WebMCP requires Chromium `146.0.7672.0` or higher with the `#enable-webmcp-testing` flag, and tools register only in a secure context — HTTPS or `localhost`; on a LAN IP they do not register. Full setup steps (remote debugging, flag, reload): [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+| Tool                           | Purpose                                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------------ |
+| `duckdb_get_context`           | Bootstrap or delta-read the actionable workspace state.                                    |
+| `duckdb_activate_dataset`      | Activate an already local preset with revision and idempotency control.                    |
+| `duckdb_execute_sql_to_canvas` | Run one bounded read-only analysis, create an artifact, infer presentation, and select it. |
+| `duckdb_verify_zero_egress`    | Read scoped upload, release, transport, policy, and lineage evidence.                      |
 
-When `document.modelContext` is absent, the built-in Agent Simulator takes over — same workspace, same operations; only the language model is simulated.
+All four tools are imperative — the page exposes no declarative form tools. Tool contracts, envelopes, and agent playbooks: [`docs/agent-system-design.md`](./docs/agent-system-design.md) §8 and §12. The pinned registration-API facts: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
-## How tools register
+<details>
+<summary><strong>How tools register</strong></summary>
 
 One imperative registration path with a module-owned `AbortController` (`src/agent-control-plane/registration.ts`):
 
@@ -107,9 +100,62 @@ if (registry && "registerTool" in registry) {
 
 Unregistering means aborting `registrationAbortController` — there is no `unregisterTool()`. A cross-origin iframe embedding the app must include `allow="tools"` in its Permissions Policy.
 
-## Project Structure
+</details>
 
-Implementation lives in eight module folders under `src/`, colocated by use case — UI, state, tests, and registrations stay together, with no top-level `components`, `hooks`, `utils`, `services`, or `types` buckets. The binding folder structure and module lifecycle: [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+## Demo presets
+
+Two synthetic presets are generated in browser memory and activated by ID. You can also bring your own file: drop a CSV (≤200 MB, ≤5,000 columns) onto the Datasets card and it imports as the active dataset under the sensitive-by-default policy — in this tab's memory only, never uploaded. Pinned numbers, policies, and demo order: [`docs/prd.md`](./docs/prd.md) §6.
+
+| Preset           | Rows                        | Policy                                                |
+| ---------------- | --------------------------- | ----------------------------------------------------- |
+| `saas_churn`     | 250,000 (~14.2 MB), public  | `public_synthetic` — row display permitted on artifacts |
+| `healthcare_pii` | 100,000, sensitive          | `sensitive_aggregate_only` — aggregates only, cohorts below 10 suppressed |
+
+## Guardrails
+
+- **Bounded work** — a 5,000 ms execution deadline, a 10,000-row result cursor, 2,000 chart points, 8 KB tool summaries, and 20 retained artifacts, enforced inside the worker.
+- **Read-only SQL only** — one `SELECT`/`WITH` statement with parameter bindings. DDL, DML, transactions, `ATTACH`, `COPY`, exports, URLs, and external scans are rejected. Deny list: [`docs/agent-system-design.md`](./docs/agent-system-design.md) §6.
+- **Deterministic control** — mutations require `expectedRevision` and an idempotency key; retries are safe; failures carry stable error codes and legal next actions.
+- **Honest evidence** — the badge claims zero dataset upload bytes, nothing more. Runtime telemetry is operational evidence, not a formal proof.
+
+## Platform boundaries
+
+- **Single-threaded by configuration** — only the self-hosted `eh` and `mvp` DuckDB-WASM bundles ship, no `coi`/pthread bundle, so `selectBundle` returns `eh` and queries run on one thread. The shipped COOP/COEP isolation exists for the document, not for DuckDB threading.
+- **WebAssembly memory ceiling** — the browser's wasm memory limit (4 GB, sometimes lower per browser) applies unmanaged; the effective query limit is the custody-clamped budget enforced inside the worker.
+- **No remote reads** — the SQL inspector rejects external URLs/files, so there are no range-request reads of remote files; the only sources are the two registered presets and locally imported CSV relations (drop-and-import, in-tab only — never URLs).
+
+Engine lifecycle and the custody → engine seam: [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+
+## Stack
+
+Vite, React, TypeScript, Tailwind CSS, and `@tanstack/react-router`, with `@duckdb/duckdb-wasm` in a Web Worker, ECharts behind a lazy boundary in `src/live-canvas/chart.tsx`, and self-hosted fonts. Full stack and platform rationale: [`PRODUCT.md`](./PRODUCT.md).
+
+## Deploy (Cloudflare Pages)
+
+Every push to `main` deploys from CI: after the quality and E2E jobs are green, the deploy job builds and runs `wrangler pages deploy dist --project-name duckstudio --branch main`, authenticated with the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets. Deploys ship the static `dist/` and inherit `public/_headers` (COOP/COEP/CORP) at the edge.
+
+Preview deploys for a feature branch are manual:
+
+```bash
+pnpm exec wrangler pages deploy dist --project-name duckstudio
+```
+
+## Documentation
+
+Each fact lives in one canonical document; the others derive from it.
+
+| Document                                                                        | Owns                                                              |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`PRODUCT.md`](./PRODUCT.md)                                                    | Product purpose, positioning, principles, non-negotiable invariants |
+| [`docs/agent-system-design.md`](./docs/agent-system-design.md)                   | Tool schemas, state mechanics, policy rules, envelopes, errors, agent playbooks |
+| [`docs/prd.md`](./docs/prd.md)                                                   | One-day scope, implementation slices, UI behavior, acceptance criteria |
+| [`CONTEXT.md`](./CONTEXT.md)                                                     | Shared language                                                    |
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md)                                           | Folder structure, command path, state rules, module lifecycle      |
+| [`SECURITY.md`](./SECURITY.md)                                                   | Custody and safe-release rules                                     |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md)                                           | Tests, checks, the pre-publish audit, browser setup                |
+| [`docs/video-script.md`](./docs/video-script.md)                                 | Demo contract (derived from the PRD)                               |
+| [`docs/adr/`](./docs/adr)                                                        | Decision records                                                   |
+| [`AGENTS.md`](./AGENTS.md)                                                       | Agent behavior and document authority                              |
 
 ## Resources
 
@@ -120,4 +166,4 @@ Implementation lives in eight module folders under `src/`, colocated by use case
 
 ## License
 
-MIT.
+[MIT](./LICENSE).
