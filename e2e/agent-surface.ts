@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { SAAS_CHURN_CANONICAL_SQL } from "../src/demo-presets/canonical-sql";
 
 /**
@@ -76,6 +76,48 @@ export async function invokeTool(page: Page, name: string, input: unknown): Prom
 /** Stringify that tolerates BigInt row values crossing the structured clone. */
 export function stableJson(value: unknown): string {
   return JSON.stringify(value, (_key, entry) => (typeof entry === "bigint" ? Number(entry) : entry));
+}
+
+/**
+ * The systematic failure-envelope assertion (agent-webmcp-interaction
+ * feature: "errors teach recovery instead of leaking internals"). Every
+ * failure must carry a stable code, a concise human message, retryability,
+ * and recovery-useful details; never raw rows, the caller's sensitive
+ * values, or a stack trace; and `nextActions` exactly when the §9 table
+ * names an executable recovery. Every new denial test rides this helper so
+ * the promise is asserted the same way everywhere.
+ */
+const EXECUTABLE_RECOVERY = new Set([
+  "STALE_REVISION",
+  "DATASET_UNAVAILABLE",
+  "ARTIFACT_UNAVAILABLE",
+  "OPERATION_CONFLICT",
+  "INTERNAL_ERROR",
+]);
+
+export function assertFailureEnvelope(
+  envelope: Envelope,
+  sensitiveValues: readonly string[] = [],
+): void {
+  expect(envelope.ok).toBe(false);
+  if (envelope.ok) return;
+  const { error, nextActions } = envelope;
+  expect(error.code).toMatch(/^[A-Z][A-Z_]+$/);
+  expect(error.message.length).toBeGreaterThan(0);
+  expect(error.message.length).toBeLessThanOrEqual(300);
+  expect(typeof error.retryable).toBe("boolean");
+  expect(error.details).toEqual(expect.any(Object));
+
+  const serialized = stableJson({ error, nextActions });
+  for (const value of sensitiveValues) {
+    expect(serialized).not.toContain(value);
+  }
+  // Stack frames look like "at fn (file:12:3)" — never cross custody.
+  expect(serialized).not.toMatch(/at .*:\d+:\d+/);
+
+  if (EXECUTABLE_RECOVERY.has(error.code)) {
+    expect(nextActions.length).toBeGreaterThan(0);
+  }
 }
 
 /** Recursively collects every object key in a JSON-safe value. */

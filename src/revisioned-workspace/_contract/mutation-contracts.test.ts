@@ -754,3 +754,55 @@ describe("refinement against a live relation (ticket 36's query acceptance)", ()
     }
   });
 });
+
+describe("chart downsampling (grilling 34: commit-time, disclosed)", () => {
+  it("commits the budgeted points, reports the emitted count, and keeps the spec", async () => {
+    // Nine materialized rows against a five-point chart budget: the warning
+    // discloses {requested, emitted} while the committed spec is unchanged.
+    const rows = Array.from({ length: 40 }, (_, index) => ({ tickets: index, churn_rate: 0.1 + index / 100 }));
+    const engine = fakeEngine((decision) => {
+      if (decision.positionalSql.includes("churn_rate")) {
+        return Promise.resolve({
+          schema: [
+            { name: "tickets", type: "INTEGER" },
+            { name: "churn_rate", type: "DOUBLE" },
+          ],
+          batches: [
+            {
+              columns: [
+                { name: "tickets", type: "INTEGER" },
+                { name: "churn_rate", type: "DOUBLE" },
+              ],
+              rowCount: rows.length,
+              values: {
+                tickets: rows.map((row) => row.tickets),
+                churn_rate: rows.map((row) => row.churn_rate),
+              },
+            },
+          ],
+          metrics: { executionMs: 5, materializedRows: rows.length, chartPoints: rows.length },
+        });
+      }
+      return defaultFakeExecute(decision);
+    });
+    const store = createStore(engine);
+    await activateSaasChurn(store);
+
+    const envelope = await runChurn(store, "downsample-01", {
+      sql: "SELECT tickets, churn_rate FROM saas_churn GROUP BY tickets, churn_rate ORDER BY tickets",
+      presentation: { chart: { type: "scatter", x: "tickets", y: "churn_rate", maxPoints: 10 } },
+    });
+    if (!envelope.ok) throw new Error("expected commit: " + JSON.stringify(envelope.error ?? null));
+    const parsed = CompiledRunAnalysisEnvelopeSuccess.parse(envelope);
+    expect(parsed.warnings.map((warning) => warning.code)).toContain("CHART_DOWNSAMPLED");
+    const warning = parsed.warnings.find((entry) => entry.code === "CHART_DOWNSAMPLED");
+    expect(warning?.details).toMatchObject({ requested: 40, emitted: 10 });
+    expect(parsed.data.metrics.chartPoints).toBe(10);
+    expect(parsed.data.summary.chart?.pointCount).toBe(10);
+    // The committed specification is unchanged by downsampling — read from
+    // the committed record (the §8.3 response carries no presentation).
+    const committed = store.getSnapshot().artifacts[0]?.artifact;
+    expect(committed?.presentation.chart?.maxPoints).toBe(10);
+    expect(committed?.presentation.chart?.x).toBe("tickets");
+  });
+});

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   agentSurface,
+  assertFailureEnvelope,
   HEALTHCARE_ACTIVATE,
   invokeTool,
   type EnvelopeFailure,
@@ -39,6 +40,9 @@ test.describe("qa: sql isolation", () => {
       "INSTALL httpfs",
       "LOAD httpfs",
       "SELECT 'https://example.com/exfil'",
+      "PRAGMA database_list",
+      "BEGIN; SELECT COUNT(*) FROM saas_churn; COMMIT",
+      "SELECT * FROM read_csv_auto('/data/secret.csv')",
     ];
 
     for (const [index, sql] of unsafeStatements.entries()) {
@@ -53,6 +57,7 @@ test.describe("qa: sql isolation", () => {
       expect(denied.error.code, `expected UNSAFE_SQL for: ${sql}`).toBe("UNSAFE_SQL");
       expect(denied.error.retryable, `expected non-retryable for: ${sql}`).toBe(false);
       expect(String(denied.error.details.blockedConstruct), `expected a named construct for: ${sql}`).toBeTruthy();
+      assertFailureEnvelope(denied, ["tickets", "churn_rate", "mrr"]);
     }
 
     // Ten denials, zero commits: the workspace never left rev 1 and the
@@ -196,7 +201,37 @@ test.describe("qa: sensitive dataset custody", () => {
     expect(denied.ok).toBe(false);
     expect(denied.error.code).toBe("POLICY_DENIED");
     expect(denied.error.message).toContain("sensitive_aggregate_only");
+    assertFailureEnvelope(denied);
     await expect(page.getByText("No results yet. Run an analysis and it appears here.")).toBeVisible();
+  });
+
+  test("an unsafe supplied presentation is denied with blockedFields and the permitted spec", async ({
+    page,
+  }) => {
+    await agentSurface(page);
+    await invokeTool(page, "duckdb_activate_dataset", HEALTHCARE_ACTIVATE);
+    const denied = (await invokeTool(page, "duckdb_execute_sql_to_canvas", {
+      source: { kind: "dataset", id: "healthcare_pii" },
+      sql: "SELECT diagnosis, COUNT(*) AS patients FROM healthcare_pii GROUP BY diagnosis",
+      bindings: {},
+      // The one illegal element: a raw grid on a sensitive dataset.
+      presentation: { grid: { visible: true } },
+      expectedRevision: 1,
+      idempotencyKey: "qa5-presentation-01",
+    })) as EnvelopeFailure;
+    expect(denied.ok).toBe(false);
+    expect(denied.error.code).toBe("POLICY_DENIED");
+    expect(denied.error.details.blockedFields).toBe("grid");
+    // The nearest legal spec rides along for the one-click apply.
+    const permitted = JSON.parse(String(denied.error.details.permittedPresentation)) as {
+      grid?: { visible: boolean };
+      kpis?: unknown[];
+    };
+    expect(permitted.grid).toEqual({ visible: false });
+    expect(permitted.kpis?.length).toBeGreaterThan(0);
+    assertFailureEnvelope(denied);
+    // No downgraded artifact: the denial commits nothing.
+    await expect(page.getByText("rev 1 · healthcare_pii · sensitive_aggregate_only")).toBeVisible();
   });
 });
 

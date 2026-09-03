@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { agentSurface, invokeTool, type EnvelopeSuccess, type SurfaceWindow } from "./agent-surface";
+import { agentSurface, assertFailureEnvelope, invokeTool, type EnvelopeSuccess, type SurfaceWindow } from "./agent-surface";
 import { NO_UPLOAD_BADGE } from "../src/revisioned-workspace/projection";
 import { intakeDigest, importedRelationName } from "../src/revisioned-workspace/intake-tickets";
 
@@ -105,6 +105,43 @@ test.describe("slice 7: local file import", () => {
     // the badge never moved.
     await expect(page.getByText("rev 0 · no dataset")).toBeVisible();
     await expect(page.getByText(NO_UPLOAD_BADGE)).toBeVisible();
+  });
+
+  test("digest identity end to end: the same file rebuilds the same relation, different content a different one", async ({
+    page,
+  }) => {
+    await agentSurface(page);
+    await dropCsv(page, FILE_NAME, IMPORT_CSV);
+    await expect(page.getByText(`rev 1 · ${IMPORT_RELATION} · sensitive_aggregate_only`)).toBeVisible();
+
+    // A different file behind the same stem derives a different digest, so
+    // the slug collision resolves to a distinct relation.
+    const otherCsv = IMPORT_CSV.replace("east", "west");
+    const otherRelation = importedRelationName(FILE_NAME, intakeDigest(FILE_NAME, new TextEncoder().encode(otherCsv)));
+    expect(otherRelation).not.toBe(IMPORT_RELATION);
+    await dropCsv(page, FILE_NAME, otherCsv);
+    await expect(page.getByText(`rev 2 · ${otherRelation} · sensitive_aggregate_only`)).toBeVisible();
+
+    // Re-importing the first file rebuilds its relation in place (CREATE OR
+    // REPLACE) — digest equality, observable in the header.
+    await dropCsv(page, FILE_NAME, IMPORT_CSV);
+    await expect(page.getByText(`rev 3 · ${IMPORT_RELATION} · sensitive_aggregate_only`)).toBeVisible();
+  });
+
+  test("analysis before any import is refused with the real local-file next action", async ({ page }) => {
+    await agentSurface(page);
+    const denied = (await invokeTool(page, "duckdb_execute_sql_to_canvas", {
+      source: { kind: "dataset", id: "saas_churn" },
+      sql: "SELECT COUNT(*) AS n FROM saas_churn",
+      bindings: {},
+      expectedRevision: 0,
+      idempotencyKey: "e2e-import-refused-01",
+    })) as EnvelopeFailure;
+    assertFailureEnvelope(denied);
+    expect(denied.error.code).toBe("DATASET_UNAVAILABLE");
+    // The human action is real: the dropzone on this very page performs it.
+    expect(denied.nextActions).toContainEqual({ kind: "human_action", action: "select_local_file" });
+    await expect(page.getByRole("button", { name: "Drop a CSV here — it never leaves this tab." })).toBeVisible();
   });
 
   test("imported direct identifiers reach metadata, never the relation — the mute test holds", async ({ page }) => {
