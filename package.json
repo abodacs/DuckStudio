@@ -21,7 +21,6 @@
     "verify:webmcp": "node scripts/verify-webmcp-surface.mjs"
   },
   "dependencies": {
-    "@base-ui-components/react": "1.0.0-rc.0",
     "@codemirror/commands": "6.11.0",
     "@codemirror/lang-sql": "6.10.0",
     "@codemirror/language": "6.12.4",
