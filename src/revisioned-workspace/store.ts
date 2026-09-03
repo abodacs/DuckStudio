@@ -803,58 +803,79 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     const summary = measureSummary(presentation.spec, result, downsample.emitted);
 
     // ---- POINT OF NO RETURN: one synchronous in-memory commit, zero awaits ----
+    // A throw inside this section used to escape dispatch as a rejection:
+    // the operation stayed `running` (the slot never freed), every later
+    // mutation conflicted, and the materialized relation leaked. The catch
+    // settles it like every other failure path.
+    const preCommit = workspace;
     const before = projectWorkspace(workspace);
-    const record = graph.append({
-      source: input.source,
-      sourceRevision: workspace.revision,
-      sql: input.sql,
-      sqlHash: sha256Hex(input.sql),
-      bindings: redactBindings(input.bindings, authorized.decision.redactedBindingKeys),
-      schema: classifiedSchema,
-      rowCount: result.metrics.materializedRows,
-      policy: source.policy,
-      release: release.release,
-      presentation: presentation.spec,
-      metrics,
-      createdAt: now(),
-      summary,
-    });
-    const revision = workspace.revision + 1;
-    const artifactId = record.artifact.artifactId;
-    // Page memory lands with the commit (grilling 51): the bounded row
-    // cache and the §8.4 evidence snapshot the Custody view and the
-    // suppression counters merge synchronously from the projection.
-    pageMemory.captureRows(
-      artifactId,
-      captureRows(
-        result,
-        Math.min(
-          authorized.decision.budget.resultRows,
-          presentation.spec.grid?.maxRows ?? authorized.decision.budget.resultRows,
+    let record: ReturnType<typeof graph.append>;
+    let artifactId: string;
+    try {
+      record = graph.append({
+        source: input.source,
+        sourceRevision: workspace.revision,
+        sql: input.sql,
+        sqlHash: sha256Hex(input.sql),
+        bindings: redactBindings(input.bindings, authorized.decision.redactedBindingKeys),
+        schema: classifiedSchema,
+        rowCount: result.metrics.materializedRows,
+        policy: source.policy,
+        release: release.release,
+        presentation: presentation.spec,
+        metrics,
+        createdAt: now(),
+        summary,
+      });
+      const revision = workspace.revision + 1;
+      artifactId = record.artifact.artifactId;
+      // Page memory lands with the commit (grilling 51): the bounded row
+      // cache and the §8.4 evidence snapshot the Custody view and the
+      // suppression counters merge synchronously from the projection.
+      pageMemory.captureRows(
+        artifactId,
+        captureRows(
+          result,
+          Math.min(
+            authorized.decision.budget.resultRows,
+            presentation.spec.grid?.maxRows ?? authorized.decision.budget.resultRows,
+          ),
         ),
-      ),
-    );
-    pageMemory.captureEvidence(artifactId, {
-      ...kernel.evidence({ kind: "artifact", id: artifactId }, record.artifact.policy),
-      lineage: [...record.artifact.lineage, { kind: "artifact", id: artifactId }],
-    });
-    replaceWorkspace({
-      ...workspace,
-      revision,
-      selectedArtifactId: artifactId,
-      recentArtifactIds: [artifactId, ...workspace.recentArtifactIds],
-      artifacts: [...workspace.artifacts, record],
-      operations: workspace.operations.map((operation) =>
-        operation.operationId === operationId
-          ? { ...operation, status: "succeeded", artifactId, finishedAt: now() }
-          : operation,
-      ),
-    });
-    appendEvents([
-      { revision, at: now(), kind: "analysis_succeeded", operationId, artifactId },
-      { revision, at: now(), kind: "artifact_selected", operationId, artifactId },
-    ]);
-    releaseSlot();
+      );
+      pageMemory.captureEvidence(artifactId, {
+        ...kernel.evidence({ kind: "artifact", id: artifactId }, record.artifact.policy),
+        lineage: [...record.artifact.lineage, { kind: "artifact", id: artifactId }],
+      });
+      replaceWorkspace({
+        ...workspace,
+        revision,
+        selectedArtifactId: artifactId,
+        recentArtifactIds: [artifactId, ...workspace.recentArtifactIds],
+        artifacts: [...workspace.artifacts, record],
+        operations: workspace.operations.map((operation) =>
+          operation.operationId === operationId
+            ? { ...operation, status: "succeeded", artifactId, finishedAt: now() }
+            : operation,
+        ),
+      });
+      appendEvents([
+        { revision, at: now(), kind: "analysis_succeeded", operationId, artifactId },
+        { revision, at: now(), kind: "artifact_selected", operationId, artifactId },
+      ]);
+      releaseSlot();
+    } catch {
+      // Undo any partial in-memory mutation, drop the materialized relation,
+      // and settle with an envelope. The caught error is not logged — it may
+      // quote result values (SECURITY.md); the envelope is the disclosure.
+      replaceWorkspace(preCommit);
+      await engine.dropRelation(identity.relationName).catch(() => undefined);
+      return settleFailure(operationId, input.idempotencyKey, fingerprint, {
+        code: "INTERNAL_ERROR",
+        message: "The analysis failed while committing; read context and retry.",
+        retryable: true,
+        details: { phase: "commit" },
+      });
+    }
 
     const warnings: Extract<Envelope, { ok: true }>["warnings"] = authorized.warnings.map((budgetWarning) => ({
       code: budgetWarning.code,

@@ -166,6 +166,113 @@ describe("atomic runAnalysis path (ticket 37)", () => {
   });
 });
 
+describe("analysis commit settles with an envelope, never a throw", () => {
+  it("commits a non-finite KPI measurement as an honest null, not a crash", async () => {
+    const engine = fakeEngine((decision) => {
+      if (decision.positionalSql.includes("min_cohort")) return defaultFakeExecute(decision);
+      const schema = [{ name: "rate", type: "DOUBLE" }];
+      return Promise.resolve({
+        schema,
+        batches: [{ columns: schema, rowCount: 1, values: { rate: [1e308 * 10] } }],
+        metrics: { executionMs: 1, materializedRows: 1, chartPoints: 0 },
+      });
+    });
+    const store = storeWith(engine);
+    await activateSaasChurn(store);
+    const envelope = await store.dispatch({
+      kind: "runAnalysis",
+      input: {
+        source: { kind: "dataset", id: "saas_churn" },
+        sql: "SELECT 1e308 * 10 AS rate FROM saas_churn",
+        bindings: {},
+        expectedRevision: 1,
+        idempotencyKey: "commit-nonfinite-01",
+      },
+    });
+    expect(envelope.ok).toBe(true);
+    if (envelope.ok) {
+      const summary = (envelope.data as { summary: { kpis: { value: number | null }[] } }).summary;
+      expect(summary.kpis.map((kpi) => kpi.value)).toEqual([null]);
+    }
+  });
+
+  it("commits an over-long alias cleanly: the inferred KPI label truncates to the schema bound", async () => {
+    const alias65 = "y".repeat(65);
+    const engine = fakeEngine((decision) => {
+      if (decision.positionalSql.includes("min_cohort")) return defaultFakeExecute(decision);
+      const schema = [{ name: alias65, type: "DOUBLE" }];
+      return Promise.resolve({
+        schema,
+        batches: [{ columns: schema, rowCount: 1, values: { [alias65]: [2] } }],
+        metrics: { executionMs: 1, materializedRows: 1, chartPoints: 0 },
+      });
+    });
+    const store = storeWith(engine);
+    await activateSaasChurn(store);
+    const envelope = await store.dispatch({
+      kind: "runAnalysis",
+      input: {
+        source: { kind: "dataset", id: "saas_churn" },
+        sql: `SELECT 1 AS "${alias65}" FROM saas_churn`,
+        bindings: {},
+        expectedRevision: 1,
+        idempotencyKey: "commit-label-01",
+      },
+    });
+    expect(envelope.ok).toBe(true);
+    if (envelope.ok) {
+      const kpis = (envelope.data as { summary: { kpis: { label: string }[] } }).summary.kpis;
+      expect(kpis).toHaveLength(1);
+      expect(kpis[0]?.label.length).toBeLessThanOrEqual(60);
+    }
+  });
+
+  it("settles a residual commit-phase violation with an envelope and frees the slot", async () => {
+    // A 100-char result column overflows ArtifactSummarySchema's KPI column
+    // bound (80) inside graph.append — the commit-phase throw the guard
+    // converts into a recoverable envelope.
+    const longName = "x".repeat(100);
+    const engine = fakeEngine((decision) => {
+      if (!decision.positionalSql.includes(longName)) return defaultFakeExecute(decision);
+      const schema = [{ name: longName, type: "DOUBLE" }];
+      return Promise.resolve({
+        schema,
+        batches: [{ columns: schema, rowCount: 1, values: { [longName]: [1.5] } }],
+        metrics: { executionMs: 1, materializedRows: 1, chartPoints: 0 },
+      });
+    });
+    const store = storeWith(engine);
+    await activateSaasChurn(store);
+    const envelope = await store.dispatch({
+      kind: "runAnalysis",
+      input: {
+        source: { kind: "dataset", id: "saas_churn" },
+        sql: `SELECT 1 AS "${longName}" FROM saas_churn`,
+        bindings: {},
+        expectedRevision: 1,
+        idempotencyKey: "commit-overflow-01",
+      },
+    });
+    expect(envelope.ok).toBe(false);
+    if (!envelope.ok) {
+      expect(envelope.error.code).toBe("INTERNAL_ERROR");
+      expect(envelope.error.details.phase).toBe("commit");
+    }
+    // The operation is terminal, not stuck `running` — and the pre-commit
+    // state is intact: no revision bump, no artifact committed or selected.
+    const snapshot = store.getSnapshot();
+    expect(snapshot.operations[snapshot.operations.length - 1]?.status).toBe("failed");
+    expect(snapshot.revision).toBe(1);
+    expect(snapshot.recentArtifactIds).not.toContain("a_01");
+    expect(snapshot.selectedArtifactId).toBeNull();
+    // The materialized relation did not leak.
+    expect(engine.dropped).toEqual(["artifact_a_01"]);
+    // The slot freed: the next dispatch is not OPERATION_CONFLICT.
+    const next = await runChurn(store, "post-commit-failure-01");
+    expect(next.ok).toBe(true);
+  });
+});
+
 describe("exact replay and key conflicts (grilling 33; §15.9)", () => {
   it("replays the original envelope verbatim — original revision, no duplicate artifact", async () => {
     const engine = fakeEngine();
