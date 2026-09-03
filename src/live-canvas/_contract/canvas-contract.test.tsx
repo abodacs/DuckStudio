@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { CustodyView } from "../custody-view";
-import { DataGridView } from "../data-grid-view";
+import { DataGridView, GRID_EMPTY_STATE } from "../data-grid-view";
 import { InsightsView } from "../insights-view";
 import { WorkspaceShell } from "../../studio-shell/shell";
 import { workspaceStore } from "../../revisioned-workspace/store";
@@ -123,7 +123,7 @@ describe("healthcare suppression contract (grilling 51 item 2)", () => {
     const { container } = render(<DataGridView />);
 
     // The honest empty state, and not one record-shaped element.
-    expect(screen.getByText("No artifact — the grid paints rows only from an approved artifact.")).toBeDefined();
+    expect(screen.getByText(GRID_EMPTY_STATE)).toBeDefined();
     expect(container.querySelectorAll("[data-grid-row]")).toHaveLength(0);
   });
 
@@ -133,7 +133,7 @@ describe("healthcare suppression contract (grilling 51 item 2)", () => {
 
     // The pinned banner copy, with the identifier line from the release data.
     expect(screen.getByRole("alert")).toBeDefined();
-    expect(screen.getByText("Data Grid — suppressed by policy")).toBeDefined();
+    expect(screen.getByText("Rows — suppressed by policy")).toBeDefined();
     expect(screen.getByText(/Raw records never paint on the shared canvas/)).toBeDefined();
     expect(screen.getByText(/k ≥ 10/)).toBeDefined();
     expect(screen.getByText("mrn")).toBeDefined();
@@ -179,16 +179,23 @@ describe("public grid virtualization contract (grilling 51 item 1)", () => {
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.length).toBeLessThanOrEqual(1 + 2 * 8);
 
-    // Transform-only scroll: the canvas keeps its full height; the window
-    // moves by translateY, and the DOM row count stays bounded.
+    // The grid reads the viewport's clientHeight through the virtualizer's
+    // rect observer, so the test hands jsdom a real one (10 rows) and lets
+    // it re-measure on a scroll event before the deep jump.
     const viewport = container.querySelector<HTMLElement>("[data-grid-viewport]");
     if (!viewport) throw new Error("expected the grid viewport");
     const canvas = container.querySelector<HTMLElement>("[data-grid-canvas]");
     expect(canvas?.style.height).toBe("320000px");
+    Object.defineProperty(viewport, "clientHeight", { configurable: true, value: 320 });
+    fireEvent.scroll(viewport);
+    expect(container.querySelectorAll("[data-grid-row]").length).toBeLessThanOrEqual(10 + 2 * 8);
+
+    // Transform-only scroll: the canvas keeps its full height; the window
+    // moves by translateY, and the DOM row count stays bounded.
     viewport.scrollTop = 3200;
     fireEvent.scroll(viewport);
     expect(windowEl.style.transform).toBe("translateY(2944px)");
-    expect(container.querySelectorAll("[data-grid-row]").length).toBeLessThanOrEqual(1 + 2 * 8);
+    expect(container.querySelectorAll("[data-grid-row]").length).toBeLessThanOrEqual(10 + 2 * 8);
   });
 });
 
@@ -242,7 +249,7 @@ describe("tab and dispatch contracts (§7.2, §15.16)", () => {
     render(<WorkspaceShell />);
     const spy = vi.spyOn(workspaceStore, "dispatch");
 
-    for (const label of ["Insights", "Data Grid", "SQL & Lineage", "Custody"]) {
+    for (const label of ["Charts", "Query", "Rows", "SQL & Lineage", "Zero Upload"]) {
       const tab = screen.getByRole("tab", { name: label });
       fireEvent.click(tab);
       expect(tab.getAttribute("aria-selected")).toBe("true");
@@ -346,7 +353,7 @@ describe("judge-path gestures (slice 6: preset cards, the canonical prompt chip,
   }
 
   const presetCard = (name: string | RegExp) =>
-    within(screen.getByRole("group", { name: "Dataset presets" })).getByRole("button", { name });
+    within(screen.getByRole("group", { name: "Datasets" })).getByRole("button", { name });
 
   it("a preset-card click dispatches activateDataset once with a fresh key", () => {
     render(<WorkspaceShell />);
@@ -446,13 +453,13 @@ describe("judge-path gestures (slice 6: preset cards, the canonical prompt chip,
     current = await churnWorkspace();
     current.appendCapability("simulator_only");
     render(<WorkspaceShell />);
-    expect(screen.getByText("simulator_only · same workspace")).toBeDefined();
+    expect(screen.getByText("built-in agent")).toBeDefined();
     expect(screen.queryByText(/connecting/)).toBeNull();
     cleanup();
 
     current = await churnWorkspace();
     current.appendCapability("webmcp_native");
     render(<WorkspaceShell />);
-    expect(screen.getByText("webmcp_native")).toBeDefined();
+    expect(screen.getByText("agent connected")).toBeDefined();
   });
 });

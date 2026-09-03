@@ -1,5 +1,6 @@
 import type { ErrorCode } from "../revisioned-workspace/schemas";
 import type { AuthorizedDecision } from "../dataset-custody/schemas";
+import type { ColumnClassification } from "../demo-presets/schemas";
 
 /**
  * The engine protocol (ADR 0002; grilling 21): one typed request/response
@@ -17,6 +18,23 @@ import type { AuthorizedDecision } from "../dataset-custody/schemas";
 export interface EngineColumn {
   readonly name: string;
   readonly type: string;
+}
+
+/**
+ * An intake-described column: the sniffed name/type pair plus the
+ * name-heuristic classification that decides metadata disclosure and
+ * relation omission (slice 7).
+ */
+export interface DescribedColumn extends EngineColumn {
+  readonly classification: ColumnClassification;
+}
+
+/** The intake outcome: the materialized relation plus the full described schema for metadata. */
+export interface IntakeResult {
+  readonly relationName: string;
+  readonly rowCount: number;
+  /** Every described column, direct identifiers included — metadata, not the relation. */
+  readonly columns: readonly DescribedColumn[];
 }
 
 /** One bounded, columnar result batch (structured-clone safe). */
@@ -90,7 +108,15 @@ export type EngineRequest =
       readonly relationName: string;
       readonly result: ExecutionResult;
     }
-  | { readonly id: number; readonly kind: "drop"; readonly relationName: string };
+  | { readonly id: number; readonly kind: "drop"; readonly relationName: string }
+  /** Slice 7: the dropped file's bytes, out-of-band via the intake ticket. */
+  | {
+      readonly id: number;
+      readonly kind: "intake";
+      readonly relation: string;
+      readonly name: string;
+      readonly bytes: Uint8Array;
+    };
 
 /** Response union — the `kind` echoes the request `kind`. */
 export type EngineResponse =
@@ -111,7 +137,9 @@ export type EngineResponse =
       readonly failure: EngineFailure;
     }
   | { readonly id: number; readonly kind: "drop"; readonly ok: true; readonly result: MaterializedRelation }
-  | { readonly id: number; readonly kind: "drop"; readonly ok: false; readonly failure: EngineFailure };
+  | { readonly id: number; readonly kind: "drop"; readonly ok: false; readonly failure: EngineFailure }
+  | { readonly id: number; readonly kind: "intake"; readonly ok: true; readonly result: IntakeResult }
+  | { readonly id: number; readonly kind: "intake"; readonly ok: false; readonly failure: EngineFailure };
 
 /**
  * The transport both ends agree on. A `Worker` in the browser, an in-process
@@ -140,6 +168,8 @@ export interface EngineClient {
   execute(decision: AuthorizedDecision): Promise<ExecutionResult>;
   materializeRelation(relationName: string, result: ExecutionResult): Promise<MaterializedRelation>;
   dropRelation(relationName: string): Promise<void>;
+  /** Registers the dropped file's bytes, materializes the relation, describes the schema (slice 7). */
+  intakeFile(input: { readonly relation: string; readonly name: string; readonly bytes: Uint8Array }): Promise<IntakeResult>;
 }
 
 /** Distributive `Omit` so the request union stays a union without `id`. */
@@ -169,7 +199,9 @@ export function createEngineClient(transport: EngineTransport): EngineClient {
     pending.delete(response.id);
     clearTimeout(entry.timer);
     if (response.ok) {
-      (entry.resolve as (value: WarmResult | ExecutionResult | MaterializedRelation) => void)(response.result);
+      (entry.resolve as (value: WarmResult | ExecutionResult | MaterializedRelation | IntakeResult) => void)(
+        response.result,
+      );
     } else {
       entry.reject(response.failure);
     }
@@ -184,7 +216,7 @@ export function createEngineClient(transport: EngineTransport): EngineClient {
     });
   });
 
-  function request<T extends WarmResult | ExecutionResult | MaterializedRelation>(
+  function request<T extends WarmResult | ExecutionResult | MaterializedRelation | IntakeResult>(
     message: EngineRequestInput,
   ): Promise<T> {
     const id = nextId++;
@@ -211,5 +243,6 @@ export function createEngineClient(transport: EngineTransport): EngineClient {
     dropRelation: async (relationName) => {
       await request<MaterializedRelation>({ kind: "drop", relationName });
     },
+    intakeFile: (input) => request<IntakeResult>({ kind: "intake", ...input }),
   };
 }

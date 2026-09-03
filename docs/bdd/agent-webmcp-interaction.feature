@@ -47,7 +47,7 @@ Feature: An agent operates the local data lab through the WebMCP control plane
       Then both calls succeed and the workspace revision advances by exactly one
       And the mutation envelope returns the artifact handle, the projected summary, and measured metrics, but no result rows
       And the mutation envelope's next action suggests "duckdb_verify_zero_egress" scoped to the new artifact
-      And the human's left pane shows the same operation, artifact card, and revision without any separate agent channel
+      And the human's Controls pane shows the same operation, Saved results card, and revision without any separate agent channel
 
     Scenario: No tool response contains result rows
       When each of the four registered tools is invoked with legal inputs
@@ -127,9 +127,9 @@ Feature: An agent operates the local data lab through the WebMCP control plane
 
     Scenario: Sensitive values appear nowhere the agent can observe
       Given "healthcare_pii" is active with policy "sensitive_aggregate_only" and a legal aggregate artifact is selected
-      When the agent inspects every tool response, the shared canvas, artifact cards, error details, and the visible page text
+      When the agent inspects every tool response, the shared canvas, Saved results cards, error details, and the visible page text
       Then no raw record, direct identifier "mrn" value, or sub-minimum cohort appears in any of them
-      And the Data Grid explains the policy suppression instead of painting rows
+      And the Rows explains the policy suppression instead of painting rows
 
     Scenario: Errors teach recovery instead of leaking internals
       When any mutation fails

@@ -26,7 +26,7 @@ Feature: Governed SQL analysis over a local dataset with chart verification
       Then the workspace revision is 1
       And the activation envelope reports policy "public_synthetic", 250000 rows, and a schema digest, but no rows
       And the header shows active dataset "saas_churn" with policy "public_synthetic"
-      And the Data Grid shows an empty-workspace notice, not rows
+      And the Rows shows an empty-workspace notice, not rows
 
     Scenario: Analysis against a workspace with no active dataset is recoverably refused
       When one read-only SELECT is executed against dataset "saas_churn" while no dataset is active
@@ -90,8 +90,8 @@ Feature: Governed SQL analysis over a local dataset with chart verification
       When the canonical group-by-tickets aggregation is executed with presentation omitted
       Then exactly one artifact is committed and selected in the same command
       And the envelope returns the artifact handle, a safe summary under 8 KB, and measured runtime, but no result rows
-      And the Insights view shows KPIs computed from the query: Churn Rate "14.2%", Avg Tickets "4.8 / mo", Impacted MRR "$182,400"
-      And the Insights scatter charts ticket buckets and visibly increases for tickets greater than 5
+      And the Charts view shows KPIs computed from the query: Churn Rate "14.2%", Avg Tickets "4.8 / mo", Impacted MRR "$182,400"
+      And the Charts view scatter charts ticket buckets and visibly increases for tickets greater than 5
       And the SQL & Lineage view shows the exact statement, SQL hash, dataset lineage, release decision "allowed", and measured runtime
       And the workspace revision is 2 and the header reflects the new revision
 
@@ -99,7 +99,7 @@ Feature: Governed SQL analysis over a local dataset with chart verification
       When a read-only aggregation returns numeric result columns with no presentation supplied
       Then the committed artifact carries an inferred KPI per numeric result column in result order
       And the first two numeric columns become the chart axes of a scatter specification
-      And the envelope summary, the left artifact card, and the Insights view render the same summary object
+      And the envelope summary, the Saved results card, and the Charts view render the same summary object
 
     Scenario: A refinement sources the prior artifact instead of recomputing it
       Given artifact "a_01" exists from a prior aggregation on "saas_churn"
@@ -112,14 +112,14 @@ Feature: Governed SQL analysis over a local dataset with chart verification
   @PRD @ASD-5 @ASD-6
   Rule: Chart and grid verification is governed by the dataset policy
 
-    Scenario: A public artifact renders bounded rows in the Data Grid
+    Scenario: A public artifact renders bounded rows in the Rows
       Given "saas_churn" is active and artifact "a_01" holds a public aggregation
-      When the Data Grid is opened for "a_01"
+      When the Rows is opened for "a_01"
       Then bounded public rows render virtually
 
     Scenario: A sensitive artifact renders a suppression panel and never raw records
       Given "healthcare_pii" is active and a legal aggregate artifact with all cohorts of at least 10 is selected
-      When the Data Grid is opened for that artifact
+      When the Rows is opened for that artifact
       Then a policy suppression panel explains that "sensitive_aggregate_only" withholds raw rows
       And no raw record or direct identifier "mrn" value is painted anywhere in the shared DOM
 

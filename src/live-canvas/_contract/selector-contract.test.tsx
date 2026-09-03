@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { CustodyView } from "../custody-view";
-import { DataGridView } from "../data-grid-view";
+import { CUSTODY_EMPTY_STATE, CustodyView } from "../custody-view";
+import { DataGridView, GRID_EMPTY_STATE } from "../data-grid-view";
+import { INSIGHTS_EMPTY_STATE } from "../insights-copy";
 import { InsightsView } from "../insights-view";
-import { SqlLineageView } from "../sql-lineage-view";
+import { LINEAGE_EMPTY_STATE, SqlLineageView } from "../sql-lineage-view";
 import { workspaceStore } from "../../revisioned-workspace/store";
 
 /**
@@ -25,10 +26,10 @@ import { workspaceStore } from "../../revisioned-workspace/store";
  */
 describe("canvas projection selector contract (ADR 0003)", () => {
   const views = [
-    { name: "Insights", View: InsightsView, empty: "No artifact" },
-    { name: "Data Grid", View: DataGridView, empty: "No artifact" },
-    { name: "SQL & Lineage", View: SqlLineageView, empty: "No artifact" },
-    { name: "Custody", View: CustodyView, empty: "No custody evidence yet" },
+    { name: "Charts", View: InsightsView, empty: INSIGHTS_EMPTY_STATE.noDataset },
+    { name: "Rows", View: DataGridView, empty: GRID_EMPTY_STATE },
+    { name: "SQL & Lineage", View: SqlLineageView, empty: LINEAGE_EMPTY_STATE },
+    { name: "Zero Upload", View: CustodyView, empty: CUSTODY_EMPTY_STATE },
   ] as const;
 
   it("renders every view from projectArtifact's stable no_artifact view", () => {
@@ -37,7 +38,7 @@ describe("canvas projection selector contract (ADR 0003)", () => {
 
     for (const { View, empty } of views) {
       const { unmount } = render(<View />);
-      expect(screen.getByText(new RegExp(empty))).toBeDefined();
+      expect(screen.getByText(empty)).toBeDefined();
       unmount();
     }
   });
@@ -63,6 +64,6 @@ describe("canvas projection selector contract (ADR 0003)", () => {
     // referentially equal (projectArtifact memoizes per snapshot+id), so
     // useSyncExternalStore settled instead of looping.
     expect(renders.length).toBeLessThanOrEqual(rendersAfterMount + 2);
-    expect(screen.getByText(/No artifact/)).toBeDefined();
+    expect(screen.getByText(GRID_EMPTY_STATE)).toBeDefined();
   });
 });

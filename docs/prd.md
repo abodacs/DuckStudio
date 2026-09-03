@@ -42,11 +42,11 @@ flowchart TB
 | Layer | Must ship | Explicitly cut |
 |---|---|---|
 | **Custody kernel** | Explicit preset policies, SQL guard, release guard, upload telemetry | Differential privacy, formal proofs, compliance certification |
-| **Workspace** | ID, revision, six domain commands, selected artifact, one active operation, bounded events | Persistence across tabs, collaboration, multi-agent locking |
-| **Execution** | One DuckDB-WASM Web Worker; bounded read-only SQL with bindings | Writes, exports, external connectors, multi-file join wizards, arbitrary files on tape |
+| **Workspace** | ID, revision, seven domain commands (the file import is human-only), selected artifact, one active operation, bounded events | Persistence across tabs, collaboration, multi-agent locking |
+| **Execution** | One DuckDB-WASM Web Worker; bounded read-only SQL with bindings | Writes, exports, external connectors, multi-file join wizards, multi-format imports (TSV/JSON/Parquet/XLSX), file-handle persistence across sessions |
 | **Artifacts** | Immutable metadata + local relation + lineage; bounded retention | Durable notebooks, branching UI, artifact sharing |
 | **Control plane** | Four WebMCP tools as a subset of the workspace interface; one envelope; stable errors; revisions; idempotency; delta context | Compatibility aliases, conversational orchestration server, `egress-audit/` folder |
-| **Safe projections** | One summary object for envelope, cards, and Insights; sensitive raw-grid suppression; `minimumCohortSize` | General privacy theorem, unrestricted ad hoc PII analysis |
+| **Safe projections** | One summary object for envelope, cards, and Charts; sensitive raw-grid suppression; `minimumCohortSize` | General privacy theorem, unrestricted ad hoc PII analysis |
 | **Evidence UI** | One screen, two panes, four artifact views, operation cards, policy and revision | Routing, auth, dashboards, 3D visualization, voice |
 | **Demo** | Two seeded presets and one locked agent-native path | More datasets, extra prompt chips, paid model setup |
 
@@ -61,7 +61,7 @@ The canonical schemas and semantics are in `docs/agent-system-design.md`.
 | `duckdb_execute_sql_to_canvas` | Workspace mutation | Validate and run one bounded query, create one artifact, infer or apply KPI/chart/grid presentation, and select that artifact atomically. |
 | `duckdb_verify_zero_egress` | None | Return scoped dataset-upload, safe-release, interceptor, policy, and lineage evidence with limitations. |
 
-Human and simulator adapters also dispatch `selectArtifact` and `cancelActiveOperation`. Those commands are not WebMCP tools.
+Human and simulator adapters also dispatch `selectArtifact` and `cancelActiveOperation`, and the human dropzone dispatches `importLocalFile` (Amendment 3). Those commands are not WebMCP tools.
 
 ### 4.1 Shared response envelope
 
@@ -91,7 +91,7 @@ Activation is omitted when the desired dataset is already active. Refinements so
 
 Tools register with `document.modelContext.registerTool(...)` and full JSON Schema. Read tools carry `readOnlyHint`. Runtime validation remains mandatory. Registration uses an `AbortController` for lifecycle cleanup.
 
-The human controls, prompt chips, Agent Simulator, and WebMCP adapters all dispatch the same domain commands through the revisioned workspace. No adapter calls private React setters or fabricates a result. Envelope `summary`, artifact cards, and Insights are one projection.
+The human controls, prompt chips, Agent Simulator, and WebMCP adapters all dispatch the same domain commands through the revisioned workspace. No adapter calls private React setters or fabricates a result. Envelope `summary`, Saved results cards, and Charts are one projection.
 
 ## 5. Custody and Correctness Contract
 
@@ -100,7 +100,7 @@ The human controls, prompt chips, Agent Simulator, and WebMCP adapters all dispa
 A browser agent can inspect tool output and the page. Therefore sensitive values must be governed before either destination:
 
 - tool payloads never include result rows;
-- `public_synthetic` artifacts may render bounded rows in Data Grid; activation without an artifact paints no rows;
+- `public_synthetic` artifacts may render bounded rows in the Rows grid; activation without an artifact paints no rows;
 - `sensitive_aggregate_only` artifacts never render raw rows;
 - direct identifiers never appear as values;
 - sensitive aggregate groups require at least `minimumCohortSize` source rows (presets: 10);
@@ -135,57 +135,62 @@ No partial artifact or partial canvas commits after cancellation, policy denial,
   - Avg Tickets `4.8 / mo`;
   - Impacted MRR `$182,400`.
 - Scatter output visibly increases when `tickets > 5`.
-- The run creates one artifact, infers or applies KPI and scatter specifications, and selects that artifact. Insights opens because a chart and KPIs remain.
+- The run creates one artifact, infers or applies KPI and scatter specifications, and selects that artifact. Charts opens because a chart and KPIs remain.
 
 ### 6.2 `healthcare_pii`
 
 - 100,000 seeded rows, policy `sensitive_aggregate_only`, minimum cohort size ten.
 - Includes `diagnosis`, direct identifier `mrn`, and enough safe grouping columns for an aggregate demonstration.
 - Context marks `mrn` as an omitted direct identifier rather than returning values.
-- Data Grid shows a policy suppression panel, not rows.
+- The Rows grid shows a policy suppression panel, not rows.
 - Aggregate analysis is allowed only when every output cohort has at least ten records.
 
 ## 7. Two-Pane Evidence UI
 
 ```text
 +------------------------------------------------------------------------------------------------------+
-| DuckStudio | dataset: saas_churn | policy: public_synthetic | rev 4 | 0 Bytes of Dataset Uploaded   |
+| DuckStudio | rev 4 · saas_churn · public_synthetic | 0 Bytes of Dataset Uploaded                      |
 +------------------------------------------+-----------------------------------------------------------+
-| AGENT CONTROL & OPERATIONS (35%)         | SELECTED ARTIFACT (65%)                                  |
+| CONTROLS (35%)                           | RESULTS (65%)                                             |
 |                                          |                                                           |
-| Context · ws_local_01 · rev 3            | [Insights] [Data Grid] [SQL & Lineage] [Custody]          |
-| saas_churn · 250k · 14 cols              |                                                           |
-| budget 5s / 10k rows / 2k points         | a_01 · source saas_churn · succeeded                     |
-|                                          | KPI cards + chart                                         |
-| duckdb_execute_sql_to_canvas · op_01     |                                                           |
-| succeeded · measured runtime             | SQL hash · exact statement · lineage                     |
+| DATASETS                                 | [Charts] [Query] [Rows] [SQL & Lineage] [Zero Upload]     |
+| saas_churn · 250k · Public data          |                                                           |
+| healthcare_pii · Sensitive — totals only | a_01 · saas_churn · 9 rows                                |
+| Drop a CSV here — it never leaves        | KPI cards + chart                                         |
+|   this tab.                              |                                                           |
+|                                          | SQL hash · exact statement · lineage                      |
+| RUN AN ANALYSIS                          |                                                           |
+| ⚡ Analyze churn against support tickets  | Policy release: allowed                                   |
 |                                          |                                                           |
-| Artifact a_01                            | Policy release: allowed                                   |
-| safe summary · no rows returned          |                                                           |
+| SAVED RESULTS                            |                                                           |
+| saas_churn · 9 rows · a_01               |                                                           |
+|                                          |                                                           |
+| ACTIVITY · Time limit: 5 s · Row limit   |                                                           |
+| Run analysis · succeeded · measured      |                                                           |
 +------------------------------------------+-----------------------------------------------------------+
 ```
 
-### 7.1 Left pane
+### 7.1 Controls pane
 
-- Active-table chip updates immediately after activation.
-- Context card displays workspace ID, revision, policy, safe schema count, and active budgets.
-- Amber operation pills use exact registered tool names.
-- Operation cards expose status and operation ID; the active one has Cancel, which dispatches `cancelActiveOperation`.
-- Artifact cards expose stable handle, source, the same safe `summary` as the envelope, and a selection action that dispatches `selectArtifact`.
+- Datasets card: the two presets with human policy labels and the local-file dropzone (Amendment 3 — import never uploads).
+- Run an analysis card: the one canonical prompt, dispatching the exact agent sequence; the Query tab is the human SQL entry.
+- Saved results cards expose source, row count, the same safe `summary` as the envelope, a selection action that dispatches `selectArtifact`, and a "Refine from this result" affordance that pre-fills the Query tab.
+- Activity shows operation pills with human labels (the exact tool/command name rides the tooltip), status, measured runtime, Cancel on the running operation, structured recovery cards, and the budget line.
 - Errors render code, concise message, and recovery action rather than stack traces.
 
-### 7.2 Right pane
+### 7.2 Results pane
 
-- **Insights:** policy-approved KPIs and ECharts view.
-- **Data Grid:** virtualized public synthetic rows, or a sensitive-policy suppression panel.
+- **Charts:** policy-approved KPIs and ECharts view.
+- **Query:** the SQL workbench — editor above, results below (KPI chips plus the Rows view, so policy suppression is inherited). One statement runs per dispatch through the same domain command an agent dispatches; a presentation that would cross policy is denied with `permittedPresentation` and a one-click "Apply safe presentation".
+- **Rows:** interactive read-only grid — keyboard navigation (arrows, Shift+arrows extend, Home/End, Ctrl/Cmd+Home/End, PageUp/PageDown, Escape clears, Tab never trapped), cell/row/range selection that never dispatches, and Ctrl/Cmd+C copying the selection as TSV matching the rendered cells, header included; or a sensitive-policy suppression panel.
 - **SQL & Lineage:** exact SQL, safe bindings, hash, source, artifact chain, release decision, and measured metrics.
-- **Custody:** scoped evidence with explicit limitations.
+- **Zero Upload:** scoped evidence with explicit limitations.
 
 Canvas tabs are not workspace state. Switching tabs never dispatches a command and never changes artifact contents. Selecting an artifact dispatches `selectArtifact`.
 
 ### 7.3 First paint
 
-The first paint is an empty workspace with no dataset rows. The badge reads `0 Bytes of Dataset Uploaded`. Available presets and simulator/native capability are visible. No fabricated artifact or benchmark appears.
+The first paint is an empty workspace with no dataset rows. The badge reads `0 Bytes of Dataset Uploaded`. The served agent surface is visible in the capability chip's tooltip. No fabricated artifact or benchmark appears.
 
 ## 8. Demo Contract
 
@@ -194,8 +199,8 @@ The first paint is an empty workspace with no dataset rows. The badge reads `0 B
 1. Activate `saas_churn`; show active policy and revision. Do not paint a grid until an artifact exists.
 2. Run `duckdb_get_context` and visibly establish that the agent receives safe schema, budget, revision, and legal actions in one compact response.
 3. Run one `duckdb_execute_sql_to_canvas`; show one operation producing artifact, KPIs, scatter, SQL, and lineage atomically.
-4. Select SQL & Lineage, then Data Grid, to prove inspectability and stable artifact identity.
-5. Activate `healthcare_pii`; show `mrn` classified as omitted and Data Grid suppressed by policy.
+4. Select SQL & Lineage, then Rows, to prove inspectability and stable artifact identity.
+5. Activate `healthcare_pii`; show `mrn` classified as omitted and the Rows grid suppressed by policy.
 6. Run one safe healthcare aggregate or context read; do not expose rows.
 7. Run `duckdb_verify_zero_egress` scoped to an artifact; show dataset upload bytes, release counters, monitored transports, lineage, and limitations.
 8. Close on the artifact, policy indicator, and zero-dataset-upload badge together.
@@ -206,6 +211,7 @@ The demo may show measured runtime but must not promise or speak a fixed query t
 
 Amendment 1: 2026-09-01 (MLP/north-star framing — adds the north-star metric, MLP definition, and per-slice MLP-beat lines; slice boundaries and order unchanged)
 Amendment 2: 2026-09-02 (feature placement — runtime error→envelope taxonomy named in Slice 2, actuation/context separation tests named in Slice 4, cut-table completeness for voice and multi-file join wizards; no slice boundary or scope changes)
+Amendment 3: 2026-09-03 (slice 7 — local file drop: a seventh, human-only domain command `importLocalFile` turns one dropped CSV into the active dataset; CSV-only this slice, 200 MB / 5,000-column ceilings deny as `VALIDATION_ERROR` pre-execution, default policy `sensitive_aggregate_only`, direct-identifier columns stay in metadata and never enter the relation, bytes never leave the tab so the badge stays truthful; multi-format import and file-handle persistence stay explicitly cut)
 
 ### North star (amended)
 
@@ -278,12 +284,13 @@ A derived BDD rendering of these criteria lives in `docs/bdd/`; the canonical wo
 
 - Stale mutations execute no SQL and commit no UI state.
 - Exact mutation replay creates no duplicate artifact.
-- Artifact selection dispatches `selectArtifact` and drives Insights, Grid, SQL & Lineage, and Custody consistently.
+- Artifact selection dispatches `selectArtifact` and drives Charts, Query, Rows, SQL & Lineage, and Zero Upload consistently.
 - Cancellation and failures leave the prior selected artifact intact.
 
 ### Custody
 
 - No tool response contains raw result rows.
+- A range selection in the Rows grid copies TSV matching the rendered cells, header included.
 - `healthcare_pii` never paints raw records in shared DOM.
 - Cohorts below `minimumCohortSize` are denied before artifact commit.
 - Unsafe SQL reaches neither DuckDB nor the canvas.
@@ -294,13 +301,14 @@ A derived BDD rendering of these criteria lives in `docs/bdd/`; the canonical wo
 - Equivalent human, prompt-chip, simulator, and WebMCP commands produce the same domain events and artifacts.
 - Registration survives mount/unmount without duplicate tools.
 - Tool names, schemas, policy terms, badge copy, and demo sequence match all canonical documents.
-- Envelope `summary`, left artifact card, and Insights KPIs are the same object.
+- Envelope `summary`, the Saved results card, and the Charts KPIs are the same object.
 - Artifact-card clicks dispatch `selectArtifact`; Cancel dispatches `cancelActiveOperation`.
 
 ### Demo readiness
 
 - Seeded KPI values are computed by SQL.
-- Public grid scrolls smoothly; sensitive grid is visibly suppressed.
+- Public grid scrolls smoothly and virtualizes rows and columns; sensitive grid is visibly suppressed.
+- The Rows grid is keyboard-operable without a mouse; selection never dispatches; paste is an explicit no-op.
 - SQL, hash, lineage, artifact ID, policy, revision, and measured runtime are visible.
 - First paint contains no fake data, result, or benchmark.
 - Production build works with origin isolation and no third-party runtime asset dependency.
@@ -310,4 +318,4 @@ A derived BDD rendering of these criteria lives in `docs/bdd/`; the canonical wo
 1. **Why WebMCP fits:** the governed database and workspace live inside browser memory where a remote API cannot operate without uploading the file.
 2. **Better experience:** the agent learns the complete actionable state once, performs one atomic bounded analysis, and leaves an inspectable artifact that both operators share.
 3. **New human-agent capability:** analysts can delegate local computation while the page—not the model—retains custody and controls release into both tools and DOM.
-4. **Implementation:** four WebMCP tools as a subset of six workspace commands, one schema module plus runtime validation, revision/idempotency control, DuckDB-WASM worker execution, immutable artifact lineage, one safe projection, and scoped custody telemetry.
+4. **Implementation:** four WebMCP tools as a subset of seven workspace commands, one schema module plus runtime validation, revision/idempotency control, DuckDB-WASM worker execution, immutable artifact lineage, one safe projection, and scoped custody telemetry.

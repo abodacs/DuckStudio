@@ -121,6 +121,7 @@ describe("verbatim consumption (ARCHITECTURE.md: the engine re-derives nothing)"
       ),
       materialize: vi.fn(() => Promise.resolve({ relationName: "artifact_a_01", rowCount: 0 })),
       drop: vi.fn(() => Promise.resolve()),
+      intake: vi.fn(() => Promise.reject(new Error("intake is unused in this test"))),
     };
     const spyHandler = createWorkerHandler(spyRuntime);
     const d = decision({
@@ -145,6 +146,7 @@ describe("engine failures translate at the seam (§9)", () => {
         ),
       materialize: () => Promise.resolve({ relationName: "artifact_a_01", rowCount: 0 }),
       drop: () => Promise.resolve(),
+      intake: () => Promise.reject(new Error("intake is unused in this test")),
     };
     const slowHandler = createWorkerHandler(slow);
     const response = await slowHandler({
@@ -168,6 +170,7 @@ describe("engine failures translate at the seam (§9)", () => {
         Promise.reject(new Error('Binder Error: no such column "secret_value" in "mrn"')),
       materialize: () => Promise.resolve({ relationName: "artifact_a_01", rowCount: 0 }),
       drop: () => Promise.resolve(),
+      intake: () => Promise.reject(new Error("intake is unused in this test")),
     };
     const throwingHandler = createWorkerHandler(throwing);
     const response = await throwingHandler({

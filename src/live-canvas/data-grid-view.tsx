@@ -1,7 +1,7 @@
 import { projectArtifact } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
 import { KpiTile, UnavailableArtifact } from "./artifact-states";
-import { VirtualGrid } from "./virtual-grid";
+import { InteractiveGrid } from "./interactive-grid";
 
 /**
  * Data Grid evidence view (grilling 51): virtualized committed rows only
@@ -10,8 +10,8 @@ import { VirtualGrid } from "./virtual-grid";
  * released data — KPI aggregates and column metadata — and zero raw rows,
  * ever. No-artifact and evicted states keep M0's honest-empty copy.
  */
-/** The pinned empty-state line (ticket 06 — copy is decided, not invented). */
-export const GRID_EMPTY_STATE = "No artifact — the grid paints rows only from an approved artifact.";
+/** The actionable empty-state line (slice-7 plan stage 2): what to do next. */
+export const GRID_EMPTY_STATE = "Run an analysis and its rows land here.";
 
 export function DataGridView() {
   const artifact = useWorkspace((ws) => projectArtifact(ws, ws.selectedArtifactId));
@@ -33,7 +33,7 @@ export function DataGridView() {
           </div>
           <div className="rise" style={{ animationDelay: "300ms" }}>
             <p className="meta">{GRID_EMPTY_STATE}</p>
-            <p className="meta mt-1">Rows paint after your first analysis — nothing ambient, nothing preloaded.</p>
+            <p className="meta mt-1">Nothing ambient, nothing preloaded — rows come only from an artifact.</p>
           </div>
         </div>
       );
@@ -44,14 +44,14 @@ export function DataGridView() {
         case "rows":
           return (
             <div className="view-swap flex h-full min-h-0 flex-1 flex-col p-3">
-              <VirtualGrid grid={artifact.grid} totalRows={artifact.artifact.rowCount} />
+              <InteractiveGrid grid={artifact.grid} totalRows={artifact.artifact.rowCount} />
             </div>
           );
         case "suppressed":
           return (
             <div className="view-swap flex h-full flex-col gap-4 overflow-y-auto p-3">
               <div role="alert" className="banner-suppressed">
-                <p className="banner-suppressed-title">Data Grid — suppressed by policy</p>
+                <p className="banner-suppressed-title">Rows — suppressed by policy</p>
                 <p>
                   <span className="mono-value">{artifact.artifact.source.id}</span> is governed by{" "}
                   <span className="chip-policy-sensitive">{artifact.grid.policy}</span>.

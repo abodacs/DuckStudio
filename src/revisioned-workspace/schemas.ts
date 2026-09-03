@@ -70,8 +70,8 @@ export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
  * Owned beside the codes; the studio shell renders it verbatim.
  */
 export const ERROR_RECOVERY_MESSAGE: Record<ErrorCode, string> = {
-  VALIDATION_ERROR: "The command's fields didn't match the schema; the agent corrects the named fields.",
-  STALE_REVISION: "The workspace moved since the command was prepared; the agent re-reads the delta and retries with the current revision.",
+  VALIDATION_ERROR: "Some fields didn't match what's allowed; the named fields say which.",
+  STALE_REVISION: "The workspace moved since this command was prepared; catch up on what changed, then retry with the current revision.",
   IDEMPOTENCY_CONFLICT: "That key was reused for a different command; a new key or an exact resend settles it.",
   POLICY_DENIED: "The request would cross release policy — nothing was released.",
   UNSAFE_SQL: "The statement violates execution policy; nothing ran.",
@@ -86,8 +86,8 @@ export const ERROR_RECOVERY_MESSAGE: Record<ErrorCode, string> = {
 
 /** Recovery guidance per code — the agent's legal next move (§9's recovery column). */
 export const ERROR_RECOVERY_MOVE: Record<ErrorCode, string> = {
-  VALIDATION_ERROR: "Recovery: corrected fields, then resend.",
-  STALE_REVISION: "Recovery: re-read events from the expected revision, then retry with the current revision.",
+  VALIDATION_ERROR: "Recovery: fix the named fields, then resend.",
+  STALE_REVISION: "Recovery: read what changed since the prepared revision, then retry with the current one.",
   IDEMPOTENCY_CONFLICT: "Recovery: new key, or resend the original command exactly.",
   POLICY_DENIED: "Recovery: use the permitted presentation or safer SQL.",
   UNSAFE_SQL: "Recovery: apply the blocked-construct details and rewrite the statement.",
@@ -100,9 +100,10 @@ export const ERROR_RECOVERY_MOVE: Record<ErrorCode, string> = {
   INTERNAL_ERROR: "Recovery: read current context; no sensitive stack data is exposed.",
 };
 
-/** §4.1 capability negotiation: enums, not prose. */
+/** §4.1 capability negotiation: enums, not prose. Slice 7 adds the human file-import capability; the tool surface stays four. */
 export const CapabilitySchema = z.enum([
   "activate_local_preset",
+  "import_local_file",
   "run_readonly_sql",
   "present_artifact",
   "verify_custody",
@@ -133,10 +134,10 @@ export const BudgetLimitsSchema = z.strictObject({
 
 export type BudgetLimits = z.infer<typeof BudgetLimitsSchema>;
 
-/** §4.4 left-pane operation card. */
+/** §4.4 left-pane operation card. Slice 7 adds the human `import_local_file` kind. */
 export const OperationSummarySchema = z.strictObject({
   operationId: z.string(),
-  kind: z.enum(["activate_dataset", "run_analysis"]),
+  kind: z.enum(["activate_dataset", "run_analysis", "import_local_file"]),
   status: z.enum(["queued", "running", "succeeded", "failed", "cancelled"]),
   sourceId: z.string().optional(),
   artifactId: z.string().optional(),
@@ -286,6 +287,7 @@ export const WorkspaceEventSchema = z.strictObject({
   at: z.string(),
   kind: z.enum([
     "dataset_activated",
+    "dataset_imported",
     "analysis_succeeded",
     "analysis_failed",
     "artifact_selected",
@@ -341,7 +343,7 @@ export type ActivateDatasetInput = z.infer<typeof ActivateDatasetInputSchema>;
 /** §8.3 `duckdb_execute_sql_to_canvas` presentation input: the committed spec plus the pass-through `initialView` hint, which is never stored (grilling 34). */
 export const RunPresentationInputSchema = PresentationSpecSchema.extend({
   initialView: z
-    .enum(["insights", "grid", "sql_lineage", "custody"])
+    .enum(["insights", "query", "grid", "sql_lineage", "custody"])
     .describe("Human-evidence-plane hint for which tab to open after commit; never stored on the artifact.")
     .optional(),
 }).describe(
@@ -497,6 +499,27 @@ export const CompiledCancelActiveOperationInput = z.compile(CancelActiveOperatio
 
 export type CancelActiveOperationInput = z.infer<typeof CancelActiveOperationInputSchema>;
 
+/**
+ * §8.5 human-only `importLocalFile` (slice 7, prd Amendment 3) — never a
+ * WebMCP tool. The file's bytes ride an out-of-band one-shot intake ticket
+ * (`intake-tickets.ts`); the command carries only the ticket handle, never
+ * the bytes, so the domain command stays JSON-shaped.
+ */
+export const ImportLocalFileInputSchema = z.strictObject({
+  ticketId: z
+    .string()
+    .min(8)
+    .max(80)
+    .describe("Handle for the bytes put in the intake registry by the human adapter."),
+  name: z.string().min(1).max(200).describe("The dropped file's name; its .csv extension is required (Amendment 3)."),
+  expectedRevision: z.number().int().min(0),
+  idempotencyKey: z.string().min(8).max(80),
+});
+
+export const CompiledImportLocalFileInput = z.compile(ImportLocalFileInputSchema);
+
+export type ImportLocalFileInput = z.infer<typeof ImportLocalFileInputSchema>;
+
 // --- Response data (§8.2, §8.3, §8.5) ---
 
 /** §8.2 response data. */
@@ -546,6 +569,15 @@ export const CancelActiveOperationDataSchema = z.strictObject({
 });
 
 export type CancelActiveOperationData = z.infer<typeof CancelActiveOperationDataSchema>;
+
+/**
+ * §8.5 `importLocalFile` response data — the activation shape: an import is
+ * an activation of the imported relation (it becomes `activeDataset`), so
+ * the two commands report the same facts.
+ */
+export const ImportLocalFileDataSchema = ActivateDatasetDataSchema;
+
+export type ImportLocalFileData = ActivateDatasetData;
 
 /** §8.1 `scope: "artifact"` data — the committed record and its measured summary. */
 export const GetContextArtifactDataSchema = AnalysisRecordSchema;

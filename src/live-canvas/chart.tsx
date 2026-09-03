@@ -105,7 +105,7 @@ export default function EvidenceChart({ insights }: { insights: InsightsData }) 
       observer?.disconnect();
       instance.dispose();
     };
-  }, [chart, points]);
+  }, [chart, points, insights]);
 
   return (
     <div

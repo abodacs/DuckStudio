@@ -24,7 +24,7 @@ src/
 
 Folder meaning:
 
-- `revisioned-workspace/` owns the domain-command interface (all six commands), revision, the idempotency cache, single-flight operations, the bounded event ring, atomic commit, presentation inference and deny-over-strip, the §7 envelope (transport vocabulary, shape, builders, tool-summary budget), and the projection functions. Human, chip, simulator, and WebMCP adapters dispatch into it, and it exports the one app store binding (`workspaceStore`) that both the agent adapters and the UI hold.
+- `revisioned-workspace/` owns the domain-command interface (all seven commands, `importLocalFile` being the slice-7 human-only file import whose bytes ride the one-shot intake registry in `intake-tickets.ts`), revision, the idempotency cache, single-flight operations, the bounded event ring, atomic commit, presentation inference and deny-over-strip, the §7 envelope (transport vocabulary, shape, builders, tool-summary budget), and the projection functions. Human, chip, simulator, and WebMCP adapters dispatch into it, and it exports the one app store binding (`workspaceStore`) that both the agent adapters and the UI hold.
 - `dataset-custody/` is the custody kernel behind that interface: policy, SQL inspection, release, cohort confirmation, and upload/release evidence. Do not add `egress-audit/`.
 - `duck-engine/` is the worker, bindings, budgets, and cancellation. It executes custody decisions verbatim; it never re-derives them.
 - `analysis-artifacts/` is the immutable graph and lineage.
@@ -33,7 +33,7 @@ Folder meaning:
 - `studio-shell/` composes the two-pane chrome; its `boot.ts` owns ordered startup behind one `start()` interface.
 - `demo-presets/` is the two seeded datasets. A preset's interface is the seed→relation triple — deterministic row generator, dataset metadata carrying its release policy, and canonical SQL — encoded as `PresetTriple` in `demo-presets/triples.ts`, one exported triple per preset. Policy travels with its dataset, and a contract test (`_contract/preset-numbers.test.ts`) runs the SQL and asserts the pinned `prd.md` §6 values, so the demo numbers are load-bearing.
 
-`selectArtifact` and `cancelActiveOperation` live on the workspace interface. They are not registered WebMCP tools.
+`selectArtifact` and `cancelActiveOperation` live on the workspace interface. `importLocalFile` does too (slice 7, human-only, one-shot intake ticket). None of them are registered WebMCP tools.
 
 Do not create top-level technical buckets such as:
 
@@ -52,7 +52,7 @@ Schema ownership follows the same rule. Each module owns its schemas (`revisione
 
 The custody → engine seam is one object. `dataset-custody/` returns a single authorized-execution decision — authorized relation, prepared positional SQL, clamped budget, redaction keys — and `duck-engine/` consumes it verbatim, owning only cancellation and respawn-on-cancel (ADR 0002). The engine never re-derives relation, SQL, budget, or redaction; each custody rule is written and tested once, and engine tests run against fake decision objects with no worker.
 
-Platform boundaries (ADR 0002): only the self-hosted `eh` and `mvp` DuckDB-WASM bundles ship — no `coi`/pthread bundle — so `selectBundle` returns `eh` and engine execution is single-threaded by configuration; the shipped COOP/COEP isolation is for the document, not for DuckDB threading. The browser's wasm memory ceiling applies unmanaged; the custody-clamped budget (`executionMs` 5,000 default, `resultRows` 10,000 default) is the effective query limit. Remote files and URLs are rejected at the custody seam, so the engine only ever sees registered preset relations.
+Platform boundaries (ADR 0002): only the self-hosted `eh` and `mvp` DuckDB-WASM bundles ship — no `coi`/pthread bundle — so `selectBundle` returns `eh` and engine execution is single-threaded by configuration; the shipped COOP/COEP isolation is for the document, not for DuckDB threading. The browser's wasm memory ceiling applies unmanaged; the custody-clamped budget (`executionMs` 5,000 default, `resultRows` 10,000 default) is the effective query limit. Remote files and URLs are rejected at the custody seam, so the engine only ever sees registered preset relations and locally imported CSV relations (slice 7's intake path registers a dropped file's buffer in-tab and materializes its relation minus direct identifiers; URLs stay rejected).
 
 ## One Command Path
 

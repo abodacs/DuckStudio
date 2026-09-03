@@ -1,6 +1,6 @@
 import { createCustodyKernel } from "../../dataset-custody/kernel";
 import type { AuthorizedDecision } from "../../dataset-custody/schemas";
-import type { ExecutionResult } from "../../duck-engine/protocol";
+import type { ExecutionResult, IntakeResult } from "../../duck-engine/protocol";
 import type { WorkspaceEngine } from "../../duck-engine/worker";
 import { createWorkspaceStore, type WorkspaceStore } from "../store";
 
@@ -16,10 +16,21 @@ export const FIXED_NOW = "2026-09-02T12:00:00.000Z";
 
 export type RespawnHook = (failure: unknown) => void;
 
+/** The intake call shape the fake records (slice 7). */
+export interface FakeIntakeRequest {
+  readonly relation: string;
+  readonly name: string;
+  readonly bytes: Uint8Array;
+}
+
 export interface FakeEngine extends WorkspaceEngine {
   readonly decisions: AuthorizedDecision[];
   readonly materialized: string[];
   readonly dropped: string[];
+  /** Every `intakeFile` request, in call order (slice 7). */
+  readonly intakeFiles: FakeIntakeRequest[];
+  /** Overrides the default intake answer; a never-settling return holds the op for Cancel. */
+  onIntake(impl: (request: FakeIntakeRequest) => Promise<IntakeResult>): void;
   /** Registers a hook fired when the store respawns the engine (cancel). */
   onRespawn(hook: RespawnHook): void;
 }
@@ -58,17 +69,36 @@ export function defaultFakeExecute(decision: AuthorizedDecision): Promise<Execut
   );
 }
 
+/** The default intake answer: one identifier column and two analyzable ones. */
+export function defaultFakeIntake(request: FakeIntakeRequest): Promise<IntakeResult> {
+  return Promise.resolve({
+    relationName: request.relation,
+    rowCount: 3,
+    columns: [
+      { name: "patient_id", type: "BIGINT", classification: "direct_identifier" },
+      { name: "region", type: "VARCHAR", classification: "public" },
+      { name: "amount", type: "DOUBLE", classification: "public" },
+    ],
+  });
+}
+
 export function fakeEngine(
   execute: (decision: AuthorizedDecision) => Promise<ExecutionResult> = defaultFakeExecute,
 ): FakeEngine {
   const decisions: AuthorizedDecision[] = [];
   const materialized: string[] = [];
   const dropped: string[] = [];
+  const intakeFiles: FakeIntakeRequest[] = [];
   const respawnHooks: RespawnHook[] = [];
+  let intakeImpl = defaultFakeIntake;
   return {
     decisions,
     materialized,
     dropped,
+    intakeFiles,
+    onIntake(impl) {
+      intakeImpl = impl;
+    },
     onRespawn(hook) {
       respawnHooks.push(hook);
     },
@@ -83,6 +113,10 @@ export function fakeEngine(
     dropRelation(relationName) {
       dropped.push(relationName);
       return Promise.resolve();
+    },
+    intakeFile(request) {
+      intakeFiles.push(request);
+      return intakeImpl(request);
     },
     respawn() {
       for (const hook of respawnHooks) {

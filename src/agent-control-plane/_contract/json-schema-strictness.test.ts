@@ -279,7 +279,7 @@ describe("duckdb_execute_sql_to_canvas JSON Schema strictness (§8.3)", () => {
             },
             initialView: {
               type: "string",
-              enum: ["insights", "grid", "sql_lineage", "custody"],
+              enum: ["insights", "query", "grid", "sql_lineage", "custody"],
               description: "Human-evidence-plane hint for which tab to open after commit; never stored on the artifact.",
             },
           },

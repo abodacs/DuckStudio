@@ -22,6 +22,7 @@ describe("rev-0 seed", () => {
       schemaVersion: "duckstudio.webmcp/v1",
       capabilities: [
         "activate_local_preset",
+        "import_local_file",
         "run_readonly_sql",
         "present_artifact",
         "verify_custody",
@@ -70,6 +71,7 @@ describe("getContext scope table at rev 0 (ticket 04)", () => {
     expect(parsed.data).toEqual({
       capabilities: [
         "activate_local_preset",
+        "import_local_file",
         "run_readonly_sql",
         "present_artifact",
         "verify_custody",

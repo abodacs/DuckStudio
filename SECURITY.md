@@ -12,6 +12,7 @@ Treat tool payloads and agent-visible DOM as one release boundary.
 - `public_synthetic` datasets may render bounded demo-safe rows; `sensitive_aggregate_only` datasets never render raw grid rows.
 - Enforce direct-identifier suppression and minimum aggregate cohort size at runtime.
 - Dataset policy is explicit metadata. Name-based detection is defense in depth only.
+- Local file intake (slice 7) never uploads: the dropped CSV's bytes are read in the tab, ride a one-shot intake ticket consumed inside the import execution (deleted on failure or cancel — zero trace), and never enter a tool payload. Imported datasets default to `sensitive_aggregate_only`; direct-identifier columns stay in metadata (flagged omitted) and are excluded from the materialized relation, so the value never reaches DuckDB.
 - Keep the badge copy exact: `0 Bytes of Dataset Uploaded`.
 - Distinguish dataset upload accounting from application-shell traffic.
 - Describe runtime interception as operational evidence, never formal proof or compliance certification.

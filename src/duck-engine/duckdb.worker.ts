@@ -1,7 +1,8 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
 import { createWorkerHandler, presetCsv, PRESET_TRIPLES, type BoundedRead, type DuckEngineRuntime } from "./worker-handler";
+import { buildIntakeSql, describeIntakeColumns, intakeFileName, materializedIntakeColumns } from "./intake";
 import { decodeEngineCell, duckDbType } from "./result-decode";
-import type { EngineColumn, EngineRequest, EngineResponse, WarmResult } from "./protocol";
+import type { EngineColumn, EngineRequest, EngineResponse, IntakeResult, WarmResult } from "./protocol";
 
 /**
  * The browser engine worker (ADR 0002): owns the `AsyncDuckDB`, the
@@ -137,6 +138,31 @@ async function createBrowserRuntime(): Promise<DuckEngineRuntime> {
 
     async drop(relationName) {
       await connection.query(`DROP TABLE IF EXISTS ${relationName}`);
+    },
+
+    // Slice 7 intake: the dropped bytes register as a virtual file, the
+    // sniffer describes it, and the materialization omits direct identifiers
+    // — the classified full schema returns for metadata only. A failure
+    // unregisters the buffer so the engine keeps zero trace of the bytes.
+    async intake(relation, name, bytes): Promise<IntakeResult> {
+      const fileName = intakeFileName(name);
+      await db.registerFileBuffer(fileName, bytes);
+      try {
+        const described = await connection.query(`DESCRIBE SELECT * FROM read_csv('${fileName}')`);
+        const rawColumns = described.toArray().map((row) => ({
+          name: String((row as { column_name: unknown }).column_name),
+          type: String((row as { column_type: unknown }).column_type),
+        }));
+        const columns = describeIntakeColumns(rawColumns);
+        await connection.query(buildIntakeSql(relation, fileName, materializedIntakeColumns(columns)));
+        const counted = await connection.query(`SELECT COUNT(*) AS n FROM ${relation}`);
+        const row = counted.toArray()[0] as { n: unknown } | undefined;
+        return { relationName: relation, rowCount: Number(row?.n), columns };
+      } catch (error) {
+        await db.dropFile(fileName).catch(() => undefined);
+        await connection.query(`DROP TABLE IF EXISTS ${relation}`).catch(() => undefined);
+        throw error;
+      }
     },
   };
 }

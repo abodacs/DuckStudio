@@ -31,5 +31,11 @@ test-results/
 
 # Zcode artifacts
 .zcode/
+
+# Agent tool local state
+.agents/skills/
+.claude/
+.factory/
+.qwen/
 # Self-hosted DuckDB-WASM runtime assets (downloaded by scripts/download-duckdb-wasm.sh)
 public/duckdb/
