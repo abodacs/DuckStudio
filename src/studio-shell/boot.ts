@@ -27,12 +27,6 @@ export const BOOT_PLAN = ["gate", "warm", "mount", "register"] as const;
 
 export type BootStep = (typeof BOOT_PLAN)[number];
 
-/**
- * The warm step (Slice 2): egress interception arms first — synchronously,
- * in the same slot — then the DuckDB worker warms (ADR 0007: warm on first
- * paint, so first analysis pays no cold start).
- */
-
 /** Injectable seams so `warmDefault` can be driven headlessly, like {@link StartInjection}. */
 export interface WarmInjection {
   /** Defaults to `globalThis`. */
@@ -56,6 +50,11 @@ export function armOnce(scope: EgressScope, kernel: CustodyKernel): EgressMonito
   return egressMonitor;
 }
 
+/**
+ * The warm step (Slice 2): egress interception arms first — synchronously,
+ * in the same slot — then the DuckDB worker warms (ADR 0007: warm on first
+ * paint, so first analysis pays no cold start).
+ */
 export async function warmDefault(inject: WarmInjection = {}): Promise<void> {
   armOnce(inject.scope ?? globalThis, inject.kernel ?? custodyKernel);
   await (inject.warm ?? warmEngine)();

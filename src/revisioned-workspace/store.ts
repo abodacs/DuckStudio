@@ -802,7 +802,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     };
     const summary = measureSummary(presentation.spec, result, downsample.emitted);
 
-    // ---- POINT OF NO RETURN: one synchronous in-memory commit, zero awaits ----
+    // ---- POINT OF NO RETURN: one synchronous in-memory commit ----
     // A throw inside this section used to escape dispatch as a rejection:
     // the operation stayed `running` (the slot never freed), every later
     // mutation conflicted, and the materialized relation leaked. The catch

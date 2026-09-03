@@ -401,12 +401,13 @@ export function createCustodyKernel(now: () => string = () => new Date().toISOSt
         }
         // §5.1: an aggregate that reassembles a raw per-row value (FIRST,
         // ANY_VALUE, …) is an aggregate by shape only and cannot release.
-        if (shape.reassembles) {
+        // `reassemblingFn` is non-null exactly when `reassembles` is true.
+        if (shape.reassemblingFn !== null) {
           const failure: CustodyFailure = {
             code: "POLICY_DENIED",
             message: `Sensitive datasets release aggregates only; ${shape.reassemblingFn}() reassembles a raw row value and cannot release.`,
             retryable: false,
-            details: { blockedFields: shape.reassemblingFn ?? "" },
+            details: { blockedConstruct: shape.reassemblingFn },
           };
           return { ok: false, failure };
         }

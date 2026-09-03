@@ -97,7 +97,7 @@ describe("sensitive release gate is alias-proof (§5.1 row 5)", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.failure.code).toBe("POLICY_DENIED");
-      expect(result.failure.details.blockedFields).toBe("FIRST");
+      expect(result.failure.details.blockedConstruct).toBe("FIRST");
     }
   });
 
@@ -135,7 +135,7 @@ describe("sensitive release gate is alias-proof (§5.1 row 5)", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.failure.code).toBe("POLICY_DENIED");
-      expect(result.failure.details.blockedFields).toBe("ANY_VALUE");
+      expect(result.failure.details.blockedConstruct).toBe("ANY_VALUE");
     }
   });
 

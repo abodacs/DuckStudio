@@ -347,13 +347,13 @@ The kernel governs both WebMCP payloads and DOM projections visible to a browser
 | Schema names/types | Allowed | Allowed; direct identifiers marked omitted |
 | Raw rows in tool payload | Never | Never |
 | Raw rows in shared grid | Allowed within row budget, only on an artifact | Suppressed |
-| Aggregates | Allowed | Allowed only when every cohort has `count >= minimumCohortSize` |
+| Aggregates | Allowed | Aggregate-shaped statements only; reassembling aggregates (`FIRST`, `LAST`, `ANY_VALUE`, `ARBITRARY`, `LIST`, `ARRAY_AGG`, `STRING_AGG` — each returns a raw per-row value) are `POLICY_DENIED`; every surviving cohort has `count >= minimumCohortSize` |
 | Direct-identifier values | Never | Never |
 | Sensitive categorical top values | Allowed for demo-safe columns | Suppressed |
 | KPI/chart | Allowed | Aggregate-only after cohort check |
 | SQL and bindings | Allowed | SQL allowed; binding values redacted in every projection |
 
-The one-day implementation enforces explicit preset metadata, direct-identifier suppression, minimum aggregate cohort size, restricted aggregate output, and blocked raw grids. It does not claim differential privacy, protection against all differencing attacks, formal information-flow security, or regulatory certification. The persistent badge copy is `0 Bytes of Dataset Uploaded`; application-shell traffic is outside that accounting.
+The one-day implementation enforces explicit preset metadata, direct-identifier suppression, minimum aggregate cohort size, restricted aggregate output, and blocked raw grids. On a `sensitive_aggregate_only` source, identifier provenance is statement-level: any reference to a direct-identifier column — aliased, wrapped in an expression, or through a CTE — is `POLICY_DENIED`, so a renamed column cannot reclassify itself. It does not claim differential privacy, protection against all differencing attacks, formal information-flow security, or regulatory certification. The persistent badge copy is `0 Bytes of Dataset Uploaded`; application-shell traffic is outside that accounting.
 
 ## 6. SQL Execution Policy
 
@@ -372,6 +372,7 @@ Rejected before execution:
 - URL literals and external table functions such as HTTP, S3, filesystem glob, CSV/Parquet scans over paths;
 - extension loading or network-capable functions;
 - references outside the authorized source relation set;
+- a `WITH` header the inspector cannot parse — the relation scan fails closed with `UNSAFE_SQL` (`blockedConstruct: "cte_header"`) instead of being skipped; the legal `AS MATERIALIZED (` and `AS NOT MATERIALIZED (` spellings are parsed;
 - string interpolation of values where bindings are supported.
 
 SQL literals in the statement are not a substitute for bindings; they remain in stored SQL and are visible in lineage. Sensitive values belong in bindings so the kernel can redact them.
