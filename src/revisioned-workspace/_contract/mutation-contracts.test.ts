@@ -131,7 +131,7 @@ describe("atomic runAnalysis path (ticket 37)", () => {
     expect(engine.materialized).toEqual(["artifact_a_01"]);
   });
 
-  it("redacts direct-identifier binding values everywhere downstream of the kernel", async () => {
+  it("redacts restricted-classified binding values everywhere downstream of the kernel", async () => {
     const store = storeWith(fakeEngine());
     await store.dispatch({
       kind: "activateDataset",
@@ -141,8 +141,11 @@ describe("atomic runAnalysis path (ticket 37)", () => {
       kind: "runAnalysis",
       input: {
         source: { kind: "dataset", id: "healthcare_pii" },
-        sql: "SELECT diagnosis, COUNT(*) AS patients FROM healthcare_pii WHERE mrn = $mrn GROUP BY diagnosis HAVING COUNT(*) >= 10",
-        bindings: { mrn: "MRN-CLASSIFIED-0042" },
+        // Bound on the sensitive-classified column: since the release gate
+        // denies any direct-identifier reference, restricted bindings that
+        // can still release are sensitive-classified ones.
+        sql: "SELECT diagnosis, COUNT(*) AS patients FROM healthcare_pii WHERE diagnosis = $diagnosis GROUP BY diagnosis HAVING COUNT(*) >= 10",
+        bindings: { diagnosis: "MIGRAINE-CLASSIFIED-0042" },
         expectedRevision: 1,
         idempotencyKey: "binding-01",
       },
@@ -150,15 +153,15 @@ describe("atomic runAnalysis path (ticket 37)", () => {
     expect(envelope.ok).toBe(true);
     // The raw value never leaves the kernel — not in the envelope, not in
     // the committed artifact's redacted bindings.
-    expect(JSON.stringify(envelope)).not.toContain("MRN-CLASSIFIED-0042");
+    expect(JSON.stringify(envelope)).not.toContain("MIGRAINE-CLASSIFIED-0042");
 
     const artifact = await store.dispatch({ kind: "getContext", input: { scope: "artifact", artifactId: "a_01" } });
     expect(artifact.ok).toBe(true);
     if (artifact.ok) {
       const record = artifact.data as { artifact: { bindings: Record<string, unknown>; release: { redactedBindingKeys: string[] } } };
-      expect(record.artifact.release.redactedBindingKeys).toEqual(["mrn"]);
-      expect(record.artifact.bindings).toEqual({ mrn: "[redacted]" });
-      expect(JSON.stringify(record)).not.toContain("MRN-CLASSIFIED-0042");
+      expect(record.artifact.release.redactedBindingKeys).toEqual(["diagnosis"]);
+      expect(record.artifact.bindings).toEqual({ diagnosis: "[redacted]" });
+      expect(JSON.stringify(record)).not.toContain("MIGRAINE-CLASSIFIED-0042");
     }
   });
 });

@@ -14,6 +14,24 @@ import { SAAS_CHURN_CANONICAL_SQL } from "../demo-presets/canonical-sql";
 
 const kernel = createCustodyKernel(() => "2026-09-02T00:00:00.000Z");
 
+/** The decideRelease call shape the release pipeline uses, with the failure inputs pinned per case. */
+function decide(
+  dataset: Parameters<typeof governedSource>[0],
+  sql: string,
+  resultSchema: readonly { readonly name: string; readonly type: string }[],
+  minCohortCount: number | null,
+) {
+  return kernel.decideRelease({
+    source: governedSource(dataset),
+    sql,
+    resultSchema,
+    minCohortCount,
+    redactedBindingKeys: [],
+    materializedRows: 0,
+    budget: { executionMs: 5_000, resultRows: 10_000, chartPoints: 2_000 },
+  });
+}
+
 describe("authorize returns the pinned decision (grilling 22)", () => {
   it("carries relation, positional SQL, ordered bindings, budget, redaction keys, policy", () => {
     const result = kernel.authorize({
@@ -70,6 +88,61 @@ describe("authorize returns the pinned decision (grilling 22)", () => {
       bindings: { region: null },
     });
     expect(nullPasses.ok).toBe(true);
+  });
+});
+
+describe("sensitive release gate is alias-proof (§5.1 row 5)", () => {
+  it("denies a reassembling aggregate: FIRST() returns a raw row value", () => {
+    const result = decide(healthcarePiiPreset, "SELECT FIRST(mrn) AS x FROM healthcare_pii", [{ name: "x", type: "VARCHAR" }], 500);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.failure.code).toBe("POLICY_DENIED");
+      expect(result.failure.details.blockedFields).toBe("FIRST");
+    }
+  });
+
+  it("keeps denying an aliased raw identifier select: an alias cannot reclassify a column", () => {
+    const result = decide(healthcarePiiPreset, "SELECT mrn AS patient_ref FROM healthcare_pii", [{ name: "patient_ref", type: "VARCHAR" }], 500);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.failure.code).toBe("POLICY_DENIED");
+  });
+
+  it("denies an aggregate over an identifier column: counting mrn still discloses provenance", () => {
+    const result = decide(healthcarePiiPreset, "SELECT COUNT(mrn) AS n FROM healthcare_pii", [{ name: "n", type: "BIGINT" }], 500);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.failure.code).toBe("POLICY_DENIED");
+      expect(result.failure.details.blockedFields).toBe("mrn");
+    }
+  });
+
+  it("releases the canonical shape: grouped aggregate with a cohort at the floor", () => {
+    const result = decide(
+      healthcarePiiPreset,
+      "SELECT COUNT(*) AS n FROM healthcare_pii GROUP BY diagnosis",
+      [{ name: "n", type: "BIGINT" }],
+      10,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.release.status).toBe("downgraded");
+      expect(result.release.omittedDirectIdentifiers).toEqual(["mrn"]);
+    }
+  });
+
+  it("denies ANY_VALUE, which the aggregate word list never covered", () => {
+    const result = decide(healthcarePiiPreset, "SELECT ANY_VALUE(diagnosis) AS d FROM healthcare_pii", [{ name: "d", type: "VARCHAR" }], 500);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.failure.code).toBe("POLICY_DENIED");
+      expect(result.failure.details.blockedFields).toBe("ANY_VALUE");
+    }
+  });
+
+  it("leaves the public preset untouched: FIRST() over saas_churn releases", () => {
+    const result = decide(saasChurnPreset, "SELECT FIRST(plan) AS x FROM saas_churn", [{ name: "x", type: "VARCHAR" }], null);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.release.status).toBe("allowed");
   });
 });
 

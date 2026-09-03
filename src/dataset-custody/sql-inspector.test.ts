@@ -234,6 +234,15 @@ describe("named → positional binding rewrite (grilling 21)", () => {
     const aggregate = inspect("SELECT AVG(mrr) FROM saas_churn");
     expect(aggregate.ok && aggregate.inspection.hasAggregate).toBe(true);
   });
+
+  it("flags row-reassembling functions so the release gate can deny them", () => {
+    const reassembling = inspect("SELECT FIRST(tickets) FROM saas_churn");
+    expect(reassembling.ok && reassembling.inspection.reassembles).toBe(true);
+    expect(reassembling.ok && reassembling.inspection.reassemblingFn).toBe("FIRST");
+    const aggregate = inspect("SELECT COUNT(tickets) FROM saas_churn");
+    expect(aggregate.ok && aggregate.inspection.reassembles).toBe(false);
+    expect(aggregate.ok && aggregate.inspection.reassemblingFn).toBeNull();
+  });
 });
 
 describe("lexer (defense against smuggling)", () => {

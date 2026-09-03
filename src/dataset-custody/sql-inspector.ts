@@ -30,6 +30,10 @@ export interface SqlInspection {
   /** Raw `WHERE` clause, verbatim; null when absent. */
   readonly whereExpression: string | null;
   readonly hasAggregate: boolean;
+  /** A row-reassembling function (`FIRST`, `ANY_VALUE`, …) was applied — aggregate-shaped, row-valued. */
+  readonly reassembles: boolean;
+  /** The first reassembling function applied (e.g. `FIRST`); null when none. */
+  readonly reassemblingFn: string | null;
 }
 
 export type InspectResult =
@@ -66,7 +70,13 @@ const CLAUSE_WORDS = new Set([
 const AGGREGATE_WORDS = new Set([
   "COUNT", "SUM", "AVG", "MIN", "MAX", "TOTAL", "MEDIAN", "MODE", "STRING_AGG", "LIST", "ARRAY_AGG",
   "FIRST", "LAST", "PRODUCT", "STDDEV", "VARIANCE", "BOOL_AND", "BOOL_OR",
+  // Genuine DuckDB aggregates too — without them an `ANY_VALUE(x) … GROUP BY`
+  // statement passes the aggregate gate before the reassembling scan runs.
+  "ANY_VALUE", "ARBITRARY",
 ]);
+
+/** Row-reassembling functions: legal aggregates by shape, but each returns a raw per-row value. */
+const REASSEMBLING_WORDS = new Set(["FIRST", "LAST", "ANY_VALUE", "ARBITRARY", "LIST", "ARRAY_AGG", "STRING_AGG"]);
 
 /** §6: DDL, DML, transaction control, external data, extension loading, session mutation. */
 const FORBIDDEN_WORDS = new Set([
@@ -409,6 +419,8 @@ export function inspectSql(input: InspectInput): InspectResult {
   let groupExpressions: string[] = [];
   let whereExpression: string | null = null;
   let hasAggregate = false;
+  let reassembles = false;
+  let reassemblingFn: string | null = null;
 
   for (let k = 0; k < meaningful.length; k += 1) {
     const token = meaningful[k] as Token;
@@ -488,6 +500,10 @@ export function inspectSql(input: InspectInput): InspectResult {
     if (token.kind === "word" && AGGREGATE_WORDS.has(upper) && meaningful[k + 1]?.text === "(") {
       hasAggregate = true;
     }
+    if (token.kind === "word" && REASSEMBLING_WORDS.has(upper) && meaningful[k + 1]?.text === "(") {
+      reassembles = true;
+      reassemblingFn ??= upper;
+    }
   }
   rebuilt += sql.slice(cursor);
 
@@ -500,6 +516,8 @@ export function inspectSql(input: InspectInput): InspectResult {
       groupExpressions,
       whereExpression,
       hasAggregate: hasAggregate || hasGrouping,
+      reassembles,
+      reassemblingFn,
     },
   };
 }
