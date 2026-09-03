@@ -52,7 +52,7 @@ export function cancelActiveOperation(expectedRevision: number): void {
 export function activatePreset(
   datasetId: PresetId,
   expectedRevision: number,
-): Promise<{ ok: true } | { ok: false; code: ErrorCode }> {
+): Promise<{ ok: true } | { ok: false; code: ErrorCode; message: string }> {
   return workspaceStore
     .dispatch({
       kind: "activateDataset",
@@ -61,7 +61,7 @@ export function activatePreset(
     .then((envelope) =>
       envelope.ok
         ? ({ ok: true } as const)
-        : ({ ok: false, code: envelope.error.code } as const),
+        : ({ ok: false, code: envelope.error.code, message: envelope.error.message } as const),
     );
 }
 

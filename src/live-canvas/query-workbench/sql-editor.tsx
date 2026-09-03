@@ -22,8 +22,12 @@ export default function SqlEditor(props: {
   const [view, setView] = useState<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   const onRunRef = useRef(onRun);
-  onChangeRef.current = onChange;
-  onRunRef.current = onRun;
+  // Latest-callback refs sync in an effect: .current writes during render
+  // break render purity (react-doctor/no-ref-current-in-render).
+  useEffect(() => {
+    onChangeRef.current = onChange;
+    onRunRef.current = onRun;
+  });
 
   useEffect(() => {
     const extensions: Extension[] = [

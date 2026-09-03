@@ -62,6 +62,46 @@ function cellText(value: unknown): string {
   return value === null || value === undefined ? "∅" : String(value);
 }
 
+// Straight scrollTop/clientHeight observers: identical values to the
+// library defaults in a real browser, and deterministic under jsdom's
+// layout-less element (getBoundingClientRect is always zeros there).
+function observeOffset(
+  instance: Virtualizer<HTMLDivElement, Element>,
+  callback: (offset: number, isScrolling: boolean) => void,
+): (() => void) | undefined {
+  const element = instance.scrollElement;
+  if (!element) return;
+  const handler = () => callback(element.scrollTop, false);
+  handler();
+  element.addEventListener("scroll", handler, { passive: true });
+  return () => element.removeEventListener("scroll", handler);
+}
+
+// The horizontal window reads scrollLeft instead — same deal, per axis.
+function observeOffsetX(
+  instance: Virtualizer<HTMLDivElement, Element>,
+  callback: (offset: number, isScrolling: boolean) => void,
+): (() => void) | undefined {
+  const element = instance.scrollElement;
+  if (!element) return;
+  const handler = () => callback(element.scrollLeft, false);
+  handler();
+  element.addEventListener("scroll", handler, { passive: true });
+  return () => element.removeEventListener("scroll", handler);
+}
+
+function observeRect(
+  instance: Virtualizer<HTMLDivElement, Element>,
+  callback: (rect: { width: number; height: number; x: number; y: number }) => void,
+): (() => void) | undefined {
+  const element = instance.scrollElement;
+  if (!element) return;
+  const handler = () => callback({ width: element.clientWidth, height: element.clientHeight, x: 0, y: 0 });
+  handler();
+  element.addEventListener("scroll", handler, { passive: true });
+  return () => element.removeEventListener("scroll", handler);
+}
+
 export function InteractiveGrid({
   grid,
   totalRows,
@@ -88,44 +128,6 @@ export function InteractiveGrid({
   );
   const table = useReactTable({ data, columns: columnDefs, getCoreRowModel: getCoreRowModel() });
   const tableRows = table.getRowModel().rows;
-
-  // Straight scrollTop/clientHeight observers: identical values to the
-  // library defaults in a real browser, and deterministic under jsdom's
-  // layout-less element (getBoundingClientRect is always zeros there).
-  const observeOffset = (
-    instance: Virtualizer<HTMLDivElement, Element>,
-    callback: (offset: number, isScrolling: boolean) => void,
-  ): (() => void) | undefined => {
-    const element = instance.scrollElement;
-    if (!element) return;
-    const handler = () => callback(element.scrollTop, false);
-    handler();
-    element.addEventListener("scroll", handler, { passive: true });
-    return () => element.removeEventListener("scroll", handler);
-  };
-  // The horizontal window reads scrollLeft instead — same deal, per axis.
-  const observeOffsetX = (
-    instance: Virtualizer<HTMLDivElement, Element>,
-    callback: (offset: number, isScrolling: boolean) => void,
-  ): (() => void) | undefined => {
-    const element = instance.scrollElement;
-    if (!element) return;
-    const handler = () => callback(element.scrollLeft, false);
-    handler();
-    element.addEventListener("scroll", handler, { passive: true });
-    return () => element.removeEventListener("scroll", handler);
-  };
-  const observeRect = (
-    instance: Virtualizer<HTMLDivElement, Element>,
-    callback: (rect: { width: number; height: number; x: number; y: number }) => void,
-  ): (() => void) | undefined => {
-    const element = instance.scrollElement;
-    if (!element) return;
-    const handler = () => callback({ width: element.clientWidth, height: element.clientHeight, x: 0, y: 0 });
-    handler();
-    element.addEventListener("scroll", handler, { passive: true });
-    return () => element.removeEventListener("scroll", handler);
-  };
 
   const rowVirtualizer = useVirtualizer({
     count: rows.length,

@@ -3,7 +3,7 @@ import { agentSurface, invokeTool, waitForSurface, type AgentSurface, type Surfa
 import { HEALTHCARE_PII_CANONICAL_SQL, SAAS_CHURN_CANONICAL_SQL } from "../src/demo-presets/canonical-sql";
 import { NO_UPLOAD_BADGE } from "../src/revisioned-workspace/projection";
 import { EVIDENCE_LIMITATIONS, MONITORED_TRANSPORTS } from "../src/dataset-custody/schemas";
-import { INSIGHTS_EMPTY_STATE } from "../src/live-canvas/insights-view";
+import { INSIGHTS_EMPTY_STATE } from "../src/live-canvas/insights-copy";
 import { GRID_EMPTY_STATE } from "../src/live-canvas/data-grid-view";
 import { LINEAGE_EMPTY_STATE } from "../src/live-canvas/sql-lineage-view";
 import { CUSTODY_EMPTY_STATE } from "../src/live-canvas/custody-view";

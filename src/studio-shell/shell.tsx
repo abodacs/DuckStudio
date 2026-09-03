@@ -192,6 +192,27 @@ export function WorkspaceShell() {
   const runtime = expandedOperation ? measuredRuntime(expandedOperation) : null;
 
   /**
+   * The newest settled operation, phrased for the status live region beside
+   * the operation stream: the visible pill carries the outcome as a color
+   * dot alone, so the settlement is announced, never only painted.
+   */
+  const settledOperation =
+    vm.operations[0]?.status === "succeeded" || vm.operations[0]?.status === "failed"
+      ? vm.operations[0]
+      : null;
+  const settledAnnouncement = settledOperation
+    ? [
+        LABEL_FOR_KIND[settledOperation.kind].label,
+        settledOperation.status,
+        settledOperation.artifactId ? `— result ${settledOperation.artifactId}` : null,
+        settledOperation.status === "failed" ? `— ${settledOperation.errorCode ?? "failed"}` : null,
+        runtime,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : "";
+
+  /**
    * The projection facts: the active dataset highlights its preset card.
    * Neither gates a dispatch — grilling 61 keeps every gesture enabled so
    * the envelope teaches recovery.
@@ -221,10 +242,10 @@ export function WorkspaceShell() {
   };
 
   return (
-    <div className="relative flex h-dvh min-w-[960px] flex-col overflow-hidden">
+    <div className="relative flex min-h-dvh flex-col lg:h-dvh lg:overflow-hidden">
       <div aria-hidden className="lamp-field" />
       <header className="relative z-30 px-5 pt-4">
-        <div className="glass-island rise flex items-center gap-4 px-4 py-2.5">
+        <div className="glass-island rise flex flex-wrap items-center gap-4 px-4 py-2.5">
           <h1 className="title shrink-0">DuckStudio</h1>
           <p aria-live="polite" className="meta whitespace-nowrap">
             <span className="mono-value">rev {vm.revision}</span>
@@ -236,6 +257,7 @@ export function WorkspaceShell() {
             {vm.badge}
           </span>
           <span
+            role="group"
             aria-label="Agent capability"
             title={surfaceTitle}
             className="chip-capability"
@@ -245,16 +267,20 @@ export function WorkspaceShell() {
           </span>
         </div>
       </header>
-      <main className="relative z-10 grid min-h-0 flex-1 grid-cols-[35%_65%] gap-4 px-5 pt-4 pb-5">
-        <section aria-label="Controls" className="min-h-0 overflow-y-auto pr-1">
+      <main className="relative z-10 grid flex-1 grid-cols-1 gap-4 px-5 pt-4 pb-5 lg:min-h-0 lg:grid-cols-[35%_65%]">
+        <section aria-label="Controls" className="pr-1 lg:min-h-0 lg:overflow-y-auto">
           <h2 className="pane-label rise" style={rise(60)}>
             CONTROLS
           </h2>
           <div role="group" aria-label="Datasets" className="rise mt-3 space-y-2" style={rise(100)}>
             <h3 className="card-label">DATASETS</h3>
             <p id="preset-status" className="meta">
-              Click a preset to activate it — in this tab's memory only; rows never leave the browser.
+              Drop a CSV to make it the active dataset, or click a preset to swap in demo data — in this tab's memory
+              only; rows never leave the browser.
             </p>
+            {/* Slice 7 leads (issue #82): bringing your own file is the
+               dataset story's entry point; presets follow. */}
+            <ImportPanel importFile={(file) => importLocalFile(file, vm.revision)} />
             {PRESETS.map((entry) => {
               const isActive = activeDatasetId === entry.preset.datasetId;
               return (
@@ -262,6 +288,7 @@ export function WorkspaceShell() {
                   key={entry.id}
                   type="button"
                   aria-label={`Activate dataset ${entry.preset.datasetId} · ${entry.preset.policy} policy`}
+                  aria-pressed={isActive}
                   aria-describedby="preset-status"
                   onClick={() => activate(entry.id)}
                   className={isActive ? "preset-card preset-card-active" : "preset-card"}
@@ -290,8 +317,6 @@ export function WorkspaceShell() {
                 </button>
               );
             })}
-            {/* Slice 7: bring your own file — drag-and-drop CSV import, in-tab only. */}
-            <ImportPanel importFile={(file) => importLocalFile(file, vm.revision)} />
           </div>
           <div role="group" aria-label="Run an analysis" className="card-panel rise mt-2" style={rise(130)}>
             <div className="card-core">
@@ -386,9 +411,16 @@ export function WorkspaceShell() {
                       >
                         <span aria-hidden className="op-dot" />
                         <span>{LABEL_FOR_KIND[operation.kind].label}</span>
+                        <span className="sr-only">{operation.status}</span>
                       </li>
                     ))}
                   </ul>
+                  {/* Persistent polite region: the text change is what a
+                      screen reader announces, so it never unmounts while
+                      operations exist. */}
+                  <p role="status" className="sr-only">
+                    {settledAnnouncement}
+                  </p>
                   {expandedOperation && (
                     <div className={`operation-card ${expandedOperation.status === "failed" ? "operation-card-failed" : ""}`}>
                       <p className="meta flex items-center gap-2">
@@ -510,7 +542,7 @@ export function WorkspaceShell() {
             role="tabpanel"
             id={`panel-${activeView}`}
             aria-labelledby={`tab-${activeView}`}
-            className="panel-evidence rise min-h-0 flex-1 overflow-hidden"
+            className="panel-evidence rise h-[70vh] min-h-0 flex-1 overflow-hidden lg:h-auto"
             style={rise(260)}
           >
             <div id="evidence-panel" className="h-full overflow-hidden p-1 text-sm">

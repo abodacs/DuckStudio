@@ -684,7 +684,9 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
       if (!dataset) {
         return settleFailure(operationId, input.idempotencyKey, fingerprint, {
           code: "DATASET_UNAVAILABLE",
-          message: `Dataset ${input.source.id} is not active; activate it first.`,
+          message: input.source.id
+            ? `Dataset ${input.source.id} is not active; activate it first.`
+            : "No dataset is active; activate an available preset first.",
           retryable: true,
           details: { datasetId: input.source.id, activeDatasetId: workspace.activeDatasetId },
         });

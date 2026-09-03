@@ -26,9 +26,12 @@ export function composePresentation(
   pickers: WorkbenchPickers,
   priorSpec?: PresentationSpec,
 ): PresentationSpec {
+  // A KPI row still being typed (empty column) is not a pick yet — the same
+  // rule as a chart side missing its pair.
+  const explicitKpis = pickers.kpis.filter((kpi) => kpi.column !== "");
   const pickedKpis =
-    pickers.kpis.length > 0
-      ? pickers.kpis
+    explicitKpis.length > 0
+      ? explicitKpis
       : (priorSpec?.kpis?.map((kpi) => ({ column: kpi.column, format: kpi.format })) ?? []);
   const kpis = pickedKpis.map((kpi) => ({ label: kpi.column, column: kpi.column, format: kpi.format }));
 

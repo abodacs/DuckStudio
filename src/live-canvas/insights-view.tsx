@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { projectArtifact, projectWorkspace } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
 import { runCanonicalChurnAnalysis } from "./human-commands";
+import { INSIGHTS_EMPTY_STATE } from "./insights-copy";
 import { KpiTile, UnavailableArtifact } from "./artifact-states";
 
 /**
@@ -10,16 +11,6 @@ import { KpiTile, UnavailableArtifact } from "./artifact-states";
  * 280px "Loading chart…" fallback.
  */
 const EvidenceChart = lazy(() => import("./chart"));
-
-/**
- * The actionable empty-state copy (slice-7 plan stage 2): each state says
- * what to do next, not what is missing. The sample-analysis button exists
- * only while `saas_churn` is active — the one preset with a canonical run.
- */
-export const INSIGHTS_EMPTY_STATE = {
-  noDataset: "Activate a dataset on the left to begin.",
-  datasetActive: "Run the sample analysis and results land here.",
-} as const;
 
 /**
  * Insights evidence view (grilling 52): KPI cards from the measured

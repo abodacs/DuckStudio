@@ -40,6 +40,11 @@ describe("composePresentation", () => {
     expect(full.chart).toEqual({ type: "scatter", x: "tickets", y: "churn_rate" });
   });
 
+  it("treats a KPI row still being typed (empty column) as not picked", () => {
+    const spec = composePresentation({ ...PICKERS, kpis: [{ column: "", format: "integer" }] });
+    expect(spec.kpis).toBeUndefined();
+  });
+
   it("submits the grid request as picked — the workspace denies, not the composer", () => {
     expect(composePresentation({ ...PICKERS, grid: true }).grid).toEqual({ visible: true });
   });

@@ -3,7 +3,8 @@ import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { CUSTODY_EMPTY_STATE, CustodyView } from "../custody-view";
 import { DataGridView, GRID_EMPTY_STATE } from "../data-grid-view";
-import { InsightsView, INSIGHTS_EMPTY_STATE } from "../insights-view";
+import { INSIGHTS_EMPTY_STATE } from "../insights-copy";
+import { InsightsView } from "../insights-view";
 import { LINEAGE_EMPTY_STATE, SqlLineageView } from "../sql-lineage-view";
 import { workspaceStore } from "../../revisioned-workspace/store";
 
