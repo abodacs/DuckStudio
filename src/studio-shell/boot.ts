@@ -4,8 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { workspaceStore } from "../revisioned-workspace/store";
 import { nativeModelContextAvailable, registerTools } from "../agent-control-plane/registration";
 import { warmEngine } from "../duck-engine/worker";
-import { armEgressMonitoring } from "../dataset-custody/egress";
-import { custodyKernel } from "../dataset-custody/kernel";
+import { armEgressMonitoring, type EgressMonitor, type EgressScope } from "../dataset-custody/egress";
+import { custodyKernel, type CustodyKernel } from "../dataset-custody/kernel";
 import type { WorkspaceRouter } from "./router";
 
 /** Mounted app handle returned by {@link start} (ADR 0001 am5). */
@@ -32,9 +32,33 @@ export type BootStep = (typeof BOOT_PLAN)[number];
  * in the same slot — then the DuckDB worker warms (ADR 0007: warm on first
  * paint, so first analysis pays no cold start).
  */
-export async function warmDefault(): Promise<void> {
-  armEgressMonitoring(globalThis, custodyKernel);
-  await warmEngine();
+
+/** Injectable seams so `warmDefault` can be driven headlessly, like {@link StartInjection}. */
+export interface WarmInjection {
+  /** Defaults to `globalThis`. */
+  scope?: EgressScope;
+  /** Defaults to the app's {@link custodyKernel} binding. */
+  kernel?: CustodyKernel;
+  /** Defaults to {@link warmEngine}; tests inject a no-op. */
+  warm?: () => Promise<void>;
+}
+
+let egressMonitor: EgressMonitor | null = null;
+
+/**
+ * Arms interception exactly once per page. A failed boot retries the whole
+ * plan — warm included — and a failed warm deliberately leaves interception
+ * armed (it must cover first paint regardless); re-arming would stack a
+ * second wrapper layer and account every later dataset send twice.
+ */
+export function armOnce(scope: EgressScope, kernel: CustodyKernel): EgressMonitor {
+  egressMonitor ??= armEgressMonitoring(scope, kernel);
+  return egressMonitor;
+}
+
+export async function warmDefault(inject: WarmInjection = {}): Promise<void> {
+  armOnce(inject.scope ?? globalThis, inject.kernel ?? custodyKernel);
+  await (inject.warm ?? warmEngine)();
 }
 
 /** Injectable seams so `start` can be driven headlessly (ADR 0001 am6). */
