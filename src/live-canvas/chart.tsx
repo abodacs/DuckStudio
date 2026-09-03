@@ -48,9 +48,9 @@ export default function EvidenceChart({ insights }: { insights: InsightsData }) 
       grid: { left: 48, right: 16, top: 16, bottom: 32 },
       tooltip: {
         trigger: "item",
-        backgroundColor: "rgb(10 10 16 / 92%)",
+        backgroundColor: "rgb(5 5 8 / 92%)",
         borderColor: HAIRLINE,
-        textStyle: { color: "#e6edf3", fontSize: 11 },
+        textStyle: { color: "#f4f7fa", fontSize: 11 },
         formatter: (params: { dataIndex: number }) => {
           const point = points[params.dataIndex];
           if (!point) return "";

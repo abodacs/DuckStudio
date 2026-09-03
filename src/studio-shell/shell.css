@@ -33,6 +33,8 @@
  * "Custody Glass" world tokens. The chassis is OLED black; panels are
  * translucent white glass over it. Two chromatic voices only: Signal Cyan
  * (custody, trust, selection) and Lamp Amber (the agent, warnings).
+ *
+ * Hallmark · genre: atmospheric · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app
  */
 @theme {
   --color-canvas: #050508;

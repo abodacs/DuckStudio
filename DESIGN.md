@@ -85,10 +85,10 @@ components:
     textColor: "{colors.ink}"
     rounded: "{rounded.pill}"
     padding: "4px 12px 4px 10px"
-  chip-tool:
-    backgroundColor: "rgb(255 179 71 / 6%)"
+  chip-operation:
+    backgroundColor: "transparent"
     textColor: "{colors.lamp-amber}"
-    typography: "{typography.mono}"
+    typography: "{typography.meta}"
     rounded: "{rounded.pill}"
     padding: "2px 8px"
   chip-policy-sensitive:
@@ -127,14 +127,14 @@ components:
 
 DuckStudio is a dark optical instrument lit by its own two signal lamps — Signal Cyan is custody and trust, Lamp Amber is the agent — and every surface is translucent white glass you can see custody through. The chassis is OLED black; two fixed radial lamp fields wash the room (cyan over the evidence pane, amber low over the agent rail); panels are machined hardware built as concentric double bezels with 1px white hairlines. It refuses the category's flat admin-panel arrangement: nothing here is a grey card on a grey dashboard — depth, light, and hairline construction make the workspace read as a scientific instrument. The tone stays "a luminous custody instrument — glass depth under two signal lamps, forensic legibility; not a brand film."
 
-Density is deliberate and forensic: working type is 11–14px, every readout binds to explicit workspace state (workspace ID, revision, policy enum, artifact handle), and every empty state teaches the custody invariant it enforces with ghost geometry that fabricates no values. The aha is staged in the material itself: governed evidence renders on glass while the badge still reads `0 Bytes of Dataset Uploaded`.
+Density is deliberate and forensic: working type is 11–14px, every readout binds to explicit workspace state (revision, policy enum, artifact handle), and every empty state teaches the custody invariant it enforces with ghost geometry that fabricates no values. The aha is staged in the material itself: governed evidence renders on glass while the badge still reads `0 Bytes of Dataset Uploaded`.
 
 All state motion runs on one house glide (`cubic-bezier(0.32, 0.72, 0, 1)`) with full `prefers-reduced-motion` compliance; the lamp drift is the only ambient animation, and reduced motion pins it.
 
 **Key Characteristics:**
 - OLED-black chassis (`#050508`) with two fixed radial lamp fields — cyan over evidence, amber over the agent rail — the only chromatic voices
 - Translucent white-glass panels with 1px hairlines, built as concentric double bezels (18px outer shell / 14px inner core)
-- One soft ambient shadow per panel; lamp glows appear only on lamp-owned surfaces (the agent operation card, the evidence instrument)
+- One soft ambient shadow per panel; lamp glows appear only on lamp-owned surfaces (the Activity card, the evidence instrument)
 - `backdrop-blur` only on fixed/sticky glass; scrolling content is never blurred, and lamp softness comes from gradient falloff, not filters
 - JetBrains Mono marks anything the machine emitted, read in ink-white on grey meta lines
 - Ghost empty states preview geometry, never values; disabled controls dim to 75% and state their reason
@@ -145,10 +145,10 @@ All state motion runs on one house glide (`cubic-bezier(0.32, 0.72, 0, 1)`) with
 A black-glass monochrome whose entire expressive range is two signal lamps: white at four opacities does every structural job, cyan and amber carry meaning.
 
 ### Primary
-- **Signal Cyan** (`#00F2FE`): the custody lamp. Marks trust, custody, selection, and focus: the evidence instrument's hairline (15%) and surrounding glow, the zero-upload badge dot (full, pulsing) and border (30%), the active evidence tab (text full, background 8%, border 30%), the current first-run step numeral ring (border 40%, text full, fill 7%), ghost-readout accents (20–55%), and every `focus-visible` outline (2px, offset −2px). The lamp field itself is two radial cyan washes at 13% and 7% over the evidence side. Cyan never marks agent activity and never fills large areas — its rarity is the signal.
+- **Signal Cyan** (`#00F2FE`): the custody lamp. Marks trust, custody, selection, and focus: the evidence instrument's hairline (15%) and surrounding glow, the zero-upload badge dot (full, pulsing) and border (30%), the active evidence tab (text full, background 8%, border 30%), the selected readout's lamp (active preset and artifact cards: border 40%, fill 5%), ghost-readout accents (20–55%), and every `focus-visible` outline (2px, offset −2px). The lamp field itself is two radial cyan washes at 13% and 7% over the evidence side. Cyan never marks agent activity and never fills large areas — its rarity is the signal.
 
 ### Secondary
-- **Lamp Amber** (`#FFB347`): the agent lamp, reserved exclusively for agent tool operations and warnings. The OPERATION card wires its shell with amber (border 40%, core gradient tinted 6%→1.5%, plus the amber glow), the exact-name tool pill (`duckdb_get_context`) reads full-strength mono amber, and the `sensitive_aggregate_only` policy chip is amber. The lamp field is two radial amber washes at 9% and 5% low over the agent rail. Never decorative; never marks human-initiated UI.
+- **Lamp Amber** (`#FFB347`): the agent lamp, reserved exclusively for agent tool operations and warnings. The ACTIVITY card wires its shell with amber (border 40%, core gradient tinted 6%→1.5%, plus the amber glow); its operation pills read full-strength amber while queued/running, with the exact tool/command name on the tooltip, and the `sensitive_aggregate_only` policy chip is amber. The lamp field is two radial amber washes at 9% and 5% low over the controls rail. Never decorative; never marks human-initiated UI.
 
 ### Neutral
 - **Chassis** (`#050508`): the OLED-black room. Page background, `theme-color` meta, pre-hydration `<body>` background, and the glass header's tint base (60% opacity) — the chassis shows through the glass.
@@ -164,7 +164,7 @@ A black-glass monochrome whose entire expressive range is two signal lamps: whit
 
 **The Dim Border Rule.** Chromatic borders render dimmed (cyan at 15–40%, amber at 40%); chromatic text renders at full strength. A colored border marks; colored text speaks.
 
-**The Lamp-Glow Rule.** Glows mark the two lamps and nothing else: the amber glow lives only on the OPERATION card, the cyan glow only on the evidence instrument. Neutral panels get ambient shadow, never glow.
+**The Lamp-Glow Rule.** Glows mark the two lamps and nothing else: the amber glow lives only on the ACTIVITY card, the cyan glow only on the evidence instrument. Neutral panels get ambient shadow, never glow.
 
 ## Typography
 
@@ -178,23 +178,23 @@ Fonts are self-hosted because `Cross-Origin-Embedder-Policy: require-corp` makes
 
 ### Hierarchy
 - **Title** (Space Grotesk 500, 18px/28px, tracking −0.01em): the product name `DuckStudio` and the error-frame heading. The only display-size text.
-- **Numeral** (Space Grotesk 500, 12px): display numerals inside machined elements — the first-run step numbers seated in 28px circles.
+- **Numeral** (Space Grotesk 500, 12px): display numerals inside machined elements — reserved for numbered readouts; no live surface seats one today.
 - **Label** (Geist 500, 11px/16px, +0.14em tracking, uppercase): pane labels (`AGENT CONTROL & OPERATIONS`, `SELECTED ARTIFACT`) and every card label (`CONTEXT`, `OPERATION`, `CUSTODY`). Always Ink Secondary.
-- **Body** (Geist 400, 14px/20px): tab-panel content, badge copy, recovery button, dataset IDs' neighbors. A 13px medium working size covers first-run move labels and tab labels.
+- **Body** (Geist 400, 14px/20px): tab-panel content, badge copy, recovery button, dataset IDs' neighbors. A 13px medium working size covers tab labels, the run button, and the dropzone lead line.
 - **Meta** (Geist 400, 12px/16px): secondary lines, preset metadata, budget lists, empty-state and error explanations.
-- **Mono** (JetBrains Mono 400, 1em — inherits surrounding size, never rescales): workspace IDs, revisions, tool names, budgets, artifact IDs, transports, policy enums, error codes, SQL. Mono values read in Ink on grey meta lines.
+- **Mono** (JetBrains Mono 400, 1em — inherits surrounding size, never rescales): revisions, tool names, budgets, artifact IDs, transports, policy enums, error codes, SQL. Mono values read in Ink on grey meta lines.
 
 ### Named Rules
 **The Mono-Means-Machine Rule.** If the system emitted it, it's JetBrains Mono in Ink; if a human said it, it's Geist in grey. Never set prose in mono; never set an ID, revision, or code in the UI font.
 
 ## Layout
 
-A single-screen instrument frame: a full-viewport (`h-dvh`) column with `min-width: 960px` (horizontal scroll below; panes never stack or crush). A floating glass header island hovers above two independently scrolling panes in a fixed grid — 35% agent operations and context left, 65% selected artifact right. Z-order is the room's architecture: the lamp field is fixed at z-0, content sits at z-10, the header island floats at z-30.
+A single-screen instrument frame: a full-viewport (`h-dvh`) two-pane grid at ≥1024px; below that breakpoint the panes stack in reading order and the page scrolls. A floating glass header island hovers above two independently scrolling panes — 35% controls left, 65% results right. Z-order is the room's architecture: the lamp field is fixed at z-0, content sits at z-10, the header island floats at z-30.
 
-- **Header island:** page gutter 20px/16px (`px-5 pt-4`); the island itself is `glass-island` — 20px radius, chassis-tinted glass at 60%, 1px hairline, `backdrop-blur-xl`, top inner highlight — with 10px/16px internal padding. Title, then a `polite` live status line (workspace ID, revision, dataset) in Meta grey with mono values separated by `·`, preset availability, and the badge pinned right (`margin-left: auto`).
+- **Header island:** page gutter 20px/16px (`px-5 pt-4`); the island itself is `glass-island` — 20px radius, chassis-tinted glass at 60%, 1px hairline, `backdrop-blur-xl`, top inner highlight — with 10px/16px internal padding. Title, then a polite live status line (revision, dataset) in Meta grey with mono values separated by `·`, the zero-upload badge, and the agent capability chip; the badge carries `margin-left: auto` and the island row wraps when narrow.
 - **Panes:** the grid runs 35/65 with a 16px gap and 20px page gutters. The left pane scrolls (`overflow-y-auto`) with 4px gutter allowance; the right pane is a flex column: pane label, tab island, then the evidence panel filling all remaining height (`flex-1`) with its core scrolling inside.
-- **Left rail order:** FIRST ANALYSIS (the three-move first-run card) → CONTEXT → OPERATION → ARTIFACTS → DATASETS (preset cards) → agent-channel footer → CUSTODY. Cards stack on an 8px rhythm (`mt-2`), 12px before groups (`mt-3`); a card label sits 4–6px above its content.
-- **First paint:** regions rise in reading order via a `--rise-delay` stagger (left rail 60→440ms; right pane 140→260ms) — a 640ms rise of 14px with a blur-resolve (6px→0) on the house glide.
+- **Left rail order:** DATASETS (the local-file dropzone, then the preset cards) → RUN AN ANALYSIS → SAVED RESULTS → ACTIVITY. Cards stack on an 8px rhythm (`mt-2`), 12px before groups (`mt-3`); a card label sits 4–6px above its content.
+- **First paint:** regions rise in reading order via a `--rise-delay` stagger (left rail 60→220ms; right pane 140→260ms) — a 640ms rise of 14px with a blur-resolve (6px→0) on the house glide.
 - **Scrollbars:** instrument-quiet everywhere — thin, `rgb(255 255 255 / 14%)` thumb on transparent.
 
 ## Elevation & Depth
@@ -205,13 +205,13 @@ Depth is a hybrid of glass tone, hairline construction, and light. Every panel c
 - **Ambient panel** (`box-shadow: 0 24px 48px -24px rgb(0 0 0 / 0.55)`): every card panel and the evidence instrument. One per panel — never stacked neutrals.
 - **Ambient island** (`0 24px 48px -24px rgb(0 0 0 / 0.65)` plus `inset 0 1px 0 rgb(255 255 255 / 0.07)`): the floating glass header island and error island — deeper seating for true float.
 - **Core highlight** (`inset 0 1px 0 rgb(255 255 255 / 0.06)`, ghost tiles `0.04`): the inner core's light-catch.
-- **Amber lamp glow** (`0 0 24px -8px rgb(255 179 71 / 0.18)`): only the OPERATION card, layered after its ambient shadow.
+- **Amber lamp glow** (`0 0 24px -8px rgb(255 179 71 / 0.18)`): only the ACTIVITY card, layered after its ambient shadow.
 - **Cyan lamp glow** (`0 0 48px -16px rgb(0 242 254 / 0.28)`): only the evidence instrument, layered after its ambient shadow.
 
 ### Named Rules
 **The One Ambient Shadow Rule.** Each panel casts exactly one soft ambient shadow (`0 24px 48px -24px` black). A second neutral shadow is a defect; the only additional shadow allowed is that panel's lamp glow.
 
-**The Blur Budget Rule.** `backdrop-blur` sits only on fixed or sticky glass (the header island, the error island). Scrolling content is never blurred; the lamp fields get their softness from radial-gradient falloff, not filters.
+**The Blur Budget Rule.** `backdrop-blur` sits only on fixed or sticky glass (the header island, the error island) plus the one floating popover, the workbench select's option list. Scrolling content is never blurred; the lamp fields get their softness from radial-gradient falloff, not filters.
 
 ## Shapes
 
@@ -220,7 +220,7 @@ Concentric double-bezel construction is the signature: every readout is machined
 ## Components
 
 ### Header glass island
-The room's one floating chrome: title, live status line (mono values in Ink on Meta grey), preset availability, and the zero-upload badge. `glass-island` construction: 20px radius, chassis glass at 60%, hairline, `backdrop-blur-xl`, island shadow with top inner highlight. The status line is a polite live region; the island is the only blurred element over scrolling content.
+The room's one floating chrome: title, live status line (mono values in Ink on Meta grey), the zero-upload badge, and the agent capability chip — its tooltip discloses the served surface (`webmcp_native`, or `simulator_only · same workspace`). `glass-island` construction: 20px radius, chassis glass at 60%, hairline, `backdrop-blur-xl`, island shadow with top inner highlight. The status line is a polite live region; the island is the only blurred element over scrolling content.
 
 ### Zero-upload badge (signature)
 The emotional core of the product and the most-protected element. A pill on cyan-tinted glass (6%) with a 1px cyan border at 30%, a 6px full-strength cyan dot pulsing on a 2.8s breathing cycle, and Body-size copy reading exactly `0 Bytes of Dataset Uploaded`. The copy is fixed by PRODUCT.md — never paraphrase, amplify, or soften the claim.
@@ -228,17 +228,14 @@ The emotional core of the product and the most-protected element. A pill on cyan
 ### Readout cards (double bezel)
 The left rail's atomic unit: `card-panel` shell (18px, glass 4%, hairline, ambient shadow, 6px padding) wrapping a `card-core` (14px, edge at 60%, white glass gradient, 10px/12px padding, top highlight). An uppercase 11px grey label, then Meta content with mono values. One chromatic variant exists: **card-operation** wires the shell amber (border 40%, amber-tinted core gradient, amber glow) because agent operations are the one thing the rail must flag; the evidence instrument gets the mirror treatment (**panel-evidence**: cyan hairline at 15%, cyan-tinted core, cyan glow) because the room's cyan lamp lands on it.
 
-### First-run card
-The three-move path (activate → ask → evidence) as a numbered readout. Each move is a 28px circle holding a Space Grotesk numeral, with a 13px label and a Meta detail line. The current move — derived from workspace state, never a tour counter — renders its circle in cyan (border 40%, fill 7%, text full); spent and future moves stay grey hairline. Announces "(current move)" to screen readers.
+### Operation pills and policy chips
+Operation pills (the ACTIVITY card) pair a status dot with a human label — `Activate dataset`, `Run analysis`, `Import file`; the exact tool/command name rides the tooltip, no aliases, no re-casing. Amber + pulse while queued/running, grey when settled, red when failed. Policy chips are 12px pills rendering the human policy label — `Sensitive — totals only` in amber (border 40%, fill 5%), `Public data` in grey (hairline border, white 3%) — with the raw enum (`sensitive_aggregate_only`, `public_synthetic`) on the tooltip. Chip color is the policy mode, readable at a glance.
 
-### Tool pill and policy chips
-The tool pill is mono Lamp Amber text in an amber pill (border 40%, fill 6%, 2px/8px padding) rendering exact registered tool names — no aliases, no re-casing. Policy chips are 12px pills: `sensitive_aggregate_only` in amber (border 40%, fill 5%), `public_synthetic` in grey (hairline border, white 3%). Chip color is the policy mode, readable at a glance.
-
-### Preset cards
-Full-width, text-left panel buttons in double-bezel construction: mono 14px dataset ID (`saas_churn`), Meta row line (`250k rows · ~14.2 MB`), the policy chip and a 24px hairline arrow circle right-aligned. Disabled until dataset activation ships: dimmed to 75% opacity with the reason ("Dataset activation is coming online.") associated via `aria-describedby` — a disabled control never goes mute. Hover wiring (`state-shift press focus-ring`) is built in for the moment they activate.
+### Preset cards and the dropzone
+Full-width, text-left panel buttons in double-bezel construction: mono 14px dataset ID (`saas_churn`), Meta row line (`250k rows · ~14.2 MB`), the policy chip and a 24px hairline arrow circle right-aligned. Clicking dispatches the activation command — `aria-pressed` carries state, and the active preset wires the cyan lamp (border 40%, cyan 5% fill) with a mono `ACTIVE` chip replacing the arrow. The local-file dropzone leads the group: a 1px dashed hairline panel at the concentric inner radius whose drag-over state tints cyan and whose click target carries the standard focus ring. Hover/press wiring (`state-shift press focus-ring`) is live on both.
 
 ### Evidence tab island
-A pill rail (hairline border, chassis glass at 80%, 6px padding, top inner highlight) holding four pill tabs (`Insights`, `Data Grid`, `SQL & Lineage`, `Custody`) at 13px medium. Idle: grey text, hover to white 4% + Ink. Active: cyan text on cyan 8% with a cyan 30% border. Full roving-tabindex keyboard contract (Arrow/Home/End). Tab switches morph the panel island via the View Transitions API (240ms house glide) where supported; the fallback remount resolves with a 320ms blur-rise (`view-swap`). Tabs are not workspace state.
+A pill rail (hairline border, chassis glass at 80%, 6px padding, top inner highlight) holding five pill tabs (`Charts`, `Query`, `Rows`, `SQL & Lineage`, `Zero Upload`) at 13px medium. Idle: grey text, hover to white 4% + Ink. Active: cyan text on cyan 8% with a cyan 30% border. Full roving-tabindex keyboard contract (Arrow/Home/End). Tab switches morph the panel island via the View Transitions API (240ms house glide) where supported; the fallback remount resolves with a 320ms blur-rise (`view-swap`). Tabs are not workspace state.
 
 ### Evidence panel (the instrument)
 The right pane's full-height double bezel: `panel-evidence` shell (cyan hairline, cyan glow) with its core filling the pane and scrolling internally at Body size. One panel serves all four views.
@@ -269,5 +266,5 @@ One house glide (`cubic-bezier(0.32, 0.72, 0, 1)`) everywhere: state shifts at 3
 - **Don't** apply `backdrop-blur` to scrolling content or use blur filters for lamp softness — radial-gradient falloff only (The Blur Budget Rule).
 - **Don't** paraphrase the badge: it reads exactly `0 Bytes of Dataset Uploaded` — no "zero-knowledge," no "SOC 2," no claims PRODUCT.md does not make.
 - **Don't** set prose in mono or machine values in the UI font (The Mono-Means-Machine Rule).
-- **Don't** stack or reflow the 35/65 panes responsively; below 960px the shell scrolls horizontally.
+- **Don't** reflow the two panes into any split other than 35/65 at ≥1024px or the reading-order stack below; never a 50/50 split or a hidden pane.
 - **Don't** soften error frames with generic advice; render a stable mono code and one recovery action.
