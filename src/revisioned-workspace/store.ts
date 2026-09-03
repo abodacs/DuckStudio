@@ -3,12 +3,18 @@ import { createArtifactGraph, type ArtifactGraph } from "../analysis-artifacts/g
 import type { ResultColumn } from "../analysis-artifacts/schemas";
 import { sha256Hex } from "../analysis-artifacts/sql-hash";
 import { healthcarePiiPreset, saasChurnPreset, type PresetId } from "../demo-presets/catalog";
-import type { PresetMetadata } from "../demo-presets/schemas";
+import { canonicalSchemaJson, type PresetMetadata } from "../demo-presets/schemas";
 import { custodyKernel, governedSource, type CustodyKernel } from "../dataset-custody/kernel";
 import { BUDGET_DEFAULTS } from "../dataset-custody/schemas";
 import type { CustodyFailure, GovernedSource } from "../dataset-custody/schemas";
 import type { EngineFailure, ExecutionResult } from "../duck-engine/protocol";
 import { workspaceEngine, type WorkspaceEngine } from "../duck-engine/worker";
+import {
+  intakeTickets,
+  importedRelationName,
+  MAX_IMPORT_BYTES,
+  type IntakeRegistry,
+} from "./intake-tickets";
 import {
   downsampleChartPoints,
   measureSummary,
@@ -26,6 +32,7 @@ import {
   ActivateDatasetInputSchema,
   CancelActiveOperationInputSchema,
   GetContextInputSchema,
+  ImportLocalFileInputSchema,
   RunAnalysisInputSchema,
   SelectArtifactInputSchema,
   VerifyCustodyInputSchema,
@@ -35,6 +42,7 @@ import {
   type CancelActiveOperationInput,
   type ErrorCode,
   type GetContextInput,
+  type ImportLocalFileInput,
   type RunAnalysisInput,
   type SelectArtifactInput,
   type VerifyCustodyInput,
@@ -70,14 +78,15 @@ import {
  * untouched. Exact replays return the cached envelope verbatim (grilling 33).
  */
 
-/** The six domain commands (§3.1); `input` is the schema's input type. */
+/** The seven domain commands (§3.1 as amended by slice 7); `input` is the schema's input type. */
 export type DomainCommand =
   | { kind: "getContext"; input: z.input<typeof GetContextInputSchema> }
   | { kind: "activateDataset"; input: ActivateDatasetInput }
   | { kind: "runAnalysis"; input: RunAnalysisInput }
   | { kind: "verifyCustody"; input: VerifyCustodyInput }
   | { kind: "selectArtifact"; input: SelectArtifactInput }
-  | { kind: "cancelActiveOperation"; input: CancelActiveOperationInput };
+  | { kind: "cancelActiveOperation"; input: CancelActiveOperationInput }
+  | { kind: "importLocalFile"; input: ImportLocalFileInput };
 
 const DomainCommandSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("getContext"), input: GetContextInputSchema }),
@@ -86,6 +95,7 @@ const DomainCommandSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("verifyCustody"), input: VerifyCustodyInputSchema }),
   z.strictObject({ kind: z.literal("selectArtifact"), input: SelectArtifactInputSchema }),
   z.strictObject({ kind: z.literal("cancelActiveOperation"), input: CancelActiveOperationInputSchema }),
+  z.strictObject({ kind: z.literal("importLocalFile"), input: ImportLocalFileInputSchema }),
 ]);
 
 const CompiledDomainCommand = z.compile(DomainCommandSchema);
@@ -98,10 +108,12 @@ export type WorkspaceStore = {
   appendCapability(capability: "webmcp_native" | "simulator_only"): void;
 };
 
-/** The kernel + engine + clock the mutation path drives; tests inject fakes (ARCHITECTURE.md). */
+/** The kernel + engine + intake + clock the mutation path drives; tests inject fakes (ARCHITECTURE.md). */
 export interface WorkspaceStorePorts {
   readonly kernel?: CustodyKernel;
   readonly engine?: WorkspaceEngine;
+  /** The out-of-band byte channel for `importLocalFile` (slice 7); tests inject a fresh registry. */
+  readonly intake?: IntakeRegistry;
   readonly now?: () => string;
 }
 
@@ -111,6 +123,7 @@ const WORKSPACE_ID = "ws_local_01";
 /** §4.1 bootstrap capabilities; negotiation appends `webmcp_native` / `simulator_only` (ticket 14). */
 const BOOTSTRAP_CAPABILITIES: Capability[] = [
   "activate_local_preset",
+  "import_local_file",
   "run_readonly_sql",
   "present_artifact",
   "verify_custody",
@@ -212,6 +225,7 @@ function asEngineFailure(raw: unknown): EngineFailure | null {
 export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): WorkspaceStore {
   const kernel = ports.kernel ?? custodyKernel;
   const engine = ports.engine ?? workspaceEngine;
+  const intake = ports.intake ?? intakeTickets;
   const now = ports.now ?? (() => new Date().toISOString());
 
   const listeners = new Set<() => void>();
@@ -220,8 +234,12 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
   const graph: ArtifactGraph = createArtifactGraph();
   const eventRing: WorkspaceEvent[] = [];
   const idempotencyCache = new Map<string, { fingerprint: string; envelope: Envelope }>();
-  /** The single-flight slot (grilling 31): one mutating operation at a time. */
-  let activeOperation: { operationId: string; kind: "activate_dataset" | "run_analysis" } | null = null;
+  /**
+   * The single-flight slot (grilling 31): one mutating operation at a time.
+   * Slice 7 widens the kind union with `import_local_file`.
+   */
+  let activeOperation: { operationId: string; kind: "activate_dataset" | "run_analysis" | "import_local_file" } | null =
+    null;
   let operationCounter = 0;
   /** Set by a cancel command; the targeted op checks it after every awaited phase. */
   let cancelRequested = false;
@@ -261,7 +279,10 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
   }
 
   /** Accepts a mutating operation into the single-flight slot, recorded `queued` (grilling 31). */
-  function acceptOperation(kind: "activate_dataset" | "run_analysis", sourceId?: string): string {
+  function acceptOperation(
+    kind: "activate_dataset" | "run_analysis" | "import_local_file",
+    sourceId?: string,
+  ): string {
     operationCounter += 1;
     const operationId = `op_${String(operationCounter).padStart(2, "0")}`;
     activeOperation = { operationId, kind };
@@ -348,7 +369,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
 
   /** The mutation check order (grilling 31/33): schema → cache → staleness → single-flight. */
   function dispatchMutation(
-    kind: "activateDataset" | "runAnalysis" | "selectArtifact" | "cancelActiveOperation",
+    kind: "activateDataset" | "runAnalysis" | "selectArtifact" | "cancelActiveOperation" | "importLocalFile",
     input: { idempotencyKey: string; expectedRevision: number } & Record<string, unknown>,
   ): Promise<Envelope> {
     const cached = idempotencyCache.get(input.idempotencyKey);
@@ -383,7 +404,7 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     // Single-flight (§9): one mutating operation at a time. Reads,
     // `selectArtifact` (not an operation), and cancel (it targets the
     // running operation) never take or collide with the slot.
-    if (activeOperation && (kind === "activateDataset" || kind === "runAnalysis")) {
+    if (activeOperation && (kind === "activateDataset" || kind === "runAnalysis" || kind === "importLocalFile")) {
       const error: EnvelopeFailure["error"] = {
         code: "OPERATION_CONFLICT",
         message: `Operation ${activeOperation.operationId} (${activeOperation.kind}) is running; wait for it or cancel it.`,
@@ -400,6 +421,9 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     }
     if (kind === "runAnalysis") {
       return runAnalysis(input as unknown as RunAnalysisInput, fingerprint);
+    }
+    if (kind === "importLocalFile") {
+      return runImport(input as unknown as ImportLocalFileInput, fingerprint);
     }
     if (kind === "selectArtifact") {
       return runSelectArtifact(input as unknown as SelectArtifactInput, fingerprint);
@@ -448,6 +472,126 @@ export function createWorkspaceStore(ports: WorkspaceStorePorts = {}): Workspace
     );
     cacheSet(input.idempotencyKey, fingerprint, envelope);
     return Promise.resolve(envelope);
+  }
+
+  /**
+   * The local-file import (slice 7, prd Amendment 3): the human-only command
+   * that turns a dropped CSV into the active dataset. The commit is the
+   * runActivate template; the engine phase mirrors runAnalysis so cancel and
+   * failure leave zero trace — the ticket's bytes are consumed (deleted) the
+   * moment execution starts, and a failed intake drops the relation it may
+   * have created. The ceilings deny pre-execution with `VALIDATION_ERROR`
+   * (EngineFailure is not widened; the code was already in its union), and
+   * the default policy is `sensitive_aggregate_only` with no classification
+   * UI — the name heuristic omits direct identifiers from the relation.
+   */
+  async function runImport(input: ImportLocalFileInput, fingerprint: string): Promise<Envelope> {
+    const operationId = acceptOperation("import_local_file", input.name);
+    const fail = (failure: CustodyFailure): Envelope =>
+      settleFailure(operationId, input.idempotencyKey, fingerprint, failure);
+
+    // One-shot consume: the bytes are referenced only by this execution from
+    // here on, so every path below — success, denial, cancel — leaves zero
+    // trace of them.
+    const ticket = intake.consume(input.ticketId);
+    if (!ticket) {
+      return fail({
+        code: "VALIDATION_ERROR",
+        message: "That import was already used or expired — drop the file again.",
+        retryable: false,
+        details: { field: "ticketId" },
+      });
+    }
+    const relation = importedRelationName(input.name, ticket.digest);
+    if (!/\.csv$/i.test(input.name)) {
+      return fail({
+        code: "VALIDATION_ERROR",
+        message: `"${input.name}" isn't a CSV — this import takes .csv files only.`,
+        retryable: false,
+        details: { field: "name" },
+      });
+    }
+    if (ticket.bytes.byteLength === 0) {
+      return fail({
+        code: "VALIDATION_ERROR",
+        message: "That file is empty — there is nothing to import.",
+        retryable: false,
+        details: { field: "bytes" },
+      });
+    }
+    if (ticket.bytes.byteLength > MAX_IMPORT_BYTES) {
+      return fail({
+        code: "VALIDATION_ERROR",
+        message: `That file is too large — the import ceiling is ${Math.round(MAX_IMPORT_BYTES / (1024 * 1024))} MB.`,
+        retryable: false,
+        details: { field: "bytes", bytes: ticket.bytes.byteLength, maximumBytes: MAX_IMPORT_BYTES },
+      });
+    }
+
+    markRunning(operationId);
+    try {
+      const intakeResult = await engine.intakeFile({ relation, name: input.name, bytes: ticket.bytes });
+      if (cancelRequested) return settleCancelled(operationId);
+
+      // ---- POINT OF NO RETURN: the runActivate template, one synchronous commit ----
+      const columns = intakeResult.columns.map((column) => ({
+        name: column.name,
+        type: column.type,
+        classification: column.classification,
+      }));
+      const dataset: PresetMetadata = {
+        datasetId: relation,
+        policy: "sensitive_aggregate_only",
+        minimumCohortSize: 10,
+        rowCount: intakeResult.rowCount,
+        byteSizeEstimate: ticket.bytes.byteLength,
+        schemaDigest: sha256Hex(canonicalSchemaJson(columns)),
+        columns,
+      };
+      const before = projectWorkspace(workspace);
+      const revision = workspace.revision + 1;
+      replaceWorkspace({
+        ...workspace,
+        revision,
+        activeDatasetId: dataset.datasetId,
+        activeDataset: Object.freeze({ ...dataset }),
+        operations: workspace.operations.map((operation) =>
+          operation.operationId === operationId
+            ? { ...operation, status: "succeeded", finishedAt: now() }
+            : operation,
+        ),
+      });
+      appendEvents([
+        { revision, at: now(), kind: "dataset_imported", operationId, datasetId: dataset.datasetId },
+      ]);
+      releaseSlot();
+      const envelope = successEnvelope(
+        workspace,
+        {
+          datasetId: dataset.datasetId,
+          schemaDigest: dataset.schemaDigest,
+          rowCount: dataset.rowCount,
+          byteSizeEstimate: dataset.byteSizeEstimate,
+          policy: dataset.policy,
+          minimumCohortSize: dataset.minimumCohortSize,
+        },
+        {
+          contextDelta: contextDelta(before, projectWorkspace(workspace)),
+          // An import has no canonical SQL to suggest; the envelope carries none.
+          nextActions: forwardAction("activateDataset", workspace, dataset.datasetId),
+        },
+      );
+      cacheSet(input.idempotencyKey, fingerprint, envelope);
+      return envelope;
+    } catch (raw) {
+      // Cancel = the worker died with its relations (grilling 31) — settle,
+      // nothing to drop. Any other engine rejection (the intake ceiling
+      // among them) drops the possibly-created relation before settling.
+      if (cancelRequested) return settleCancelled(operationId);
+      await engine.dropRelation(relation).catch(() => undefined);
+      const failure = asEngineFailure(raw) ?? internalFailure();
+      return fail(failure);
+    }
   }
 
   /** Human-only selection: a mutation, never an operation — the slot stays free (§4.4). */

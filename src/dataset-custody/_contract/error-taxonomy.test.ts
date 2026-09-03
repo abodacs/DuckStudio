@@ -143,6 +143,7 @@ describe("runtime engine failures (classified once at the seam)", () => {
         ),
       materialize: () => Promise.resolve({ relationName: "x", rowCount: 0 }),
       drop: () => Promise.resolve(),
+      intake: () => Promise.reject(new Error("intake is unused in this test")),
     };
     const response = await createWorkerHandler(slow)({
       id: 1,
@@ -172,6 +173,7 @@ describe("runtime engine failures (classified once at the seam)", () => {
       runBounded: () => Promise.reject(new Error("IO Error: unexpected internal state at line 42")),
       materialize: () => Promise.resolve({ relationName: "x", rowCount: 0 }),
       drop: () => Promise.resolve(),
+      intake: () => Promise.reject(new Error("intake is unused in this test")),
     };
     const response = await createWorkerHandler(throwing)({
       id: 1,

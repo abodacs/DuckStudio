@@ -1,7 +1,7 @@
 import type { AuthorizedDecision } from "../dataset-custody/schemas";
 import { custodyKernel } from "../dataset-custody/kernel";
 import { createEngineClient, type EngineClient, type EngineResponse, type EngineTransport } from "./protocol";
-import type { ExecutionResult, MaterializedRelation } from "./protocol";
+import type { ExecutionResult, IntakeResult, MaterializedRelation } from "./protocol";
 
 /**
  * The worker singleton (ADR 0002) and the public engine seam:
@@ -154,6 +154,8 @@ export interface WorkspaceEngine {
   materializeRelation(relationName: string, result: ExecutionResult): Promise<MaterializedRelation>;
   /** Relation-only DROP — denial cleanup and retention eviction. */
   dropRelation(relationName: string): Promise<void>;
+  /** Slice 7: materializes a dropped file's relation and describes its schema. */
+  intakeFile(input: { readonly relation: string; readonly name: string; readonly bytes: Uint8Array }): Promise<IntakeResult>;
   /** Cancel = respawn (grilling 31): kills the worker; the next request respawns it. */
   respawn(): void;
 }
@@ -167,6 +169,10 @@ export const workspaceEngine: WorkspaceEngine = {
   async dropRelation(relationName) {
     const engine = await appEngine.get();
     await engine.dropRelation(relationName);
+  },
+  async intakeFile(input) {
+    const engine = await appEngine.get();
+    return engine.intakeFile(input);
   },
   respawn: () => appEngine.respawn(),
 };

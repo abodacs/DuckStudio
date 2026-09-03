@@ -100,9 +100,10 @@ export const ERROR_RECOVERY_MOVE: Record<ErrorCode, string> = {
   INTERNAL_ERROR: "Recovery: read current context; no sensitive stack data is exposed.",
 };
 
-/** §4.1 capability negotiation: enums, not prose. */
+/** §4.1 capability negotiation: enums, not prose. Slice 7 adds the human file-import capability; the tool surface stays four. */
 export const CapabilitySchema = z.enum([
   "activate_local_preset",
+  "import_local_file",
   "run_readonly_sql",
   "present_artifact",
   "verify_custody",
@@ -133,10 +134,10 @@ export const BudgetLimitsSchema = z.strictObject({
 
 export type BudgetLimits = z.infer<typeof BudgetLimitsSchema>;
 
-/** §4.4 left-pane operation card. */
+/** §4.4 left-pane operation card. Slice 7 adds the human `import_local_file` kind. */
 export const OperationSummarySchema = z.strictObject({
   operationId: z.string(),
-  kind: z.enum(["activate_dataset", "run_analysis"]),
+  kind: z.enum(["activate_dataset", "run_analysis", "import_local_file"]),
   status: z.enum(["queued", "running", "succeeded", "failed", "cancelled"]),
   sourceId: z.string().optional(),
   artifactId: z.string().optional(),
@@ -286,6 +287,7 @@ export const WorkspaceEventSchema = z.strictObject({
   at: z.string(),
   kind: z.enum([
     "dataset_activated",
+    "dataset_imported",
     "analysis_succeeded",
     "analysis_failed",
     "artifact_selected",
@@ -497,6 +499,27 @@ export const CompiledCancelActiveOperationInput = z.compile(CancelActiveOperatio
 
 export type CancelActiveOperationInput = z.infer<typeof CancelActiveOperationInputSchema>;
 
+/**
+ * §8.5 human-only `importLocalFile` (slice 7, prd Amendment 3) — never a
+ * WebMCP tool. The file's bytes ride an out-of-band one-shot intake ticket
+ * (`intake-tickets.ts`); the command carries only the ticket handle, never
+ * the bytes, so the domain command stays JSON-shaped.
+ */
+export const ImportLocalFileInputSchema = z.strictObject({
+  ticketId: z
+    .string()
+    .min(8)
+    .max(80)
+    .describe("Handle for the bytes put in the intake registry by the human adapter."),
+  name: z.string().min(1).max(200).describe("The dropped file's name; its .csv extension is required (Amendment 3)."),
+  expectedRevision: z.number().int().min(0),
+  idempotencyKey: z.string().min(8).max(80),
+});
+
+export const CompiledImportLocalFileInput = z.compile(ImportLocalFileInputSchema);
+
+export type ImportLocalFileInput = z.infer<typeof ImportLocalFileInputSchema>;
+
 // --- Response data (§8.2, §8.3, §8.5) ---
 
 /** §8.2 response data. */
@@ -546,6 +569,15 @@ export const CancelActiveOperationDataSchema = z.strictObject({
 });
 
 export type CancelActiveOperationData = z.infer<typeof CancelActiveOperationDataSchema>;
+
+/**
+ * §8.5 `importLocalFile` response data — the activation shape: an import is
+ * an activation of the imported relation (it becomes `activeDataset`), so
+ * the two commands report the same facts.
+ */
+export const ImportLocalFileDataSchema = ActivateDatasetDataSchema;
+
+export type ImportLocalFileData = ActivateDatasetData;
 
 /** §8.1 `scope: "artifact"` data — the committed record and its measured summary. */
 export const GetContextArtifactDataSchema = AnalysisRecordSchema;

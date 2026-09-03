@@ -7,8 +7,9 @@ import { ERROR_RECOVERY_MESSAGE, ERROR_RECOVERY_MOVE } from "../revisioned-works
 import { MONITORED_TRANSPORTS } from "../dataset-custody/schemas";
 import { projectWorkspace } from "../revisioned-workspace/projection";
 import { useWorkspace } from "../revisioned-workspace/use-workspace";
-import { cancelActiveOperation, selectArtifact, activatePreset, runCanonicalChurnAnalysis } from "../live-canvas/human-commands";
+import { cancelActiveOperation, selectArtifact, activatePreset, runCanonicalChurnAnalysis, importLocalFile } from "../live-canvas/human-commands";
 import { formatKpiValue } from "../live-canvas/kpi";
+import { ImportPanel } from "../live-canvas/import-panel";
 import { consumeInitialView, resolvePostCommitView } from "../live-canvas/view-intent";
 import { CustodyView } from "../live-canvas/custody-view";
 import { DataGridView } from "../live-canvas/data-grid-view";
@@ -27,10 +28,11 @@ type ViewId = keyof typeof VIEWS;
 
 const VIEW_ORDER: readonly ViewId[] = ["insights", "grid", "sql_lineage", "custody"];
 
-/** Operation kind → the exact registered tool name (grilling 53). */
+/** Operation kind → the label its pill carries: the exact registered tool name, or the human command (slice 7's import is never a tool). */
 const TOOL_FOR_KIND: Record<OperationSummary["kind"], string> = {
   activate_dataset: ToolNameSchema.enum.duckdb_activate_dataset,
   run_analysis: ToolNameSchema.enum.duckdb_execute_sql_to_canvas,
+  import_local_file: "importLocalFile",
 };
 
 /**
@@ -393,15 +395,22 @@ export function WorkspaceShell() {
                         </>
                       ) : (
                         (expandedOperation.status === "running" || expandedOperation.status === "queued") && (
-                          <p className="mt-1.5">
-                            <button
-                              type="button"
-                              className="button-recovery"
-                              onClick={() => cancelActiveOperation(vm.revision)}
-                            >
-                              Cancel
-                            </button>
-                          </p>
+                          <>
+                            {expandedOperation.kind === "import_local_file" && (
+                              <p className="meta mt-1">
+                                Importing <span className="mono-value">{expandedOperation.sourceId}</span>… it stays in this tab.
+                              </p>
+                            )}
+                            <p className="mt-1.5">
+                              <button
+                                type="button"
+                                className="button-recovery"
+                                onClick={() => cancelActiveOperation(vm.revision)}
+                              >
+                                Cancel
+                              </button>
+                            </p>
+                          </>
                         )
                       )}
                     </div>
@@ -514,6 +523,8 @@ export function WorkspaceShell() {
                 </button>
               );
             })}
+            {/* Slice 7: bring your own file — drag-and-drop CSV import, in-tab only. */}
+            <ImportPanel importFile={(file) => importLocalFile(file, vm.revision)} />
           </div>
           <div role="group" aria-label="Custody monitoring" className="card-panel rise mt-2" style={rise(440)}>
             <div className="card-core">

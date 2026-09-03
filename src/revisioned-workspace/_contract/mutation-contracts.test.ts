@@ -694,6 +694,12 @@ describe("refinement against a live relation (ticket 36's query acceptance)", ()
         if (!response.ok) throw response.failure;
         return response.result;
       },
+      async intakeFile(input) {
+        const response = await send({ kind: "intake", ...input });
+        if (response.kind !== "intake") throw new Error("engine response kind mismatch");
+        if (!response.ok) throw response.failure;
+        return response.result;
+      },
       async dropRelation(relationName) {
         const response = await send({ kind: "drop", relationName });
         if (response.kind !== "drop") throw new Error("engine response kind mismatch");

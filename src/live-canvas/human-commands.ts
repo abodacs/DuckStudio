@@ -1,4 +1,5 @@
 import { workspaceStore } from "../revisioned-workspace/store";
+import { intakeTickets } from "../revisioned-workspace/intake-tickets";
 import type { ErrorCode } from "../revisioned-workspace/schemas";
 import { type PresetId } from "../demo-presets/catalog";
 import { SAAS_CHURN_CANONICAL_SQL } from "../demo-presets/canonical-sql";
@@ -18,6 +19,11 @@ import { captureRunIntent } from "./view-intent";
  * playbook, `duckdb_get_context` → `duckdb_execute_sql_to_canvas`,
  * pill-for-pill with tape beats 3–4. Nothing here is a shortcut or a private
  * path.
+ *
+ * Slice 7 adds the file-drop gesture: the bytes stay in this tab, riding an
+ * out-of-band one-shot intake ticket the store consumes inside the import's
+ * execution — `importLocalFile` is a human-only domain command, never a
+ * WebMCP tool.
  */
 
 export function selectArtifact(artifactId: string, expectedRevision: number): void {
@@ -56,6 +62,32 @@ export function activatePreset(
         ? ({ ok: true } as const)
         : ({ ok: false, code: envelope.error.code } as const),
     );
+}
+
+/**
+ * The file-drop gesture (slice 7): reads the file's bytes in this tab, puts
+ * them under a one-shot intake ticket, and dispatches `importLocalFile` with
+ * the handle and the store's current revision — the bytes never travel in
+ * the command and never leave the browser. Always enabled, no gating; the
+ * envelope verdict returns so the dropzone can render the human sentence
+ * beside the code chip (grilling 61: the envelope teaches).
+ */
+export type ImportFileVerdict = { ok: true } | { ok: false; code: ErrorCode; message: string };
+
+export async function importLocalFile(file: File, expectedRevision: number): Promise<ImportFileVerdict> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const { ticketId } = intakeTickets.put(file.name, bytes);
+  try {
+    const envelope = await workspaceStore.dispatch({
+      kind: "importLocalFile",
+      input: { ticketId, name: file.name, expectedRevision, idempotencyKey: crypto.randomUUID() },
+    });
+    return envelope.ok ? { ok: true } : { ok: false, code: envelope.error.code, message: envelope.error.message };
+  } finally {
+    // A rejected dispatch never executed, so the ticket would leak bytes;
+    // an executed one already consumed it and this delete is a no-op.
+    intakeTickets.delete(ticketId);
+  }
 }
 
 /**

@@ -32,7 +32,7 @@ All four tools are imperative — the page exposes no declarative form tools. To
 
 ## Demo Presets
 
-Two synthetic presets are generated in browser memory and activated by ID — `saas_churn` and `healthcare_pii`. Pinned numbers, policies, and demo order: [`docs/prd.md`](./docs/prd.md) §6.
+Two synthetic presets are generated in browser memory and activated by ID — `saas_churn` and `healthcare_pii`. You can also bring your own file: drop a CSV (≤200 MB, ≤5,000 columns) onto the Datasets card and it imports as the active dataset under the sensitive-by-default policy — in this tab's memory only, never uploaded. Pinned numbers, policies, and demo order: [`docs/prd.md`](./docs/prd.md) §6.
 
 ## Stack
 
@@ -42,7 +42,7 @@ Vite, React, TypeScript, Tailwind CSS, and `@tanstack/react-router`, with `@duck
 
 - **Single-threaded by configuration** — only the self-hosted `eh` and `mvp` DuckDB-WASM bundles ship, no `coi`/pthread bundle, so `selectBundle` returns `eh` and queries run on one thread. The shipped COOP/COEP isolation exists for the document, not for DuckDB threading.
 - **WebAssembly memory ceiling** — the browser's wasm memory limit (4 GB, sometimes lower per browser) applies unmanaged; the effective query limit is the custody-clamped budget — a 5,000 ms execution deadline and a 10,000-row result cursor, enforced inside the worker.
-- **No remote reads** — the SQL inspector rejects external URLs/files, so there are no range-request reads of remote files; the only sources are the two registered presets (deny list: `docs/agent-system-design.md` §6).
+- **No remote reads** — the SQL inspector rejects external URLs/files, so there are no range-request reads of remote files; the only sources are the two registered presets and locally imported CSV relations (drop-and-import, in-tab only — never URLs). Deny list: `docs/agent-system-design.md` §6.
 
 Engine lifecycle and the custody → engine seam: [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 

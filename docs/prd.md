@@ -42,8 +42,8 @@ flowchart TB
 | Layer | Must ship | Explicitly cut |
 |---|---|---|
 | **Custody kernel** | Explicit preset policies, SQL guard, release guard, upload telemetry | Differential privacy, formal proofs, compliance certification |
-| **Workspace** | ID, revision, six domain commands, selected artifact, one active operation, bounded events | Persistence across tabs, collaboration, multi-agent locking |
-| **Execution** | One DuckDB-WASM Web Worker; bounded read-only SQL with bindings | Writes, exports, external connectors, multi-file join wizards, arbitrary files on tape |
+| **Workspace** | ID, revision, seven domain commands (the file import is human-only), selected artifact, one active operation, bounded events | Persistence across tabs, collaboration, multi-agent locking |
+| **Execution** | One DuckDB-WASM Web Worker; bounded read-only SQL with bindings | Writes, exports, external connectors, multi-file join wizards, multi-format imports (TSV/JSON/Parquet/XLSX), file-handle persistence across sessions |
 | **Artifacts** | Immutable metadata + local relation + lineage; bounded retention | Durable notebooks, branching UI, artifact sharing |
 | **Control plane** | Four WebMCP tools as a subset of the workspace interface; one envelope; stable errors; revisions; idempotency; delta context | Compatibility aliases, conversational orchestration server, `egress-audit/` folder |
 | **Safe projections** | One summary object for envelope, cards, and Insights; sensitive raw-grid suppression; `minimumCohortSize` | General privacy theorem, unrestricted ad hoc PII analysis |
@@ -61,7 +61,7 @@ The canonical schemas and semantics are in `docs/agent-system-design.md`.
 | `duckdb_execute_sql_to_canvas` | Workspace mutation | Validate and run one bounded query, create one artifact, infer or apply KPI/chart/grid presentation, and select that artifact atomically. |
 | `duckdb_verify_zero_egress` | None | Return scoped dataset-upload, safe-release, interceptor, policy, and lineage evidence with limitations. |
 
-Human and simulator adapters also dispatch `selectArtifact` and `cancelActiveOperation`. Those commands are not WebMCP tools.
+Human and simulator adapters also dispatch `selectArtifact` and `cancelActiveOperation`, and the human dropzone dispatches `importLocalFile` (Amendment 3). Those commands are not WebMCP tools.
 
 ### 4.1 Shared response envelope
 
@@ -206,6 +206,7 @@ The demo may show measured runtime but must not promise or speak a fixed query t
 
 Amendment 1: 2026-09-01 (MLP/north-star framing — adds the north-star metric, MLP definition, and per-slice MLP-beat lines; slice boundaries and order unchanged)
 Amendment 2: 2026-09-02 (feature placement — runtime error→envelope taxonomy named in Slice 2, actuation/context separation tests named in Slice 4, cut-table completeness for voice and multi-file join wizards; no slice boundary or scope changes)
+Amendment 3: 2026-09-03 (slice 7 — local file drop: a seventh, human-only domain command `importLocalFile` turns one dropped CSV into the active dataset; CSV-only this slice, 200 MB / 5,000-column ceilings deny as `VALIDATION_ERROR` pre-execution, default policy `sensitive_aggregate_only`, direct-identifier columns stay in metadata and never enter the relation, bytes never leave the tab so the badge stays truthful; multi-format import and file-handle persistence stay explicitly cut)
 
 ### North star (amended)
 
@@ -310,4 +311,4 @@ A derived BDD rendering of these criteria lives in `docs/bdd/`; the canonical wo
 1. **Why WebMCP fits:** the governed database and workspace live inside browser memory where a remote API cannot operate without uploading the file.
 2. **Better experience:** the agent learns the complete actionable state once, performs one atomic bounded analysis, and leaves an inspectable artifact that both operators share.
 3. **New human-agent capability:** analysts can delegate local computation while the page—not the model—retains custody and controls release into both tools and DOM.
-4. **Implementation:** four WebMCP tools as a subset of six workspace commands, one schema module plus runtime validation, revision/idempotency control, DuckDB-WASM worker execution, immutable artifact lineage, one safe projection, and scoped custody telemetry.
+4. **Implementation:** four WebMCP tools as a subset of seven workspace commands, one schema module plus runtime validation, revision/idempotency control, DuckDB-WASM worker execution, immutable artifact lineage, one safe projection, and scoped custody telemetry.

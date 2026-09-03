@@ -3,8 +3,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PRESET_TRIPLES, presetCsv, type BoundedRead, type DuckEngineRuntime } from "./worker-handler";
+import { buildIntakeSql, describeIntakeColumns, intakeFileName, materializedIntakeColumns } from "./intake";
 import { decodeEngineCell } from "./result-decode";
-import type { WarmResult } from "./protocol";
+import type { IntakeResult, WarmResult } from "./protocol";
 
 /**
  * The headless DuckDB runtime (vitest path): the same `DuckEngineRuntime`
@@ -104,6 +105,30 @@ export async function createNodeDuckRuntime(): Promise<NodeDuckRuntime> {
 
     async drop(relationName) {
       await connection.run(`DROP TABLE IF EXISTS ${relationName}`);
+    },
+
+    // Same intake orchestration as the browser runtime (slice 7), over a
+    // temp file instead of a registered buffer; a failure removes the file so
+    // the harness keeps zero trace of the bytes.
+    async intake(relation, name, bytes): Promise<IntakeResult> {
+      const csvPath = join(workDir, intakeFileName(name));
+      await writeFile(csvPath, bytes);
+      try {
+        const reader = await connection.runAndReadAll(`DESCRIBE SELECT * FROM read_csv('${csvPath}')`);
+        const described = reader.getRowObjectsJson() as { column_name?: unknown; column_type?: unknown }[];
+        const columns = describeIntakeColumns(
+          described.map((row) => ({ name: String(row.column_name), type: String(row.column_type) })),
+        );
+        await connection.run(buildIntakeSql(relation, csvPath, materializedIntakeColumns(columns)));
+        const [count] = (
+          await connection.runAndReadAll(`SELECT COUNT(*) AS n FROM ${relation}`)
+        ).getRowObjectsJson();
+        return { relationName: relation, rowCount: Number(count?.n), columns };
+      } catch (error) {
+        await rm(csvPath, { force: true }).catch(() => undefined);
+        await connection.run(`DROP TABLE IF EXISTS ${relation}`).catch(() => undefined);
+        throw error;
+      }
     },
 
     async dispose(): Promise<void> {

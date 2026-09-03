@@ -9,6 +9,7 @@ this directory must be corrected in the same change.
 |---|---|---|
 | `analyst-sql-analysis.feature` | SQL authoring against an activated dataset, aggregation, and chart verification | `docs/prd.md` §5, §6, §10; `docs/agent-system-design.md` §5, §6, §9, §15 |
 | `agent-webmcp-interaction.feature` | Driving the app through WebMCP agents: bootstrap, atomic analysis, retry semantics, custody evidence, parity | `docs/prd.md` §4, §10; `docs/agent-system-design.md` §7, §8, §10, §14, §15 |
+| `local-file-import.feature` | Bringing your own file: drag-and-drop CSV import, ceilings, zero-trace cancel, identifier omission, the four-tool pin | `docs/prd.md` §3 + Amendment 3; `docs/agent-system-design.md` §3, §4.2, §4.4, §8.5, §9, §11, §14 |
 
 ## Conventions
 

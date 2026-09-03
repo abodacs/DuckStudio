@@ -62,10 +62,11 @@ Mutations require `expectedRevision` and `idempotencyKey` and increment `revisio
 | `runAnalysis` | `duckdb_execute_sql_to_canvas` |
 | `selectArtifact` | none — human and simulator only |
 | `cancelActiveOperation` | none — human and simulator only |
+| `importLocalFile` | none — human only (slice 7; see §8.5) |
 
-WebMCP registers exactly the four tools. That is a subset of the workspace interface, not a second command set. Human controls and the simulator may dispatch all six commands. No adapter calls a private UI setter.
+WebMCP registers exactly the four tools. That is a subset of the workspace interface, not a second command set. Human controls and the simulator may dispatch all seven commands except that `importLocalFile` is driven by the human dropzone alone (its bytes ride an out-of-band one-shot ticket an agent never holds). No adapter calls a private UI setter.
 
-`selectArtifact` and `cancelActiveOperation` are workspace mutations. They are not operations in the left-pane stream except that cancel transitions the running operation to `cancelled`.
+`selectArtifact` and `cancelActiveOperation` are workspace mutations but not operations in the left-pane stream, except that cancel transitions the running operation to `cancelled`. `importLocalFile` runs as an operation (`import_local_file`) in the stream and takes the single-flight slot (§4.4).
 
 ### 3.2 Command, event, and projection flow
 
@@ -105,6 +106,7 @@ type WorkspaceEvent = {
   at: string
   kind:
     | "dataset_activated"
+    | "dataset_imported"
     | "analysis_succeeded"
     | "analysis_failed"
     | "artifact_selected"
@@ -125,6 +127,7 @@ Events are retained in a bounded ring buffer and may be requested with `sinceRev
 ```ts
 type Capability =
   | "activate_local_preset"
+  | "import_local_file"
   | "run_readonly_sql"
   | "present_artifact"
   | "verify_custody"
@@ -190,6 +193,8 @@ type Dataset = {
 ```
 
 `public_synthetic` permits safe grid rows and categorical values on the shared canvas after an artifact exists. `sensitive_aggregate_only` permits schema metadata and aggregates only after release checks; it never permits a raw grid in tool output or the shared canvas.
+
+Imported files (slice 7) materialize as `local_<slug>_<digest>` relations and become the active dataset under the default `sensitive_aggregate_only` policy — there is no classification UI. The intake's name heuristic classifies direct identifiers (defense in depth): they stay in the dataset metadata flagged `omitted`, and the materialized relation excludes their columns, so no identifier value ever enters DuckDB.
 
 Activation does not paint a grid. Views bind to an artifact ID; there is no dataset-preview projection.
 
@@ -277,7 +282,7 @@ flowchart LR
 ```ts
 type OperationSummary = {
   operationId: string
-  kind: "activate_dataset" | "run_analysis"
+  kind: "activate_dataset" | "run_analysis" | "import_local_file"
   status: "queued" | "running" | "succeeded" | "failed" | "cancelled"
   sourceId?: string
   artifactId?: string
@@ -287,7 +292,7 @@ type OperationSummary = {
 }
 ```
 
-Only one mutating operation (`activate_dataset` or `run_analysis`) runs at a time in the one-day build. `selectArtifact` is a mutation but not an operation: it appends `artifact_selected`, updates `selectedArtifactId`, and increments revision.
+Only one mutating operation (`activate_dataset`, `run_analysis`, or `import_local_file`) runs at a time in the one-day build. `selectArtifact` is a mutation but not an operation: it appends `artifact_selected`, updates `selectedArtifactId`, and increments revision.
 
 `cancelActiveOperation` aborts the running worker, sets that operation to `cancelled`, appends `operation_cancelled`, increments revision, creates no artifact, and leaves `selectedArtifactId` unchanged. Cancelling when no operation is running returns `VALIDATION_ERROR`.
 
@@ -511,7 +516,7 @@ Compact bootstrap response data:
 
 ```json
 {
-  "capabilities": ["activate_local_preset", "run_readonly_sql", "present_artifact", "verify_custody", "cancel_active_operation", "select_artifact"],
+  "capabilities": ["activate_local_preset", "import_local_file", "run_readonly_sql", "present_artifact", "verify_custody", "cancel_active_operation", "select_artifact"],
   "activeDataset": { "datasetId": "saas_churn", "policy": "public_synthetic", "rowCount": 250000 },
   "budgets": { "executionMs": 5000, "resultRows": 10000, "chartPoints": 2000 },
   "selectedArtifactId": null,
@@ -763,6 +768,24 @@ These commands are part of the workspace interface and are not registered as Web
 
 If `operationId` is omitted, cancel targets the single running operation. A missing, stale, or non-running id is `VALIDATION_ERROR`.
 
+`importLocalFile` (slice 7, prd Amendment 3) — human-only, driven by the dropzone. The file's bytes ride an out-of-band one-shot intake ticket the human adapter fills; the command carries only the handle, never the bytes, so the domain command stays JSON-shaped:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "ticketId": { "type": "string", "minLength": 8, "maxLength": 80 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "expectedRevision": { "type": "integer", "minimum": 0 },
+    "idempotencyKey": { "type": "string", "minLength": 8, "maxLength": 80 }
+  },
+  "required": ["ticketId", "name", "expectedRevision", "idempotencyKey"],
+  "additionalProperties": false
+}
+```
+
+The name must end in `.csv` (Amendment 3: CSV-only this slice). Ceilings deny pre-execution as `VALIDATION_ERROR`: 200 MB, 5,000 columns, empty file, unknown or already-consumed ticket. The imported relation becomes the active dataset under the default `sensitive_aggregate_only` policy (§4.2), the response data is the activation shape (§8.2: `datasetId`, `schemaDigest`, `rowCount`, `byteSizeEstimate`, `policy`, `minimumCohortSize`), and the event appended is `dataset_imported`. The ticket is consumed exactly once inside the execution, so a failed or cancelled import leaves zero trace and an exact replay answers from the envelope cache.
+
 ### 8.6 WebMCP best-practice conformance
 
 The four tools are audited against the 2026 `modern-web-guidance` WebMCP best practices (collected in `docs/webmcp-best-practices.md`). Conformance is recorded here so the canonical contract stays the source of truth.
@@ -828,6 +851,8 @@ Errors never echo raw rows, sensitive bindings, or full internal stack traces.
 
 Runtime engine failures (DuckDB diagnostics, budget exhaustion, worker respawn) are classified at the custody seam before they become envelopes: policy violations map to their table code above, exhausted budgets to `BUDGET_EXCEEDED`, and anything unclassified to `INTERNAL_ERROR` with `retryable: true`. `error.details` carries only recovery-useful hints — blocked construct, offending clause kind, budget axis, elapsed and limit values — so the agent's recovery loop is: read `code` + `details`, apply the recovery column, re-dispatch. There is no fix-up tool; §12's playbooks are the loop.
 
+Intake failures (slice 7) follow the same discipline: the import ceilings — non-CSV name, empty file, 200 MB, 5,000 columns, unknown ticket — deny pre-execution as `VALIDATION_ERROR` with a human sentence, and the `EngineFailure` union is not widened (the code was already in it).
+
 ## 10. State, Retry, and Lifecycle Semantics
 
 - Adapters validate inputs against the shared schema module, then dispatch domain commands.
@@ -844,6 +869,7 @@ Runtime engine failures (DuckDB diagnostics, budget exhaustion, worker respawn) 
 `duckdb_get_context(scope: "summary")` exposes enums rather than prose:
 
 - `activate_local_preset`
+- `import_local_file`
 - `run_readonly_sql`
 - `present_artifact`
 - `verify_custody`
@@ -851,7 +877,7 @@ Runtime engine failures (DuckDB diagnostics, budget exhaustion, worker respawn) 
 - `select_artifact`
 - `webmcp_native` or `simulator_only`
 
-Unavailable human gestures appear in `nextActions` as `{ kind: "human_action", action: "select_local_file" }`. Tools never fabricate file paths or pretend to complete the gesture.
+Unavailable human gestures appear in `nextActions` as `{ kind: "human_action", action: "select_local_file" }`. Since slice 7 the import dropzone performs that gesture for real; tools never fabricate file paths or pretend to complete the gesture.
 
 ## 12. Agent Playbooks
 
@@ -915,7 +941,7 @@ Changing a view tab does not dispatch a workspace command. Selecting an artifact
 
 ## 14. Simulator Parity
 
-Prompt chips and the built-in Agent Simulator are scripted clients of the revisioned workspace. They do not call private UI setters or manufacture transcript results. In a native WebMCP environment the same tool adapters invoke that workspace. Contract tests run identical scenarios through both adapters and compare events, artifacts, revisions, errors, and projections.
+Prompt chips and the built-in Agent Simulator are scripted clients of the revisioned workspace. They do not call private UI setters or manufacture transcript results. In a native WebMCP environment the same tool adapters invoke that workspace. Contract tests run identical scenarios through both adapters and compare events, artifacts, revisions, errors, and projections. The human file drop (slice 7) dispatches `importLocalFile` through the same store; it is not a registered tool, so parity covers the four registered tools and the simulator never fabricates a ticket.
 
 ## 15. Acceptance Scenarios
 

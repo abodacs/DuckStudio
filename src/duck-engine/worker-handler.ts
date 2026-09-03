@@ -8,8 +8,9 @@ import {
 import type { HealthcarePiiRow } from "../demo-presets/healthcare-pii";
 import type { SaasChurnRow } from "../demo-presets/saas-churn";
 import { toCsv } from "../demo-presets/csv";
+import { IntakeCeilingError } from "./intake";
 import type { EngineRequest, EngineResponse, EngineColumn } from "./protocol";
-import type { ExecutionResult, MaterializedRelation, WarmResult } from "./protocol";
+import type { ExecutionResult, IntakeResult, MaterializedRelation, WarmResult } from "./protocol";
 import { shapeResult } from "./result-decode";
 
 /**
@@ -42,6 +43,12 @@ export interface DuckEngineRuntime {
   materialize(relationName: string, result: ExecutionResult): Promise<MaterializedRelation>;
   /** Drops a relation by name; absent names resolve silently (idempotent cleanup). */
   drop(relationName: string): Promise<void>;
+  /**
+   * Slice 7 intake: registers the dropped file's bytes, materializes the
+   * `local_*` relation minus direct identifiers, and describes the full
+   * classified schema. Ceiling denials throw {@link IntakeCeilingError}.
+   */
+  intake(relation: string, name: string, bytes: Uint8Array): Promise<IntakeResult>;
 }
 
 /** The presets materialize in the worker at warm time (grilling 23). */
@@ -93,7 +100,7 @@ function budgetFailure(id: number, elapsedMs: number, limitMs: number): EngineRe
 
 function internalFailure(
   id: number,
-  phase: "execute" | "warm" | "materialize" | "drop",
+  phase: "execute" | "warm" | "materialize" | "drop" | "intake",
 ): EngineResponse {
   return {
     id,
@@ -137,10 +144,11 @@ export function createWorkerHandler(runtime: DuckEngineRuntime): WorkerHandler {
       }
     }
 
-    if (request.kind === "materialize" || request.kind === "drop") {
-      // Artifact-relation mechanics (grilling 32): no policy here — the
-      // workspace decides when relations live and die. Drop is idempotent by
-      // contract so denial cleanup and eviction never race a vanished name.
+    if (request.kind === "materialize" || request.kind === "drop" || request.kind === "intake") {
+      // Artifact-relation mechanics (grilling 32) and slice-7 intake: no
+      // policy here — the workspace decides what the relation may contain.
+      // Drop is idempotent by contract so denial cleanup and eviction never
+      // race a vanished name.
       try {
         if (request.kind === "materialize") {
           return {
@@ -150,6 +158,14 @@ export function createWorkerHandler(runtime: DuckEngineRuntime): WorkerHandler {
             result: await runtime.materialize(request.relationName, request.result),
           };
         }
+        if (request.kind === "intake") {
+          return {
+            id: request.id,
+            kind: "intake",
+            ok: true,
+            result: await runtime.intake(request.relation, request.name, request.bytes),
+          };
+        }
         await runtime.drop(request.relationName);
         return {
           id: request.id,
@@ -157,7 +173,23 @@ export function createWorkerHandler(runtime: DuckEngineRuntime): WorkerHandler {
           ok: true,
           result: { relationName: request.relationName, rowCount: 0 },
         };
-      } catch {
+      } catch (error) {
+        // Intake ceilings are input facts, not engine defects: they cross as
+        // VALIDATION_ERROR with the human sentence (EngineFailure is not
+        // widened — the code was already in its union).
+        if (error instanceof IntakeCeilingError) {
+          return {
+            id: request.id,
+            kind: "intake",
+            ok: false,
+            failure: {
+              code: "VALIDATION_ERROR",
+              message: error.message,
+              retryable: false,
+              details: error.details,
+            },
+          };
+        }
         return internalFailure(request.id, request.kind);
       }
     }

@@ -10,6 +10,7 @@ import {
   GetContextEventsDataSchema,
   GetContextSchemaDataSchema,
   GetContextSummaryDataSchema,
+  ImportLocalFileDataSchema,
   RunAnalysisDataSchema,
   SelectArtifactDataSchema,
   type Workspace,
@@ -127,6 +128,10 @@ export const CompiledCancelActiveOperationEnvelopeSuccess = z.compile(
   EnvelopeSuccessSchema.extend({ data: CancelActiveOperationDataSchema }),
 );
 
+export const CompiledImportLocalFileEnvelopeSuccess = z.compile(
+  EnvelopeSuccessSchema.extend({ data: ImportLocalFileDataSchema }),
+);
+
 /** The one awaited result type every adapter shares (ADR 0004 am4). */
 export type Envelope =
   | z.infer<typeof EnvelopeSuccessSchema>
@@ -140,6 +145,7 @@ export type EnvelopeSuccessData =
   | z.infer<typeof GetContextArtifactDataSchema>
   | z.infer<typeof EvidenceSnapshotSchema>
   | z.infer<typeof ActivateDatasetDataSchema>
+  | z.infer<typeof ImportLocalFileDataSchema>
   | z.infer<typeof RunAnalysisDataSchema>
   | z.infer<typeof SelectArtifactDataSchema>
   | z.infer<typeof CancelActiveOperationDataSchema>;

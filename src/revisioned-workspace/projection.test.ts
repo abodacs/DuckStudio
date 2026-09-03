@@ -19,6 +19,7 @@ describe("projectWorkspace at rev 0", () => {
       badge: "0 Bytes of Dataset Uploaded",
       capabilities: [
         "activate_local_preset",
+        "import_local_file",
         "run_readonly_sql",
         "present_artifact",
         "verify_custody",
